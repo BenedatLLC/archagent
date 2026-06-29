@@ -1,0 +1,5 @@
+[project]
+languages = ["ts"]
+
+[ts]
+source_paths = ["src"]

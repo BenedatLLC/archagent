@@ -216,3 +216,7 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# archagent: generated checker configs are derived from architecture/invariants.md
+# (match at any depth, e.g. examples/*/.archagent/generated/)
+**/.archagent/generated/

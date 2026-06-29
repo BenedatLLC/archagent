@@ -1,0 +1,26 @@
+[project]
+name = "archagent"
+version = "0.1.0"
+description = "Keep code adherent to a described architecture; teach coding agents to reason about it."
+readme = "README.md"
+authors = [
+    { name = "Jeff Fischer", email = "jeff.fischer@benedat.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "ast-grep-cli>=0.44.0",
+    "import-linter>=2.12",
+    "typer>=0.26.8",
+]
+
+[project.scripts]
+archagent = "archagent:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/archagent"]
+# templates/ ships as package data so `archagent init` works after install
+

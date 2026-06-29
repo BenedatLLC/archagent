@@ -1,0 +1,6 @@
+[project]
+languages = ["python"]
+
+[python]
+root_package = "app"
+source_paths = ["src"]
