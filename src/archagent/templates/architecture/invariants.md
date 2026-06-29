@@ -15,7 +15,8 @@ No invariants yet — add rows to the table above. Example rows:
 **Columns**
 - `Type` (after the architecture dimensions): BOUNDARY · INTERFACE · DATAFLOW · STRUCTURAL · PURPOSE
 - `Tier` (how it's enforced): structural · contract · pbt · model-check
-- `Rule` (compact DSL): `forbid <a> -> <b>` (BOUNDARY) · `forbid-pattern <ast-grep pattern>` (STRUCTURAL)
+- `Rule` (compact DSL): `forbid <a> -> <b>` (BOUNDARY) · `forbid-pattern <pattern> [in|outside <scope>]`
+  (STRUCTURAL — `in`/`outside` scope it to a path or dotted module; omit to scan all sources)
 - `Severity`: error (fails `check`) · warn
 - `Why`: link to the ADR carrying the rationale
 - `Status`: active · proposed · deprecated

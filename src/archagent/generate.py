@@ -51,7 +51,7 @@ def generate(invariants: list[Invariant], config: Config) -> GenResult:
                 else:
                     result.skipped.append((inv.id, f"BOUNDARY: no generator for '{inv.applies_to}'"))
             elif inv.type == "STRUCTURAL" and inv.rule.startswith("forbid-pattern"):
-                result.written.append(_write_astgrep_rule(inv, out / "sgrules"))
+                result.written.append(_write_astgrep_rule(inv, out / "sgrules", config))
                 result.astgrep_ids.append(inv.id)
             else:
                 result.skipped.append((inv.id, f"no v1 generator for {inv.type}/{inv.tier}/{inv.applies_to}"))
@@ -122,7 +122,7 @@ def _path_regex_alt(operands: list[str]) -> str:
 
 # --- ast-grep ------------------------------------------------------------
 
-def _write_astgrep_rule(inv: Invariant, sgrules_dir: Path) -> Path:
+def _write_astgrep_rule(inv: Invariant, sgrules_dir: Path, config: Config) -> Path:
     rule = parse_pattern(inv.rule)
     sgrules_dir.mkdir(parents=True, exist_ok=True)
     language = _astgrep_language(inv.applies_to)
@@ -135,9 +135,35 @@ def _write_astgrep_rule(inv: Invariant, sgrules_dir: Path) -> Path:
         "rule:\n"
         f"  pattern: '{pattern}'\n"
     )
+    if rule.scope_mode != "all" and rule.scope:
+        # `in` -> only these files; `outside` -> all files except these.
+        key = "files" if rule.scope_mode == "in" else "ignores"
+        globs = _scope_to_globs(rule.scope, inv, config)
+        content += f"{key}:\n" + "".join(f"  - '{g}'\n" for g in globs)
     path = sgrules_dir / f"{inv.id}.yml"
     path.write_text(content)
     return path
+
+
+def _scope_to_globs(scope: str, inv: Invariant, config: Config) -> list[str]:
+    """Turn an `in`/`outside` scope (path/glob or dotted module) into ast-grep globs."""
+    if "/" in scope or "*" in scope or scope.endswith((".py", ".ts", ".tsx", ".js")):
+        s = scope.rstrip("/")
+        if "*" in s or s.endswith((".py", ".ts", ".tsx", ".js")):
+            return [s]
+        return [s, f"{s}/**"]  # a directory
+    # dotted/bare module -> candidate paths under each source root for this language
+    slug = scope.replace(".", "/")
+    if "python" in inv.applies_to:
+        exts, src_paths = [".py"], config.python.source_paths
+    else:
+        exts, src_paths = [".ts", ".tsx", ".js"], config.ts.source_paths
+    globs: list[str] = []
+    for sp in src_paths:
+        base = f"{sp}/{slug}"
+        globs += [f"{base}{ext}" for ext in exts]
+        globs.append(f"{base}/**")
+    return globs
 
 
 def _astgrep_language(applies_to: str) -> str:

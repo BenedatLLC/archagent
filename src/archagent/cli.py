@@ -92,7 +92,11 @@ def check(project: Path = typer.Option(Path("."), help="Target repo root")) -> N
             mark, detail = "[green]PASS[/]", ""
         else:
             mark = "[red]FAIL[/]" if r.severity == "error" else "[yellow]WARN[/]"
-            detail = "; ".join(f"{f.detail} ({f.file}:{f.line})" if f.file else f.detail for f in r.findings)
+            shown = r.findings[:3]
+            parts = [(f"{f.detail} ({f.file}:{f.line})" if f.file else f.detail) for f in shown]
+            if len(r.findings) > len(shown):
+                parts.append(f"(+{len(r.findings) - len(shown)} more)")
+            detail = "; ".join(parts)
             if r.severity == "error":
                 failed += 1
         table.add_row(r.invariant_id, r.checker, mark, detail)

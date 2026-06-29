@@ -83,7 +83,10 @@ _A lifecycle is a state machine + a one-line caption: what it shows and the key 
 - **Tier** (how it's enforced, cheapest first): structural · contract · pbt · model-check.
 - **Rule** (compact DSL):
   - `forbid <a> -> <b>[, <c>...]` — BOUNDARY (must not import *directly*).
-  - `forbid-pattern <ast-grep pattern>` — STRUCTURAL (a code shape that must not appear).
+  - `forbid-pattern <ast-grep pattern> [in|outside <scope>]` — STRUCTURAL (a code shape that must not
+    appear). `in <scope>` flags matches only there; `outside <scope>` flags everywhere *except* there
+    (the "only `<scope>` may do this" case). `<scope>` is a path/glob (`src/app/domain`) or a dotted
+    module (`app.domain.workflow`); omit it to scan all sources.
 - **Severity**: `error` fails `check`; `warn` is reported but doesn't fail.
 - **Why**: a link to the ADR with the rationale.
 
