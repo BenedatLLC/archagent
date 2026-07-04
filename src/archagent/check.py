@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -17,6 +18,7 @@ from pathlib import Path
 
 from .config import Config
 from .invariants import Invariant
+from .rules import parse_property
 
 
 @dataclass
@@ -42,6 +44,7 @@ def run_checks(
     il_ids: list[str],
     dc_ids: list[str],
     sg_ids: list[str],
+    pbt_ids: list[str],
 ) -> list[CheckResult]:
     by_id = {inv.id: inv for inv in invariants}
     results: list[CheckResult] = []
@@ -51,6 +54,8 @@ def run_checks(
         results.extend(_run_dependency_cruiser(dc_ids, config, by_id))
     if sg_ids:
         results.extend(_run_ast_grep(sg_ids, config, by_id))
+    if pbt_ids:
+        results.extend(_run_pbt(pbt_ids, config, by_id))
     return results
 
 
@@ -153,6 +158,49 @@ def _run_ast_grep(ids, config, by_id) -> list[CheckResult]:
                 (m.get("text", "") or "").splitlines()[0][:80],
             ))
     return [CheckResult(i, "ast-grep", not by[i], by_id[i].severity, findings=by[i]) for i in ids]
+
+
+# --- property-based tests (pbt) ------------------------------------------
+
+def _run_pbt(ids, config, by_id) -> list[CheckResult]:
+    # Behavioral properties execute the project's code, so they run in the TARGET's
+    # environment (config.python.test_command), not archagent's venv.
+    test_cmd = shlex.split(config.python.test_command)
+    env = dict(os.environ)
+    env.pop("VIRTUAL_ENV", None)  # let the target's runner pick its own env
+    results = []
+    for i in ids:
+        target = parse_property(by_id[i].rule).target
+        try:
+            proc = subprocess.run(
+                [*test_cmd, target, "-q", "--no-header", "-p", "no:cacheprovider"],
+                cwd=config.project_root, env=env, capture_output=True, text=True, timeout=300,
+            )
+        except FileNotFoundError:
+            results.append(CheckResult(i, "pbt", True, by_id[i].severity,
+                                       skipped_reason=f"test runner not found: {test_cmd[0]}"))
+            continue
+        out = proc.stdout + "\n" + proc.stderr
+        if proc.returncode == 0:
+            results.append(CheckResult(i, "pbt", True, by_id[i].severity))
+        elif proc.returncode == 5:  # pytest: no tests collected
+            results.append(CheckResult(i, "pbt", True, by_id[i].severity,
+                                       skipped_reason=f"property not found: {target}"))
+        else:
+            results.append(CheckResult(i, "pbt", False, by_id[i].severity,
+                                       findings=[Finding("", 0, _pbt_failure(out))]))
+    return results
+
+
+def _pbt_failure(out: str) -> str:
+    for line in out.splitlines():
+        if "Falsifying example" in line:
+            return line.strip()[:120]
+    for line in reversed(out.splitlines()):
+        s = line.strip()
+        if s.startswith(("E ", "assert", "FAILED")) or "Error" in s:
+            return s[:120]
+    return "property failed"
 
 
 # --- helpers -------------------------------------------------------------

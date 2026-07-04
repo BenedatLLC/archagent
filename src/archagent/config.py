@@ -17,6 +17,9 @@ _TS_ALIASES = ("ts", "tsx", "typescript", "js", "javascript")
 class PythonConfig:
     root_package: str | None = None
     source_paths: list[str] = field(default_factory=lambda: ["src"])
+    # Command to run property tests in the TARGET's environment (pbt tier executes
+    # the project's code, unlike the static structural checkers). e.g. "uv run pytest".
+    test_command: str = "pytest"
 
 
 @dataclass
@@ -73,6 +76,7 @@ def load_config(project_root: Path) -> Config:
         python=PythonConfig(
             root_package=py.get("root_package"),
             source_paths=py.get("source_paths", ["src"]),
+            test_command=py.get("test_command", "pytest"),
         ),
         ts=TSConfig(source_paths=ts.get("source_paths", ["src"])),
     )

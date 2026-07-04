@@ -10,6 +10,10 @@ Add (or modify) a row in `architecture/invariants.md` and confirm it works.
    - `forbid-pattern <ast-grep pattern> [in|outside <scope>]` (STRUCTURAL) — `in <scope>` flags only
      there; `outside <scope>` flags everywhere except there ("only `<scope>` may do this"). `<scope>`
      is a path/glob or a dotted module.
+   - `property <path::test>` (PBT — behavioral/data invariants). `gen` scaffolds a Hypothesis stub;
+     **write the property yourself** (it needs system knowledge). Shape it as a preserved-invariant or
+     model/round-trip check; the property IS the spec. Needs `[python] test_command` (e.g.
+     `uv run pytest`) so `check` can run it in the project's env.
 3. Add the row: ID, Type, Tier, Applies-to (language), Rule, Severity, Why (link an ADR), Status.
 4. Write or extend the ADR in `decisions/` explaining what the invariant prevents and why it matters.
 5. Run `archagent check`. Confirm it PASSES on current clean code, and (sanity-check) that it would FAIL

@@ -8,9 +8,10 @@ You describe the architecture as markdown in your repo (including a table of mac
 ast-grep) from that single source and runs them, reporting adherence per invariant. The checkers
 are deterministic; the LLM only ever *proposes*.
 
-> Status: early. v1 covers BOUNDARY invariants (Python via import-linter, JS/TS via dependency-cruiser)
-> and STRUCTURAL invariants (any language via ast-grep), driven by `architecture/invariants.md`, plus
-> per-agent delivery for Claude Code, Cursor, and OpenHands.
+> Status: early. v1 covers BOUNDARY invariants (Python via import-linter, JS/TS via dependency-cruiser),
+> STRUCTURAL invariants (any language via ast-grep, path-scopable), and a PBT tier for behavioral/data
+> invariants (Python via Hypothesis) — all driven by `architecture/invariants.md`, plus per-agent
+> delivery for Claude Code, Cursor, and OpenHands.
 
 ## Quickstart
 
@@ -87,6 +88,10 @@ _A lifecycle is a state machine + a one-line caption: what it shows and the key 
     appear). `in <scope>` flags matches only there; `outside <scope>` flags everywhere *except* there
     (the "only `<scope>` may do this" case). `<scope>` is a path/glob (`src/app/domain`) or a dotted
     module (`app.domain.workflow`); omit it to scan all sources.
+  - `property <path::test>` — a **behavioral / data invariant** ("all state is per-user", state-machine
+    or round-trip properties) checked by a **property-based test**. `gen` scaffolds a Hypothesis stub
+    (you fill in the property, since it needs system knowledge); `check` runs it in the *project's* env
+    (`[python] test_command`, e.g. `uv run pytest`) and reports the minimal counterexample on failure.
 - **Severity**: `error` fails `check`; `warn` is reported but doesn't fail.
 - **Why**: a link to the ADR with the rationale.
 
@@ -105,6 +110,7 @@ tool per `(invariant tier × language)`:
 |------------------|--------|---------|
 | BOUNDARY / layering | import-linter | dependency-cruiser |
 | STRUCTURAL (code shape) | ast-grep | ast-grep |
+| PBT (behavioral / data) | Hypothesis | fast-check *(planned)* |
 
 Adding a language is adding a column, not rewriting anything. Generated configs live under
 `.archagent/generated/` and are gitignored — they're derived from the table and regenerated on every

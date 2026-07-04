@@ -61,7 +61,8 @@ def gen(project: Path = typer.Option(Path("."), help="Target repo root")) -> Non
         console.print(f"  wrote {path.relative_to(config.project_root)}")
     for label, ids in (("import-linter", result.importlinter_ids),
                        ("dependency-cruiser", result.depcruiser_ids),
-                       ("ast-grep", result.astgrep_ids)):
+                       ("ast-grep", result.astgrep_ids),
+                       ("pbt", result.pbt_ids)):
         if ids:
             console.print(f"  {label}: {', '.join(ids)}")
     for inv_id, reason in result.skipped:
@@ -77,6 +78,7 @@ def check(project: Path = typer.Option(Path("."), help="Target repo root")) -> N
     results = run_checks(
         invariants, config,
         gen_result.importlinter_ids, gen_result.depcruiser_ids, gen_result.astgrep_ids,
+        gen_result.pbt_ids,
     )
 
     table = Table(title="archagent check")

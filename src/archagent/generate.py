@@ -16,7 +16,7 @@ from pathlib import Path
 
 from .config import Config
 from .invariants import Invariant
-from .rules import RuleError, parse_boundary, parse_pattern
+from .rules import RuleError, parse_boundary, parse_pattern, parse_property
 
 _TS_TOKENS = ("ts", "tsx", "typescript", "js", "javascript")
 
@@ -27,6 +27,7 @@ class GenResult:
     importlinter_ids: list[str] = field(default_factory=list)
     depcruiser_ids: list[str] = field(default_factory=list)
     astgrep_ids: list[str] = field(default_factory=list)
+    pbt_ids: list[str] = field(default_factory=list)
     skipped: list[tuple[str, str]] = field(default_factory=list)
 
 
@@ -53,6 +54,11 @@ def generate(invariants: list[Invariant], config: Config) -> GenResult:
             elif inv.type == "STRUCTURAL" and inv.rule.startswith("forbid-pattern"):
                 result.written.append(_write_astgrep_rule(inv, out / "sgrules", config))
                 result.astgrep_ids.append(inv.id)
+            elif inv.rule.startswith("property"):
+                scaffolded = _scaffold_property(inv, config)
+                if scaffolded is not None:
+                    result.written.append(scaffolded)
+                result.pbt_ids.append(inv.id)
             else:
                 result.skipped.append((inv.id, f"no v1 generator for {inv.type}/{inv.tier}/{inv.applies_to}"))
         except RuleError as exc:
@@ -164,6 +170,49 @@ def _scope_to_globs(scope: str, inv: Invariant, config: Config) -> list[str]:
         globs += [f"{base}{ext}" for ext in exts]
         globs.append(f"{base}/**")
     return globs
+
+
+# --- property-based tests (pbt) ----------------------------------------
+
+_PBT_HEADER = (
+    '"""archagent property tests (Hypothesis).\n\n'
+    "Each stub is generated from a `property` invariant in architecture/invariants.md.\n"
+    "Fill in the generator and assertion, then run `archagent check`.\n"
+    '"""\n\n'
+    "from hypothesis import given, strategies as st\n"
+)
+
+
+def _pbt_stub(inv: Invariant, func: str) -> str:
+    why = inv.why or "see the linked ADR"
+    return (
+        f"\n\n@given(st.data())\n"
+        f"def {func}(data):\n"
+        f"    # archagent: property for {inv.id} -- {why}\n"
+        f"    # TODO: generate inputs, drive the system, and assert invariant {inv.id}.\n"
+        f'    raise NotImplementedError("archagent: implement property {inv.id}")\n'
+    )
+
+
+def _scaffold_property(inv: Invariant, config: Config) -> Path | None:
+    """Ensure a Hypothesis stub exists for a `property <path::func>` rule.
+
+    Only scaffolds (the property logic needs system knowledge — the agent/human writes
+    it). Returns the file path if it created the file or appended a stub, else None.
+    The function name should start with `test_` so pytest collects it.
+    """
+    rule = parse_property(inv.rule)
+    rel, _, func = rule.target.partition("::")
+    file_path = config.project_root / rel
+    changed = False
+    if not file_path.exists():
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        file_path.write_text(_PBT_HEADER)
+        changed = True
+    if func and f"def {func}(" not in file_path.read_text():
+        file_path.write_text(file_path.read_text() + _pbt_stub(inv, func))
+        changed = True
+    return file_path if changed else None
 
 
 def _astgrep_language(applies_to: str) -> str:

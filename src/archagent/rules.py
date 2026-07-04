@@ -41,6 +41,21 @@ class PatternRule:
     scope: str | None = None
 
 
+@dataclass
+class PropertyRule:
+    target: str  # a pytest node id (path::func) or a path to property tests
+
+
+def parse_property(rule: str) -> "PropertyRule":
+    prefix = "property "
+    if not rule.startswith(prefix):
+        raise RuleError(f"PBT rule must start with 'property ': {rule!r}")
+    target = rule[len(prefix):].strip()
+    if not target:
+        raise RuleError(f"PBT rule has empty target: {rule!r}")
+    return PropertyRule(target=target)
+
+
 def parse_boundary(rule: str) -> BoundaryRule:
     if not rule.startswith("forbid "):
         raise RuleError(f"BOUNDARY rule must start with 'forbid ': {rule!r}")
