@@ -153,6 +153,24 @@ agent — Claude Code `.claude/skills/`, Cursor `.cursor/skills/`, OpenHands `.o
 `architecture/AGENTS.md` (the full instructions, archagent-owned). In Claude Code, invoke a skill directly
 as `/archagent-describe` (etc.) or just describe the task and Claude activates it.
 
+## Commands
+
+CLI:
+- `archagent init [PATH]` — scaffold `archagent.toml` + `architecture/` templates + agent skills.
+  Auto-detects agents (`--agents auto`); override with `--agents claude,cursor` / `all` / `none`.
+  `--wire` adds an additive pointer to top-level `CLAUDE.md`/`AGENTS.md`; `--force` re-scaffolds everything.
+- `archagent check` — regenerate configs, run the checkers, report per invariant (exit 1 on an
+  error-severity failure).
+- `archagent gen` — regenerate only the checker configs from `architecture/invariants.md` (`check` does
+  this for you).
+- `archagent upgrade` — refresh the archagent-owned prompts (skills + `architecture/AGENTS.md`) to the
+  latest; leaves your config and architecture content untouched.
+
+Agent skills (invoke in your coding agent; Claude Code slash form shown):
+- `/archagent-describe` — build or update the architecture artifact.
+- `/archagent-check` — run `archagent check` and resolve violations.
+- `/archagent-invariant` — add or change a checkable invariant.
+
 ## Configuration
 
 A small `archagent.toml` at the repo root tells archagent where the code is:
