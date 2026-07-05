@@ -13,19 +13,16 @@ are deterministic; the LLM only ever *proposes*.
 > invariants (Python via Hypothesis) — all driven by `architecture/invariants.md`, plus per-agent
 > delivery for Claude Code, Cursor, and OpenHands.
 
-## Quickstart
+## Install
 
-archagent installs from outside your repo and scaffolds into it (like Spec-Kit):
+archagent installs once (from outside your repos) and scaffolds into each project (like Spec-Kit).
+It isn't on PyPI yet, so install from the repo:
 
 ```bash
-uvx archagent init .        # scaffold archagent.toml + architecture/ + agent skills
-# ...describe your architecture and add invariants (see below)...
-uvx archagent check         # run the checkers, report per invariant (exit 1 on an error-severity failure)
+uv tool install git+https://github.com/BenedatLLC/archagent   # gives you an `archagent` command
 ```
 
-`init` detects your languages, writes a starter `archagent.toml`, lays down the `architecture/`
-templates, and installs the phase skills into each agent you select
-(`--agents claude,cursor,openhands`, or `--agents none`).
+Then run it inside a project (see **Workflow** below). Once published, `uvx archagent init .` will work too.
 
 ## The architecture artifact
 
@@ -40,6 +37,7 @@ shared source of truth that both humans and agents read and write:
 | `decisions/NNNN-*.md` | cold | ADRs — the *why* behind decisions, and the rejected alternatives |
 | `index.md` | hot | catalog of the docs |
 | `log.md` | — | append-only, chronological change log (grep/tail friendly) |
+| `AGENTS.md` | — | how to work with archagent in this repo (archagent-owned; refreshed by `upgrade`) |
 
 Two tiers, on purpose: the **hot** files are loaded into the agent every session, so they stay terse.
 The **cold** files (subsystem docs, ADRs) are retrieved only when relevant, so they can be full
@@ -116,15 +114,44 @@ Adding a language is adding a column, not rewriting anything. Generated configs 
 `.archagent/generated/` and are gitignored — they're derived from the table and regenerated on every
 `check`.
 
-## Agent workflow
+## Workflow
 
-`init` installs three phase skills into each selected agent (Claude Code `.claude/skills/`, Cursor
-`.cursor/skills/`, OpenHands `.openhands/microagents/`) plus a shared `AGENTS.md`:
+**Set up the architecture (once per repo):**
 
-- **describe** — build or update the architecture artifact (read existing docs, but verify against the
-  code; extract structure with ast-grep/grep; write the six-dimension docs and invariants).
-- **check** — run `archagent check`; fix violations, or change the invariant and record an ADR.
-- **invariant** — add or change a checkable rule and confirm it catches the right thing.
+1. **`archagent init .`** — scaffold `archagent.toml`, the `architecture/` templates, and the phase
+   skills. It **auto-detects which agents you use** (`.claude/`, `.cursor/`, `.openhands/`) and installs
+   skills for those; override with `--agents claude,cursor` / `all` / `none`. It also detects languages
+   and guesses `root_package` / `source_paths` — check those in `archagent.toml`. It **never creates or
+   overwrites your top-level `CLAUDE.md` / `AGENTS.md`**; the full instructions go in
+   `architecture/AGENTS.md`. Add `--wire` to append a small additive pointer to your top-level file(s).
+2. **`/archagent-describe`** (in your coding agent) — document the *current* architecture: it surveys any
+   existing docs, **verifies them against the code**, and writes the constitution, the per-subsystem docs
+   (the six dimensions), and an initial set of invariants.
+3. **`archagent check`** (or `/archagent-check`) — verify the code against those invariants.
+
+**Keep it honest as you work:**
+
+- **Every commit / PR** — `archagent check` (wire into pre-commit + CI) gates changes against the invariants.
+- **Add an invariant** — **`/archagent-invariant`**, or edit `architecture/invariants.md` by hand, to
+  encode a new rule (from a design decision, or lifted from a subsystem doc); `check` confirms it catches
+  the right thing.
+- **Update the architecture** (a new design, or the code changed) — re-run **`/archagent-describe`**:
+  it's *build-**or-update***. It re-reads the code and the existing docs, refreshes the subsystem(s) that
+  changed, flags where docs and code have drifted, and reconciles the invariants. Do this at
+  **design-review time** (does the proposed design fit the architecture?) and **periodically** as the code
+  evolves; record decisions as ADRs in `architecture/decisions/`.
+- **Upgrade the prompts** — **`archagent upgrade`** refreshes the archagent-owned files (the skills and
+  `architecture/AGENTS.md`) to the latest, and **leaves your config and architecture content untouched**.
+  (`init` on an existing repo skips your files and refreshes the prompts too; `--force` re-scaffolds
+  *everything*, clobbering your edits — avoid it for upgrades.)
+
+> Cadence: `describe` at design-review + periodically; `check` on every commit. archagent enforces *your
+> system's* design rules — not generic metrics (cycle counts, coupling scores).
+
+The three skills (`describe`, `check`, `invariant`) come from one neutral source and are installed per
+agent — Claude Code `.claude/skills/`, Cursor `.cursor/skills/`, OpenHands `.openhands/microagents/` — plus
+`architecture/AGENTS.md` (the full instructions, archagent-owned). In Claude Code, invoke a skill directly
+as `/archagent-describe` (etc.) or just describe the task and Claude activates it.
 
 ## Configuration
 
@@ -154,3 +181,14 @@ uv run archagent check --project examples/sample_ts    # TS (dependency-cruiser 
 import-linter (Python boundaries) · dependency-cruiser (JS/TS boundaries) · ast-grep (structural,
 any language) · grep/git for retrieval and history. archagent is the thin layer that turns one
 markdown table into those tools' configs and reports results per invariant.
+
+## Development
+
+```bash
+uv sync --group dev
+uv run pytest            # unit tests (DSL + table parsing, config generation, init/upgrade logic)
+                         # + an end-to-end check on examples/sample_py (real import-linter + ast-grep)
+```
+
+Tests run in CI on every push/PR (`.github/workflows/ci.yml`). The TS/PBT paths need Node / a target
+test env, so they're validated via the examples rather than in the unit suite.

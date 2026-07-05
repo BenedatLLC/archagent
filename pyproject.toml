@@ -22,5 +22,10 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/archagent"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
 # templates/ ships as package data so `archagent init` works after install
 
