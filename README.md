@@ -86,10 +86,13 @@ _A lifecycle is a state machine + a one-line caption: what it shows and the key 
     appear). `in <scope>` flags matches only there; `outside <scope>` flags everywhere *except* there
     (the "only `<scope>` may do this" case). `<scope>` is a path/glob (`src/app/domain`) or a dotted
     module (`app.domain.workflow`); omit it to scan all sources.
-  - `property <path::test>` — a **behavioral / data invariant** ("all state is per-user", state-machine
-    or round-trip properties) checked by a **property-based test**. `gen` scaffolds a Hypothesis stub
-    (you fill in the property, since it needs system knowledge); `check` runs it in the *project's* env
-    (`[python] test_command`, e.g. `uv run pytest`) and reports the minimal counterexample on failure.
+  - `property <path::test>` — a **behavioral / data invariant** ("all state is per-user", round-trip
+    properties) checked by a **property-based test**. `gen` scaffolds a Hypothesis `@given` stub (you
+    fill in the property); `check` runs it in the *project's* env (`[python] test_command`) and reports
+    the minimal counterexample on failure.
+  - `property stateful <path::TestCase>` — for **stateful** systems (state machines, stores, lifecycles):
+    `gen` scaffolds a Hypothesis `RuleBasedStateMachine` (random sequences of `@rule` operations checked
+    against `@invariant` methods) — the right tool for state/data-layer bugs a single `@given` can't catch.
 - **Severity**: `error` fails `check`; `warn` is reported but doesn't fail.
 - **Why**: a link to the ADR with the rationale.
 

@@ -50,7 +50,13 @@ def test_pattern_errors(rule):
 
 
 def test_property():
-    assert parse_property("property tests/t.py::test_x").target == "tests/t.py::test_x"
+    r = parse_property("property tests/t.py::test_x")
+    assert r.target == "tests/t.py::test_x" and r.stateful is False
+
+
+def test_property_stateful():
+    r = parse_property("property stateful tests/t.py::TestX")
+    assert r.stateful is True and r.target == "tests/t.py::TestX"
 
 
 @pytest.mark.parametrize("rule", ["nope", "property "])

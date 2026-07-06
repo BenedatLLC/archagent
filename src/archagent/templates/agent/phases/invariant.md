@@ -10,10 +10,15 @@ Add (or modify) a row in `architecture/invariants.md` and confirm it works.
    - `forbid-pattern <ast-grep pattern> [in|outside <scope>]` (STRUCTURAL) — `in <scope>` flags only
      there; `outside <scope>` flags everywhere except there ("only `<scope>` may do this"). `<scope>`
      is a path/glob or a dotted module.
-   - `property <path::test>` (PBT — behavioral/data invariants). `gen` scaffolds a Hypothesis stub;
-     **write the property yourself** (it needs system knowledge). Shape it as a preserved-invariant or
-     model/round-trip check; the property IS the spec. Needs `[python] test_command` (e.g.
+   - `property <path::test>` (PBT — behavioral/data invariants). `gen` scaffolds a Hypothesis `@given`
+     stub; **write the property yourself** (it needs system knowledge). Shape it as a preserved-invariant
+     or model/round-trip check; the property IS the spec. Needs `[python] test_command` (e.g.
      `uv run pytest`) so `check` can run it in the project's env.
+   - `property stateful <path::TestCase>` (PBT — **stateful** systems: state machines, stores,
+     lifecycles). `gen` scaffolds a Hypothesis `RuleBasedStateMachine`: model operations as `@rule`
+     methods (Hypothesis composes them into random sequences) and assert what must always hold as
+     `@invariant` methods. This is the right tool for state/data-layer invariants a single `@given`
+     can't catch (e.g. "state resets on error", "writes are reflected in reads").
 3. Add the row: ID, Type, Tier, Applies-to (language), Rule, Severity, Why (link an ADR), Status.
 4. Write or extend the ADR in `decisions/` explaining what the invariant prevents and why it matters.
 5. Run `archagent check`. Confirm it PASSES on current clean code, and (sanity-check) that it would FAIL

@@ -67,6 +67,17 @@ def test_property_scaffolds_stub(tmp_path):
     assert "def test_p(" in stub and "NotImplementedError" in stub
 
 
+def test_property_stateful_scaffolds_state_machine(tmp_path):
+    cfg = _cfg(tmp_path)
+    res = generate([_inv(id="ST1", type="DATAFLOW", tier="pbt",
+                         rule="property stateful tests/sp.py::TestWorkflow")], cfg)
+    assert res.pbt_ids == ["ST1"]
+    stub = (tmp_path / "tests" / "sp.py").read_text()
+    assert "class WorkflowMachine(RuleBasedStateMachine):" in stub
+    assert "@rule()" in stub and "@invariant()" in stub
+    assert "TestWorkflow = WorkflowMachine.TestCase" in stub
+
+
 def test_unsupported_is_skipped_not_guessed(tmp_path):
     cfg = _cfg(tmp_path)
     res = generate([_inv(id="Q", type="PURPOSE", tier="prose", rule="just prose")], cfg)

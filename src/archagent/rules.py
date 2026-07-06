@@ -43,17 +43,22 @@ class PatternRule:
 
 @dataclass
 class PropertyRule:
-    target: str  # a pytest node id (path::func) or a path to property tests
+    target: str  # a pytest node id (path::name) or a path to property tests
+    stateful: bool = False  # `property stateful ...` -> Hypothesis RuleBasedStateMachine
 
 
 def parse_property(rule: str) -> "PropertyRule":
     prefix = "property "
     if not rule.startswith(prefix):
         raise RuleError(f"PBT rule must start with 'property ': {rule!r}")
-    target = rule[len(prefix):].strip()
-    if not target:
+    rest = rule[len(prefix):].strip()
+    stateful = False
+    if rest == "stateful" or rest.startswith("stateful "):
+        stateful = True
+        rest = rest[len("stateful"):].strip()
+    if not rest:
         raise RuleError(f"PBT rule has empty target: {rule!r}")
-    return PropertyRule(target=target)
+    return PropertyRule(target=rest, stateful=stateful)
 
 
 def parse_boundary(rule: str) -> BoundaryRule:

@@ -177,9 +177,10 @@ def _scope_to_globs(scope: str, inv: Invariant, config: Config) -> list[str]:
 _PBT_HEADER = (
     '"""archagent property tests (Hypothesis).\n\n'
     "Each stub is generated from a `property` invariant in architecture/invariants.md.\n"
-    "Fill in the generator and assertion, then run `archagent check`.\n"
+    "Fill in the generator/rules and assertions, then run `archagent check`.\n"
     '"""\n\n'
     "from hypothesis import given, strategies as st\n"
+    "from hypothesis.stateful import RuleBasedStateMachine, invariant, rule\n"
 )
 
 
@@ -194,24 +195,55 @@ def _pbt_stub(inv: Invariant, func: str) -> str:
     )
 
 
-def _scaffold_property(inv: Invariant, config: Config) -> Path | None:
-    """Ensure a Hypothesis stub exists for a `property <path::func>` rule.
+def _pbt_stateful_stub(inv: Invariant, name: str) -> str:
+    core = name[4:] if name.startswith("Test") else name
+    machine = core if core.endswith("Machine") else core + "Machine"
+    why = inv.why or "see the linked ADR"
+    return (
+        f"\n\nclass {machine}(RuleBasedStateMachine):\n"
+        f'    """archagent property for {inv.id} -- {why}\n\n'
+        f"    Model the system's operations as @rule methods (Hypothesis composes them into\n"
+        f"    random sequences) and assert what must always hold as @invariant methods.\n"
+        f"    TODO: replace this scaffold.\n"
+        f'    """\n\n'
+        f"    def __init__(self):\n"
+        f"        super().__init__()\n"
+        f"        # TODO: construct the system under test (store / state machine / ...).\n\n"
+        f"    @rule()\n"
+        f"    def step(self):\n"
+        f"        # TODO: drive one operation on the system.\n"
+        f'        raise NotImplementedError("archagent: implement property {inv.id}")\n\n'
+        f"    @invariant()\n"
+        f"    def holds(self):\n"
+        f"        # TODO: assert invariant {inv.id} holds after every step.\n"
+        f"        pass\n\n\n"
+        f"{name} = {machine}.TestCase\n"
+    )
 
-    Only scaffolds (the property logic needs system knowledge — the agent/human writes
-    it). Returns the file path if it created the file or appended a stub, else None.
-    The function name should start with `test_` so pytest collects it.
+
+def _scaffold_property(inv: Invariant, config: Config) -> Path | None:
+    """Ensure a Hypothesis stub exists for a `property [stateful] <path::name>` rule.
+
+    Only scaffolds (the property logic needs system knowledge — the agent/human writes it).
+    Plain rules get a `@given` stub (name should start with `test_`); `stateful` rules get a
+    `RuleBasedStateMachine` + `<name> = <Machine>.TestCase`. Returns the file path if it
+    created the file or appended a stub, else None.
     """
     rule = parse_property(inv.rule)
-    rel, _, func = rule.target.partition("::")
+    rel, _, name = rule.target.partition("::")
     file_path = config.project_root / rel
     changed = False
     if not file_path.exists():
         file_path.parent.mkdir(parents=True, exist_ok=True)
         file_path.write_text(_PBT_HEADER)
         changed = True
-    if func and f"def {func}(" not in file_path.read_text():
-        file_path.write_text(file_path.read_text() + _pbt_stub(inv, func))
-        changed = True
+    if name:
+        text = file_path.read_text()
+        present = (f"{name} = " in text) if rule.stateful else (f"def {name}(" in text)
+        if not present:
+            stub = _pbt_stateful_stub(inv, name) if rule.stateful else _pbt_stub(inv, name)
+            file_path.write_text(text + stub)
+            changed = True
     return file_path if changed else None
 
 
