@@ -63,6 +63,26 @@ def test_upgrade_refreshes_prompts_only(tmp_path):
     assert res.agents == ["claude"]
 
 
+def test_upgrade_replaces_stale_prompts_but_keeps_user_content(tmp_path):
+    _pyrepo(tmp_path)
+    init_project(tmp_path, agents=["claude"])
+    skill = tmp_path / ".claude" / "skills" / "archagent-describe" / "SKILL.md"
+    agents_md = tmp_path / "architecture" / "AGENTS.md"
+    invariants = tmp_path / "architecture" / "invariants.md"
+    # simulate a stale install (old prompt text) + user-authored architecture content
+    skill.write_text("STALE")
+    agents_md.write_text("STALE")
+    invariants.write_text("MY INVARIANTS")
+
+    upgrade_project(tmp_path)
+
+    # archagent-owned prompts are refreshed to the latest (stale content replaced)
+    assert skill.read_text() != "STALE" and "archagent-describe" in skill.read_text()
+    assert agents_md.read_text() != "STALE"
+    # user-owned architecture content is preserved
+    assert invariants.read_text() == "MY INVARIANTS"
+
+
 def test_wire_is_additive_and_idempotent(tmp_path):
     _pyrepo(tmp_path)
     init_project(tmp_path, agents=["claude"], wire=True)
