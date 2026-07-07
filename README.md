@@ -24,6 +24,29 @@ uv tool install git+https://github.com/BenedatLLC/archagent   # gives you an `ar
 
 Then run it inside a project (see **Workflow** below). Once published, `uvx archagent init .` will work too.
 
+## Upgrading
+
+The prompts (agent skills + `architecture/AGENTS.md`) ship inside the archagent package, so upgrading is
+**two steps**: update the tool, then refresh the repo.
+
+1. **Update the archagent tool:**
+   ```bash
+   uv tool upgrade archagent                                   # installed from GitHub
+   # or, from a local checkout:
+   git -C /path/to/archagent pull && uv tool install --force /path/to/archagent
+   ```
+2. **Refresh the repo's prompts:**
+   ```bash
+   cd your-repo
+   archagent upgrade      # refreshes the skills + architecture/AGENTS.md only; leaves your
+                          # archagent.toml and architecture content untouched (--agents to pick which)
+   ```
+3. **Restart your coding-agent session** so it reloads the updated skills (`/skills` in Claude Code to confirm).
+
+> `archagent upgrade` alone won't help if the installed tool is stale — the prompts come from the package,
+> so do step 1 first. Don't use `archagent init --force` to upgrade: it re-scaffolds everything and would
+> overwrite your `invariants.md` and other authored content.
+
 ## The architecture artifact
 
 `init` scaffolds an `architecture/` directory in your repo — plain markdown, versioned in git, the
@@ -143,10 +166,9 @@ Adding a language is adding a column, not rewriting anything. Generated configs 
   changed, flags where docs and code have drifted, and reconciles the invariants. Do this at
   **design-review time** (does the proposed design fit the architecture?) and **periodically** as the code
   evolves; record decisions as ADRs in `architecture/decisions/`.
-- **Upgrade the prompts** — **`archagent upgrade`** refreshes the archagent-owned files (the skills and
-  `architecture/AGENTS.md`) to the latest, and **leaves your config and architecture content untouched**.
-  (`init` on an existing repo skips your files and refreshes the prompts too; `--force` re-scaffolds
-  *everything*, clobbering your edits — avoid it for upgrades.)
+- **Upgrade the prompts** — update the tool, then `archagent upgrade` (refreshes the skills +
+  `architecture/AGENTS.md` only, leaving your config and architecture content untouched). See
+  [Upgrading](#upgrading).
 
 > Cadence: `describe` at design-review + periodically; `check` on every commit. archagent enforces *your
 > system's* design rules — not generic metrics (cycle counts, coupling scores).
