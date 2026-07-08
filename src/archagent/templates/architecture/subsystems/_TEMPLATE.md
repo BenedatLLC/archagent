@@ -1,5 +1,9 @@
 # <Subsystem name>
 
+**Covers:** `src/<area>/**`
+<!-- Glob(s) of the code this subsystem owns. `archagent drift` uses this to flag when the code
+     changed but this doc didn't. Optional — if omitted, drift falls back to the file refs below. -->
+
 > **Purpose.** One short paragraph: what this subsystem is for and why it exists.
 > A new engineer should understand it here without opening other files.
 

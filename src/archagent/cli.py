@@ -15,6 +15,7 @@ from rich.table import Table
 
 from .check import run_checks
 from .config import load_config
+from .drift import find_drift
 from .generate import generate
 from .init import KNOWN_AGENTS, detect_agents, init_project, upgrade_project
 from .invariants import parse_invariants
@@ -154,6 +155,36 @@ def check(project: Path = typer.Option(Path("."), help="Target repo root")) -> N
         console.print(f"[red]{failed} invariant(s) violated.[/]")
         raise typer.Exit(code=1)
     console.print("[green]All invariants hold.[/]")
+
+
+@app.command()
+def drift(
+    project: Path = typer.Option(Path("."), help="Target repo root"),
+    exit_code: bool = typer.Option(False, "--exit-code", help="Exit 1 if any drift is found (for CI)"),
+) -> None:
+    """Reflexion-diff: report where the architecture/ docs and the code have drifted (informational)."""
+    config = load_config(project.resolve())
+    result = find_drift(config)
+    console.print("[bold]Architecture drift[/] — architecture/ vs code\n")
+
+    if result.dangling:
+        console.print(f"[red]Dangling references ({len(result.dangling)})[/] — a doc names code that no longer exists:")
+        for doc, ref in result.dangling:
+            console.print(f"  {doc} → {ref}")
+        console.print("")
+    if result.stale:
+        console.print(f"[yellow]Possibly stale ({len(result.stale)})[/] — code changed after the doc (git):")
+        for doc, detail in result.stale:
+            console.print(f"  {doc} — {detail}")
+        console.print("")
+    if not result.git_available:
+        console.print("[dim](git not available — stale-doc check skipped)[/]")
+    if not result.any:
+        console.print("[green]No drift found.[/]")
+        return
+    console.print("[dim]Reconcile via /archagent-describe (update mode).[/]")
+    if exit_code:
+        raise typer.Exit(code=1)
 
 
 def main() -> None:
