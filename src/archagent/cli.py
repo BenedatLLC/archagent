@@ -173,6 +173,9 @@ def drift(
             "dangling": [{"doc": d, "ref": r} for d, r in result.dangling],
             "stale": [{"doc": d, "detail": x} for d, x in result.stale],
             "undocumented": result.undocumented,
+            "undeclared_deps": [{"subsystem": s, "imports": t} for s, t in result.undeclared_deps],
+            "stale_deps": [{"subsystem": s, "declares": t} for s, t in result.stale_deps],
+            "undocumented_entrypoints": [{"name": n, "target": t} for n, t in result.undocumented_entrypoints],
             "git_available": result.git_available,
             "covers_declared": result.covers_declared,
         }, indent=2))
@@ -198,6 +201,21 @@ def drift(
             console.print(f"  {f}")
         if len(result.undocumented) > len(shown):
             console.print(f"  (+{len(result.undocumented) - len(shown)} more)")
+        console.print("")
+    if result.undeclared_deps:
+        console.print(f"[red]Undeclared dependencies ({len(result.undeclared_deps)})[/] — a subsystem imports another it doesn't declare (Depends-on):")
+        for s, t in result.undeclared_deps:
+            console.print(f"  {s} → {t}")
+        console.print("")
+    if result.stale_deps:
+        console.print(f"[yellow]Stale declared dependencies ({len(result.stale_deps)})[/] — declared Depends-on with no matching import:")
+        for s, t in result.stale_deps:
+            console.print(f"  {s} → {t}")
+        console.print("")
+    if result.undocumented_entrypoints:
+        console.print(f"[cyan]Undocumented entry points ({len(result.undocumented_entrypoints)})[/] — declared but not in any doc:")
+        for n, t in result.undocumented_entrypoints:
+            console.print(f"  {n} = {t}")
         console.print("")
 
     if not result.git_available:

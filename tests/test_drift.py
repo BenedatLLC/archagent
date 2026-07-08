@@ -98,6 +98,65 @@ def test_no_git_skips_stale(tmp_path):
     assert r.stale == []
 
 
+def _dep_repo(tmp):
+    (tmp / "src" / "pkg").mkdir(parents=True)
+    (tmp / "src" / "pkg" / "__init__.py").write_text("")
+    (tmp / "src" / "pkg" / "a.py").write_text("from pkg.b import thing\n")  # a -> b
+    (tmp / "src" / "pkg" / "b.py").write_text("thing = 1\n")
+    (tmp / "architecture" / "subsystems").mkdir(parents=True)
+    return Config(
+        project_root=tmp, languages=["python"],
+        python=PythonConfig(root_package="pkg", source_paths=["src"]),
+        ts=TSConfig(source_paths=["src"]),
+    )
+
+
+def test_undeclared_dependency_flagged(tmp_path):
+    cfg = _dep_repo(tmp_path)
+    _doc(cfg, "sa.md", "# SA\n\n**Covers:** `src/pkg/a.py`\n**Depends-on:** placeholder\n")
+    _doc(cfg, "sb.md", "# SB\n\n**Covers:** `src/pkg/b.py`\n")
+    r = find_drift(cfg)
+    assert ("sa", "sb") in r.undeclared_deps      # a imports b, sa didn't declare sb
+
+
+def test_declared_dependency_satisfied(tmp_path):
+    cfg = _dep_repo(tmp_path)
+    _doc(cfg, "sa.md", "# SA\n\n**Covers:** `src/pkg/a.py`\n**Depends-on:** sb\n")
+    _doc(cfg, "sb.md", "# SB\n\n**Covers:** `src/pkg/b.py`\n")
+    r = find_drift(cfg)
+    assert r.undeclared_deps == [] and r.stale_deps == []
+
+
+def test_stale_dependency_flagged(tmp_path):
+    cfg = _dep_repo(tmp_path)
+    (tmp_path / "src" / "pkg" / "a.py").write_text("x = 1\n")  # a no longer imports b
+    _doc(cfg, "sa.md", "# SA\n\n**Covers:** `src/pkg/a.py`\n**Depends-on:** sb\n")
+    _doc(cfg, "sb.md", "# SB\n\n**Covers:** `src/pkg/b.py`\n")
+    r = find_drift(cfg)
+    assert ("sa", "sb") in r.stale_deps and r.undeclared_deps == []
+
+
+def test_dependency_drift_gated_on_declaration(tmp_path):
+    cfg = _dep_repo(tmp_path)
+    _doc(cfg, "sa.md", "# SA\n\n**Covers:** `src/pkg/a.py`\n")  # no Depends-on
+    _doc(cfg, "sb.md", "# SB\n\n**Covers:** `src/pkg/b.py`\n")
+    assert find_drift(cfg).undeclared_deps == []
+
+
+def test_undocumented_entrypoint_flagged(tmp_path):
+    cfg = _repo(tmp_path)
+    (tmp_path / "pyproject.toml").write_text('[project]\nname = "x"\n\n[project.scripts]\nmytool = "pkg.cli:main"\n')
+    _doc(cfg, "pkg.md", "# Pkg\n\nNo mention here.\n")
+    assert ("mytool", "pkg.cli:main") in find_drift(cfg).undocumented_entrypoints
+
+
+def test_documented_entrypoint_not_flagged(tmp_path):
+    cfg = _repo(tmp_path)
+    (tmp_path / "pyproject.toml").write_text('[project]\nname = "x"\n\n[project.scripts]\nmytool = "pkg.cli:main"\n')
+    _doc(cfg, "pkg.md", "# Pkg\n\nThe `mytool` command runs it.\n")
+    assert find_drift(cfg).undocumented_entrypoints == []
+
+
 @pytest.mark.skipif(shutil.which("git") is None, reason="git not installed")
 def test_stale_doc_detected_via_git(tmp_path):
     cfg = _repo(tmp_path)

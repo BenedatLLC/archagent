@@ -12,10 +12,16 @@ explicit `**Covers:** <globs>` line when present, else the `path/to/file.py` ref
 
 from __future__ import annotations
 
+import ast
 import re
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # py < 3.11
+    tomllib = None
 
 from .config import Config
 
@@ -23,6 +29,7 @@ CODE_EXTS = (".py", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".go", ".rs", 
 _SKIP_DIRS = {".git", ".archagent", "__pycache__", "node_modules", ".venv", ".mypy_cache"}
 _BACKTICK = re.compile(r"`([^`\n]+)`")
 _COVERS = re.compile(r"^\s*\*{0,2}Covers:?\*{0,2}\s*[:：]?\s*(.+)$", re.IGNORECASE | re.MULTILINE)
+_DEPENDS = re.compile(r"^\s*\*{0,2}Depends[- ]?on:?\*{0,2}\s*[:：]?\s*(.+)$", re.IGNORECASE | re.MULTILINE)
 
 
 @dataclass
@@ -30,12 +37,18 @@ class DriftResult:
     dangling: list[tuple[str, str]] = field(default_factory=list)  # (doc, missing ref/glob)
     stale: list[tuple[str, str]] = field(default_factory=list)     # (doc, detail)
     undocumented: list[str] = field(default_factory=list)          # source files no subsystem Covers
+    undeclared_deps: list[tuple[str, str]] = field(default_factory=list)  # (subsystem, imported subsystem)
+    stale_deps: list[tuple[str, str]] = field(default_factory=list)       # (subsystem, declared-but-unused dep)
+    undocumented_entrypoints: list[tuple[str, str]] = field(default_factory=list)  # (name, target)
     git_available: bool = False
     covers_declared: bool = False  # did any subsystem doc declare **Covers:**? (gates undocumented)
 
     @property
     def any(self) -> bool:
-        return bool(self.dangling or self.stale or self.undocumented)
+        return bool(
+            self.dangling or self.stale or self.undocumented
+            or self.undeclared_deps or self.stale_deps or self.undocumented_entrypoints
+        )
 
 
 def find_drift(config: Config) -> DriftResult:
@@ -47,11 +60,14 @@ def find_drift(config: Config) -> DriftResult:
 
     source_files = _source_files(config)  # relative posix paths, for robust ref resolution
     covered_by_globs: set[str] = set()    # accumulates files claimed by any **Covers:** glob
+    all_text: list[str] = []
+    subs: list[tuple[str, set[str], set[str] | None]] = []  # (name, covered files, declared Depends-on)
 
     for doc in sorted(arch.rglob("*.md")):
         if doc.name.endswith("_TEMPLATE.md"):
             continue
         text = doc.read_text()
+        all_text.append(text)
         rel_doc = doc.relative_to(root).as_posix()
         refs = _file_refs(text)
         covers = _covers_globs(text)
@@ -68,13 +84,20 @@ def find_drift(config: Config) -> DriftResult:
             if not matched:
                 result.dangling.append((rel_doc, f"{glob}  (Covers matches no files)"))
 
-        # staleness: only subsystem docs describe code, and only when git can tell us
-        if result.git_available and _is_subsystem(doc, arch):
-            covered = _covered_files(root, covers, refs, source_files)
-            newer = [f for f in covered if _committed_after(root, f, rel_doc)]
-            if newer:
-                shown = ", ".join(newer[:3]) + (f" (+{len(newer) - 3} more)" if len(newer) > 3 else "")
-                result.stale.append((rel_doc, f"{len(newer)} covered file(s) changed after the doc: {shown}"))
+        if _is_subsystem(doc, arch):
+            covered_files = set()
+            for glob in covers:
+                covered_files.update(_glob_files(root, glob))
+            declared = _depends_on(text)
+            subs.append((doc.stem, covered_files, set(declared) if declared is not None else None))
+
+            # staleness: only subsystem docs describe code, and only when git can tell us
+            if result.git_available:
+                covered = _covered_files(root, covers, refs, source_files)
+                newer = [f for f in covered if _committed_after(root, f, rel_doc)]
+                if newer:
+                    shown = ", ".join(newer[:3]) + (f" (+{len(newer) - 3} more)" if len(newer) > 3 else "")
+                    result.stale.append((rel_doc, f"{len(newer)} covered file(s) changed after the doc: {shown}"))
 
     # divergence: source files owned by no subsystem's Covers glob. Only meaningful once some
     # doc declares Covers (otherwise every file is "undocumented", which is noise).
@@ -83,6 +106,11 @@ def find_drift(config: Config) -> DriftResult:
             f for f in source_files
             if f not in covered_by_globs and not f.endswith("__init__.py")
         )
+
+    # dependency-edge + entry-point drift (Python only in v1)
+    if "python" in config.languages:
+        result.undeclared_deps, result.stale_deps = _dependency_drift(root, config, subs, source_files)
+        result.undocumented_entrypoints = _entrypoint_drift(root, "\n".join(all_text))
 
     return result
 
@@ -190,3 +218,115 @@ def _last_commit_ts(root: Path, rel_path: str) -> int | None:
 def _committed_after(root: Path, file_rel: str, doc_rel: str) -> bool:
     ft, dt = _last_commit_ts(root, file_rel), _last_commit_ts(root, doc_rel)
     return ft is not None and dt is not None and ft > dt
+
+
+# --- dependency-edge + entry-point drift (Python v1) ---------------------
+
+def _depends_on(text: str) -> list[str] | None:
+    """Parse a `**Depends-on:** a, b` line into [names]; None if the doc doesn't declare one."""
+    m = _DEPENDS.search(text)
+    if not m:
+        return None
+    return [p.strip().strip("`") for p in re.split(r"[,\s]+", m.group(1).strip()) if p.strip()]
+
+
+def _dependency_drift(root, config, subs, source_files):
+    """Declared `**Depends-on:**` vs the actual cross-subsystem import graph (only for docs that declare)."""
+    file_subs: dict[str, set[str]] = {}
+    for name, files, _ in subs:
+        for f in files:
+            file_subs.setdefault(f, set()).add(name)
+    module_index = _module_index(source_files, config.python.source_paths)
+
+    undeclared: list[tuple[str, str]] = []
+    stale: list[tuple[str, str]] = []
+    for name, files, declared in subs:
+        if declared is None:  # gated: only subsystems that declare Depends-on participate
+            continue
+        actual: set[str] = set()
+        for f in files:
+            for target_file in _internal_targets(root, f, config.python.source_paths, module_index):
+                actual |= {t for t in file_subs.get(target_file, ()) if t != name}
+        undeclared += [(name, t) for t in sorted(actual - declared)]
+        stale += [(name, t) for t in sorted(declared - actual)]
+    return undeclared, stale
+
+
+def _module_of(rel_path: str, source_paths: list[str]) -> str | None:
+    for sp in source_paths:
+        prefix = sp.rstrip("/") + "/"
+        if rel_path.startswith(prefix) and rel_path.endswith(".py"):
+            parts = rel_path[len(prefix):-3].split("/")
+            if parts[-1] == "__init__":
+                parts = parts[:-1]
+            return ".".join(parts)
+    return None
+
+
+def _module_index(source_files: set[str], source_paths: list[str]) -> dict[str, str]:
+    idx: dict[str, str] = {}
+    for f in source_files:
+        m = _module_of(f, source_paths)
+        if m:
+            idx[m] = f
+    return idx
+
+
+def _imports_of(root: Path, rel_file: str, self_mod: str | None) -> list[str]:
+    try:
+        tree = ast.parse((root / rel_file).read_text())
+    except (SyntaxError, OSError, ValueError):
+        return []
+    mods: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            mods += [a.name for a in node.names]
+        elif isinstance(node, ast.ImportFrom):
+            if node.level:  # relative import — resolve against this file's package
+                if not self_mod:
+                    continue
+                base = self_mod.split(".")
+                pkg = base[:-node.level] if len(base) >= node.level else []
+                if node.module:
+                    stem = pkg + node.module.split(".")
+                    mods.append(".".join(stem))
+                    mods += [".".join(stem + [a.name]) for a in node.names]
+                else:
+                    mods += [".".join(pkg + [a.name]) for a in node.names]
+            elif node.module:
+                mods.append(node.module)
+                mods += [f"{node.module}.{a.name}" for a in node.names]  # from pkg import submodule
+    return mods
+
+
+def _internal_targets(root: Path, rel_file: str, source_paths: list[str], module_index: dict[str, str]) -> set[str]:
+    self_mod = _module_of(rel_file, source_paths)
+    targets = {module_index.get(cand) for cand in _imports_of(root, rel_file, self_mod)}
+    targets.discard(None)
+    targets.discard(rel_file)
+    return targets  # type: ignore[return-value]
+
+
+def _entry_points(root: Path) -> list[tuple[str, str]]:
+    pp = root / "pyproject.toml"
+    if tomllib is None or not pp.exists():
+        return []
+    try:
+        data = tomllib.loads(pp.read_text())
+    except (OSError, tomllib.TOMLDecodeError):
+        return []
+    proj = data.get("project", {})
+    eps: dict[str, str] = {}
+    eps.update(proj.get("scripts", {}) or {})
+    eps.update(proj.get("gui-scripts", {}) or {})
+    return list(eps.items())
+
+
+def _entrypoint_drift(root: Path, doc_text: str) -> list[tuple[str, str]]:
+    """Declared entry points not mentioned (by name or target module) in any architecture doc."""
+    out: list[tuple[str, str]] = []
+    for name, target in _entry_points(root):
+        tgt_mod = target.split(":", 1)[0]
+        if name not in doc_text and tgt_mod not in doc_text:
+            out.append((name, target))
+    return out

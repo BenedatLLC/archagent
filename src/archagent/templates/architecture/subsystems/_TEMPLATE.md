@@ -4,6 +4,10 @@
 <!-- Glob(s) of the code this subsystem owns. `archagent drift` uses this to flag when the code
      changed but this doc didn't. Optional — if omitted, drift falls back to the file refs below. -->
 
+**Depends-on:** other-subsystem, another-subsystem
+<!-- Other subsystems (by doc name) this one is allowed to import. `archagent drift` compares this to
+     the actual import graph and flags undeclared couplings + stale declarations. Optional. -->
+
 > **Purpose.** One short paragraph: what this subsystem is for and why it exists.
 > A new engineer should understand it here without opening other files.
 

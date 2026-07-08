@@ -53,10 +53,14 @@ design-review time (does a proposed design fit the architecture?) and periodical
     against the current code and update what moved.
   - **undocumented module** — code owned by no subsystem's `Covers`: document it under the right subsystem
     (extend a `**Covers:**` glob), or leave it if it's intentionally out of scope.
+  - **undeclared dependency** — a subsystem imports another it doesn't declare: add it to `Depends-on`
+    (if the coupling is intended) or remove the import (if it isn't).
+  - **stale dependency / undocumented entry point** — a `Depends-on` with no matching import, or a
+    `[project.scripts]` command absent from the docs: fix the declaration, or document the entry point.
 - **Verify, don't rewrite.** Re-check each existing claim and invariant against the *current* code. Leave
   what still holds; only change what moved.
-- **Declare coverage.** Give each `subsystems/<name>.md` a `**Covers:** <glob>` line so `drift` can tell
-  when that subsystem's code moves ahead of its doc.
+- **Declare coverage & dependencies.** Give each `subsystems/<name>.md` a `**Covers:** <glob>` line and a
+  `**Depends-on:** <subsystems>` line so `drift` can check both staleness and the subsystem topology.
 - **Flag drift.** Where a doc or invariant disagrees with the code, surface it and decide: fix the code,
   or update the doc/invariant (with an ADR if it's a real decision) — don't silently overwrite intent.
 - **Refresh what changed.** Update the affected `subsystems/<name>.md` and reconcile the invariants table
