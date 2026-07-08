@@ -1,5 +1,6 @@
 """archagent drift — the reflexion-diff between architecture/ docs and code."""
 
+import json
 import os
 import shutil
 import subprocess
@@ -53,6 +54,40 @@ def test_covers_glob_matching_nothing_is_dangling(tmp_path):
     assert find_drift(cfg).dangling == []
     _doc(cfg, "ghost.md", "# Ghost\n\n**Covers:** `src/ghost/**`\n")  # matches nothing
     assert any("src/ghost/**" in ref for _, ref in find_drift(cfg).dangling)
+
+
+def test_undocumented_gated_on_covers(tmp_path):
+    cfg = _repo(tmp_path)
+    _doc(cfg, "pkg.md", "# Pkg\n\n**Covers:** `src/pkg/a.py`\n")  # covers only a.py
+    r = find_drift(cfg)
+    assert r.covers_declared is True
+    assert "src/pkg/b.py" in r.undocumented
+    assert "src/pkg/a.py" not in r.undocumented
+
+
+def test_undocumented_skipped_without_covers(tmp_path):
+    cfg = _repo(tmp_path)
+    _doc(cfg, "pkg.md", "# Pkg\n\nRefs `src/pkg/a.py` and `src/pkg/b.py` but no Covers.\n")
+    r = find_drift(cfg)
+    assert r.covers_declared is False
+    assert r.undocumented == []
+
+
+def test_json_cli_output(tmp_path):
+    from typer.testing import CliRunner
+
+    from archagent.cli import app
+
+    _repo(tmp_path)
+    (tmp_path / "archagent.toml").write_text(
+        '[project]\nlanguages = ["python"]\n\n[python]\nroot_package = "pkg"\nsource_paths = ["src"]\n')
+    (tmp_path / "architecture" / "subsystems" / "pkg.md").write_text("# Pkg\n\nUses `src/pkg/gone.py`.\n")
+
+    result = CliRunner().invoke(app, ["drift", "--project", str(tmp_path), "--json"])
+    assert result.exit_code == 0
+    data = json.loads(result.stdout)
+    assert set(data) >= {"dangling", "stale", "undocumented", "git_available", "covers_declared"}
+    assert any(d["ref"] == "src/pkg/gone.py" for d in data["dangling"])
 
 
 def test_no_git_skips_stale(tmp_path):

@@ -29,11 +29,13 @@ _COVERS = re.compile(r"^\s*\*{0,2}Covers:?\*{0,2}\s*[:：]?\s*(.+)$", re.IGNOREC
 class DriftResult:
     dangling: list[tuple[str, str]] = field(default_factory=list)  # (doc, missing ref/glob)
     stale: list[tuple[str, str]] = field(default_factory=list)     # (doc, detail)
+    undocumented: list[str] = field(default_factory=list)          # source files no subsystem Covers
     git_available: bool = False
+    covers_declared: bool = False  # did any subsystem doc declare **Covers:**? (gates undocumented)
 
     @property
     def any(self) -> bool:
-        return bool(self.dangling or self.stale)
+        return bool(self.dangling or self.stale or self.undocumented)
 
 
 def find_drift(config: Config) -> DriftResult:
@@ -44,6 +46,7 @@ def find_drift(config: Config) -> DriftResult:
         return result
 
     source_files = _source_files(config)  # relative posix paths, for robust ref resolution
+    covered_by_globs: set[str] = set()    # accumulates files claimed by any **Covers:** glob
 
     for doc in sorted(arch.rglob("*.md")):
         if doc.name.endswith("_TEMPLATE.md"):
@@ -52,13 +55,17 @@ def find_drift(config: Config) -> DriftResult:
         rel_doc = doc.relative_to(root).as_posix()
         refs = _file_refs(text)
         covers = _covers_globs(text)
+        if covers:
+            result.covers_declared = True
 
         # absence: references / covers globs that resolve to nothing
         for ref in refs:
             if _resolve_ref(ref, root, source_files) is None:
                 result.dangling.append((rel_doc, ref))
         for glob in covers:
-            if not _glob_files(root, glob):
+            matched = _glob_files(root, glob)
+            covered_by_globs.update(matched)
+            if not matched:
                 result.dangling.append((rel_doc, f"{glob}  (Covers matches no files)"))
 
         # staleness: only subsystem docs describe code, and only when git can tell us
@@ -68,6 +75,14 @@ def find_drift(config: Config) -> DriftResult:
             if newer:
                 shown = ", ".join(newer[:3]) + (f" (+{len(newer) - 3} more)" if len(newer) > 3 else "")
                 result.stale.append((rel_doc, f"{len(newer)} covered file(s) changed after the doc: {shown}"))
+
+    # divergence: source files owned by no subsystem's Covers glob. Only meaningful once some
+    # doc declares Covers (otherwise every file is "undocumented", which is noise).
+    if result.covers_declared:
+        result.undocumented = sorted(
+            f for f in source_files
+            if f not in covered_by_globs and not f.endswith("__init__.py")
+        )
 
     return result
 

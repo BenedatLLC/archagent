@@ -46,9 +46,13 @@ First pass: the top-level map, 1–3 subsystems, and the highest-value invariant
 
 If `architecture/` already has content, you are **updating**, not starting over. Run this at
 design-review time (does a proposed design fit the architecture?) and periodically as the code changes:
-- **Start from the diff.** Run `archagent drift` — it lists dangling doc references (docs naming code
-  that no longer exists) and possibly-stale subsystem docs (code changed after the doc). That output is
-  your work-list; resolve each item below instead of re-reading everything.
+- **Start from the diff.** Run `archagent drift` (`--json` for a machine-readable work-list) and resolve
+  each item instead of re-reading everything:
+  - **dangling reference** — the doc names code that's gone: fix the reference, or delete the stale claim.
+  - **possibly stale** — the subsystem's covered code changed after the doc: re-verify that section
+    against the current code and update what moved.
+  - **undocumented module** — code owned by no subsystem's `Covers`: document it under the right subsystem
+    (extend a `**Covers:**` glob), or leave it if it's intentionally out of scope.
 - **Verify, don't rewrite.** Re-check each existing claim and invariant against the *current* code. Leave
   what still holds; only change what moved.
 - **Declare coverage.** Give each `subsystems/<name>.md` a `**Covers:** <glob>` line so `drift` can tell

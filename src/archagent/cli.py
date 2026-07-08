@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import typer
@@ -161,12 +162,25 @@ def check(project: Path = typer.Option(Path("."), help="Target repo root")) -> N
 def drift(
     project: Path = typer.Option(Path("."), help="Target repo root"),
     exit_code: bool = typer.Option(False, "--exit-code", help="Exit 1 if any drift is found (for CI)"),
+    as_json: bool = typer.Option(False, "--json", help="Emit the drift report as JSON (for tooling / agents)"),
 ) -> None:
     """Reflexion-diff: report where the architecture/ docs and the code have drifted (informational)."""
     config = load_config(project.resolve())
     result = find_drift(config)
-    console.print("[bold]Architecture drift[/] — architecture/ vs code\n")
 
+    if as_json:
+        print(json.dumps({
+            "dangling": [{"doc": d, "ref": r} for d, r in result.dangling],
+            "stale": [{"doc": d, "detail": x} for d, x in result.stale],
+            "undocumented": result.undocumented,
+            "git_available": result.git_available,
+            "covers_declared": result.covers_declared,
+        }, indent=2))
+        if exit_code and result.any:
+            raise typer.Exit(code=1)
+        return
+
+    console.print("[bold]Architecture drift[/] — architecture/ vs code\n")
     if result.dangling:
         console.print(f"[red]Dangling references ({len(result.dangling)})[/] — a doc names code that no longer exists:")
         for doc, ref in result.dangling:
@@ -177,8 +191,19 @@ def drift(
         for doc, detail in result.stale:
             console.print(f"  {doc} — {detail}")
         console.print("")
+    if result.undocumented:
+        shown = result.undocumented[:10]
+        console.print(f"[cyan]Undocumented modules ({len(result.undocumented)})[/] — code owned by no subsystem's Covers:")
+        for f in shown:
+            console.print(f"  {f}")
+        if len(result.undocumented) > len(shown):
+            console.print(f"  (+{len(result.undocumented) - len(shown)} more)")
+        console.print("")
+
     if not result.git_available:
         console.print("[dim](git not available — stale-doc check skipped)[/]")
+    if not result.covers_declared:
+        console.print("[dim](no **Covers:** in subsystem docs — undocumented-code check skipped)[/]")
     if not result.any:
         console.print("[green]No drift found.[/]")
         return

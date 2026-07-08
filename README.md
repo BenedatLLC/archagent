@@ -162,8 +162,9 @@ Adding a language is adding a column, not rewriting anything. Generated configs 
   encode a new rule (from a design decision, or lifted from a subsystem doc); `check` confirms it catches
   the right thing.
 - **See what drifted** — `archagent drift` reflexion-diffs the `architecture/` docs against the code:
-  **dangling references** (a doc names code that no longer exists) and **stale docs** (a subsystem doc's
-  covered code changed after the doc, via git). Informational — its output is the update work-list.
+  **dangling references** (a doc names code that no longer exists), **stale docs** (a subsystem doc's
+  covered code changed after the doc, via git), and **undocumented modules** (code owned by no subsystem's
+  `**Covers:**`). Informational — its output (`--json` for tooling) is the update work-list.
 - **Update the architecture** (a new design, or the code changed) — re-run **`/archagent-describe`**:
   it's *build-**or-update***. Start from `archagent drift`, then refresh the subsystem(s) that changed and
   reconcile the invariants. Do this at **design-review time** (does the proposed design fit the
@@ -189,8 +190,9 @@ CLI:
   `--wire` adds an additive pointer to top-level `CLAUDE.md`/`AGENTS.md`; `--force` re-scaffolds everything.
 - `archagent check` — regenerate configs, run the checkers, report per invariant (exit 1 on an
   error-severity failure).
-- `archagent drift` — reflexion-diff the `architecture/` docs against the code: dangling references +
-  stale docs (git). Informational; `--exit-code` to fail CI on any drift.
+- `archagent drift` — reflexion-diff the `architecture/` docs against the code: dangling references,
+  stale docs (git), and undocumented modules (when subsystem docs declare `**Covers:**`). Informational;
+  `--json` for tooling/agents, `--exit-code` to fail CI on any drift.
 - `archagent gen` — regenerate only the checker configs from `architecture/invariants.md` (`check` does
   this for you).
 - `archagent upgrade` — refresh the archagent-owned prompts (skills + `architecture/AGENTS.md`) to the
