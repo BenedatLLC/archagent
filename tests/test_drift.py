@@ -157,6 +157,32 @@ def test_documented_entrypoint_not_flagged(tmp_path):
     assert find_drift(cfg).undocumented_entrypoints == []
 
 
+def test_route_undocumented_without_spec(tmp_path):
+    cfg = _repo(tmp_path)
+    (tmp_path / "src" / "pkg" / "api.py").write_text("@app.get('/widgets')\ndef w(): ...\n")
+    _doc(cfg, "pkg.md", "# Pkg\n\nNothing about routes here.\n")
+    assert ("GET", "/widgets") in find_drift(cfg).undocumented_routes
+
+
+def test_route_documented_not_flagged(tmp_path):
+    cfg = _repo(tmp_path)
+    (tmp_path / "src" / "pkg" / "api.py").write_text("@app.get('/widgets')\ndef w(): ...\n")
+    _doc(cfg, "pkg.md", "# Pkg\n\nThe `/widgets` endpoint lists widgets.\n")
+    assert find_drift(cfg).undocumented_routes == []
+
+
+def test_route_diff_against_openapi_spec(tmp_path):
+    cfg = _repo(tmp_path)
+    (tmp_path / "src" / "pkg" / "api.py").write_text(
+        "@app.get('/widgets')\ndef w(): ...\n@app.post('/gadgets')\ndef g(): ...\n")
+    (tmp_path / "openapi.json").write_text('{"paths": {"/widgets": {"get": {}}, "/legacy": {"get": {}}}}')
+    r = find_drift(cfg)
+    assert r.openapi_spec == "openapi.json"
+    assert ("POST", "/gadgets") in r.undocumented_routes    # in code, not in spec
+    assert ("GET", "/legacy") in r.dangling_routes           # in spec, not in code
+    assert ("GET", "/widgets") not in r.undocumented_routes  # in both
+
+
 @pytest.mark.skipif(shutil.which("git") is None, reason="git not installed")
 def test_stale_doc_detected_via_git(tmp_path):
     cfg = _repo(tmp_path)

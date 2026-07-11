@@ -10,6 +10,7 @@ requires-python = ">=3.13"
 dependencies = [
     "ast-grep-cli>=0.44.0",
     "import-linter>=2.12",
+    "pyyaml>=6.0.3",
     "typer>=0.26.8",
 ]
 

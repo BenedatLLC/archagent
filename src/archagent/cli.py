@@ -176,6 +176,9 @@ def drift(
             "undeclared_deps": [{"subsystem": s, "imports": t} for s, t in result.undeclared_deps],
             "stale_deps": [{"subsystem": s, "declares": t} for s, t in result.stale_deps],
             "undocumented_entrypoints": [{"name": n, "target": t} for n, t in result.undocumented_entrypoints],
+            "undocumented_routes": [{"method": m, "path": p} for m, p in result.undocumented_routes],
+            "dangling_routes": [{"method": m, "path": p} for m, p in result.dangling_routes],
+            "openapi_spec": result.openapi_spec,
             "git_available": result.git_available,
             "covers_declared": result.covers_declared,
         }, indent=2))
@@ -216,6 +219,17 @@ def drift(
         console.print(f"[cyan]Undocumented entry points ({len(result.undocumented_entrypoints)})[/] — declared but not in any doc:")
         for n, t in result.undocumented_entrypoints:
             console.print(f"  {n} = {t}")
+        console.print("")
+    if result.undocumented_routes:
+        intended = f"the OpenAPI spec ({result.openapi_spec})" if result.openapi_spec else "any doc"
+        console.print(f"[red]Undocumented routes ({len(result.undocumented_routes)})[/] — a web route not in {intended}:")
+        for m, p in result.undocumented_routes:
+            console.print(f"  {m} {p}")
+        console.print("")
+    if result.dangling_routes:
+        console.print(f"[yellow]Dangling routes ({len(result.dangling_routes)})[/] — in the OpenAPI spec, not in code:")
+        for m, p in result.dangling_routes:
+            console.print(f"  {m} {p}")
         console.print("")
 
     if not result.git_available:

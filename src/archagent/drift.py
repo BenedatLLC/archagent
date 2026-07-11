@@ -24,6 +24,7 @@ except ModuleNotFoundError:  # py < 3.11
     tomllib = None
 
 from .config import Config
+from .webapi import extract_routes, load_openapi, matches
 
 CODE_EXTS = (".py", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".go", ".rs", ".java", ".rb")
 _SKIP_DIRS = {".git", ".archagent", "__pycache__", "node_modules", ".venv", ".mypy_cache"}
@@ -40,6 +41,9 @@ class DriftResult:
     undeclared_deps: list[tuple[str, str]] = field(default_factory=list)  # (subsystem, imported subsystem)
     stale_deps: list[tuple[str, str]] = field(default_factory=list)       # (subsystem, declared-but-unused dep)
     undocumented_entrypoints: list[tuple[str, str]] = field(default_factory=list)  # (name, target)
+    undocumented_routes: list[tuple[str, str]] = field(default_factory=list)  # (method, path) in code, not intended
+    dangling_routes: list[tuple[str, str]] = field(default_factory=list)      # (method, path) in spec, not in code
+    openapi_spec: str | None = None  # the committed spec used as the intended interface, if any
     git_available: bool = False
     covers_declared: bool = False  # did any subsystem doc declare **Covers:**? (gates undocumented)
 
@@ -48,6 +52,7 @@ class DriftResult:
         return bool(
             self.dangling or self.stale or self.undocumented
             or self.undeclared_deps or self.stale_deps or self.undocumented_entrypoints
+            or self.undocumented_routes or self.dangling_routes
         )
 
 
@@ -107,10 +112,13 @@ def find_drift(config: Config) -> DriftResult:
             if f not in covered_by_globs and not f.endswith("__init__.py")
         )
 
-    # dependency-edge + entry-point drift (Python only in v1)
+    # dependency-edge + entry-point + interface-surface drift (Python only in v1)
     if "python" in config.languages:
+        doc_text = "\n".join(all_text)
         result.undeclared_deps, result.stale_deps = _dependency_drift(root, config, subs, source_files)
-        result.undocumented_entrypoints = _entrypoint_drift(root, "\n".join(all_text))
+        result.undocumented_entrypoints = _entrypoint_drift(root, doc_text)
+        result.undocumented_routes, result.dangling_routes, result.openapi_spec = \
+            _interface_drift(root, source_files, doc_text)
 
     return result
 
@@ -330,3 +338,20 @@ def _entrypoint_drift(root: Path, doc_text: str) -> list[tuple[str, str]]:
         if name not in doc_text and tgt_mod not in doc_text:
             out.append((name, target))
     return out
+
+
+def _interface_drift(root, source_files, doc_text):
+    """Web-route surface (static) vs a committed OpenAPI spec if present, else the architecture docs."""
+    code_routes = extract_routes(root, source_files)
+    if not code_routes:
+        return [], [], None
+    spec = load_openapi(root)
+    if spec is not None:
+        spec_routes, spec_path = spec
+        undocumented = [(r.method, r.raw) for r in code_routes if not matches(r.method, r.path, spec_routes)]
+        dangling = [(s.method, s.raw) for s in spec_routes if not matches(s.method, s.path, code_routes)]
+        return undocumented, dangling, spec_path
+    # no spec — fall back to whether the route path is mentioned in any architecture doc
+    undocumented = [(r.method, r.raw) for r in code_routes
+                    if r.raw not in doc_text and ("/" + r.path) not in doc_text]
+    return undocumented, [], None
