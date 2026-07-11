@@ -25,6 +25,9 @@ class PythonConfig:
 @dataclass
 class TSConfig:
     source_paths: list[str] = field(default_factory=lambda: ["src"])
+    # Command to run property tests (fast-check) in the project's environment, e.g.
+    # "npx vitest run" or "npx jest". The pbt tier executes the project's code.
+    test_command: str = "npx vitest run"
 
 
 @dataclass
@@ -78,5 +81,8 @@ def load_config(project_root: Path) -> Config:
             source_paths=py.get("source_paths", ["src"]),
             test_command=py.get("test_command", "pytest"),
         ),
-        ts=TSConfig(source_paths=ts.get("source_paths", ["src"])),
+        ts=TSConfig(
+            source_paths=ts.get("source_paths", ["src"]),
+            test_command=ts.get("test_command", "npx vitest run"),
+        ),
     )

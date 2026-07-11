@@ -10,9 +10,12 @@ Each generated artifact carries the invariant ID so check results map back 1:1.
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
+
+_JS_EXTS = (".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs")
 
 from .config import Config
 from .invariants import Invariant
@@ -222,29 +225,94 @@ def _pbt_stateful_stub(inv: Invariant, name: str) -> str:
 
 
 def _scaffold_property(inv: Invariant, config: Config) -> Path | None:
-    """Ensure a Hypothesis stub exists for a `property [stateful] <path::name>` rule.
+    """Ensure a property-test stub exists for a `property [stateful] <path::name>` rule.
 
-    Only scaffolds (the property logic needs system knowledge — the agent/human writes it).
-    Plain rules get a `@given` stub (name should start with `test_`); `stateful` rules get a
-    `RuleBasedStateMachine` + `<name> = <Machine>.TestCase`. Returns the file path if it
-    created the file or appended a stub, else None.
+    The target's file extension picks the framework: `.py` -> Hypothesis (`@given`, or a
+    `RuleBasedStateMachine`); a JS/TS extension -> fast-check (`fc.property`, or `fc.commands`
+    model-based testing). Only scaffolds — the property logic needs system knowledge. Returns
+    the file path if it created the file or appended a stub, else None.
     """
     rule = parse_property(inv.rule)
     rel, _, name = rule.target.partition("::")
     file_path = config.project_root / rel
+    is_js = rel.endswith(_JS_EXTS)
     changed = False
     if not file_path.exists():
         file_path.parent.mkdir(parents=True, exist_ok=True)
-        file_path.write_text(_PBT_HEADER)
+        file_path.write_text(_pbt_js_header(config) if is_js else _PBT_HEADER)
         changed = True
     if name:
         text = file_path.read_text()
-        present = (f"{name} = " in text) if rule.stateful else (f"def {name}(" in text)
-        if not present:
+        if is_js:
+            present = f'"{name}"' in text or f"'{name}'" in text
+            stub = _pbt_js_stateful_stub(inv, name) if rule.stateful else _pbt_js_stub(inv, name)
+        else:
+            present = (f"{name} = " in text) if rule.stateful else (f"def {name}(" in text)
             stub = _pbt_stateful_stub(inv, name) if rule.stateful else _pbt_stub(inv, name)
+        if not present:
             file_path.write_text(text + stub)
             changed = True
     return file_path if changed else None
+
+
+# --- fast-check (JS/TS) --------------------------------------------------
+
+def _pbt_js_header(config: Config) -> str:
+    return (
+        "// archagent property tests (fast-check).\n"
+        "// Generated from `property` invariants in architecture/invariants.md; fill in the property.\n\n"
+        + _js_test_import(config)
+        + 'import fc from "fast-check";\n'
+    )
+
+
+def _js_test_import(config: Config) -> str:
+    """The `test` import line for the detected runner (jest exposes `test` as a global)."""
+    pj = config.project_root / "package.json"
+    deps = ""
+    if pj.exists():
+        try:
+            data = json.loads(pj.read_text())
+            deps = " ".join([*(data.get("devDependencies") or {}), *(data.get("dependencies") or {})])
+        except (OSError, ValueError):
+            deps = ""
+    if "jest" in deps and "vitest" not in deps:
+        return ""  # jest provides `test` globally
+    return 'import { test } from "vitest";\n'
+
+
+def _pbt_js_stub(inv: Invariant, name: str) -> str:
+    why = inv.why or "see the linked ADR"
+    return (
+        f'\n\ntest("{name}", () => {{\n'
+        f"  // archagent: property for {inv.id} -- {why}\n"
+        f"  fc.assert(\n"
+        f"    fc.property(fc.anything(), (input) => {{\n"
+        f"      // TODO: drive the system and assert invariant {inv.id}.\n"
+        f'      throw new Error("archagent: implement property {inv.id}");\n'
+        f"    }}),\n"
+        f"  );\n"
+        f"}});\n"
+    )
+
+
+def _pbt_js_stateful_stub(inv: Invariant, name: str) -> str:
+    why = inv.why or "see the linked ADR"
+    return (
+        f'\n\ntest("{name}", () => {{\n'
+        f"  // archagent: stateful property for {inv.id} -- {why}\n"
+        f"  // Model the system as fast-check Commands (model-based testing); assert invariants after each.\n"
+        f"  const allCommands = [\n"
+        f"    // TODO: e.g. fc.constant(new SomeCommand()),\n"
+        f"  ];\n"
+        f"  fc.assert(\n"
+        f"    fc.property(fc.commands(allCommands), (cmds) => {{\n"
+        f'      throw new Error("archagent: implement property {inv.id}");\n'
+        f"      // fc.modelRun(() => ({{ model: {{}}, real: {{}} }}), cmds);\n"
+        f"    }}),\n"
+        f"  );\n"
+        f"}});\n"
+    )
 
 
 def _astgrep_language(applies_to: str) -> str:

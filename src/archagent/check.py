@@ -162,43 +162,63 @@ def _run_ast_grep(ids, config, by_id) -> list[CheckResult]:
 
 # --- property-based tests (pbt) ------------------------------------------
 
+_JS_EXTS = (".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs")
+
+
 def _run_pbt(ids, config, by_id) -> list[CheckResult]:
     # Behavioral properties execute the project's code, so they run in the TARGET's
-    # environment (config.python.test_command), not archagent's venv.
-    test_cmd = shlex.split(config.python.test_command)
+    # environment (the language's test_command), not archagent's venv.
     env = dict(os.environ)
     env.pop("VIRTUAL_ENV", None)  # let the target's runner pick its own env
     results = []
     for i in ids:
         target = parse_property(by_id[i].rule).target
-        try:
-            proc = subprocess.run(
-                [*test_cmd, target, "-q", "--no-header", "-p", "no:cacheprovider"],
-                cwd=config.project_root, env=env, capture_output=True, text=True, timeout=300,
-            )
-        except FileNotFoundError:
-            results.append(CheckResult(i, "pbt", True, by_id[i].severity,
-                                       skipped_reason=f"test runner not found: {test_cmd[0]}"))
-            continue
-        out = proc.stdout + "\n" + proc.stderr
-        if proc.returncode == 0:
-            results.append(CheckResult(i, "pbt", True, by_id[i].severity))
-        elif proc.returncode == 5:  # pytest: no tests collected
-            results.append(CheckResult(i, "pbt", True, by_id[i].severity,
-                                       skipped_reason=f"property not found: {target}"))
+        rel = target.split("::", 1)[0]
+        if rel.endswith(_JS_EXTS):
+            results.append(_run_pbt_js(i, target, rel, config, by_id, env))
         else:
-            results.append(CheckResult(i, "pbt", False, by_id[i].severity,
-                                       findings=[Finding("", 0, _pbt_failure(out))]))
+            results.append(_run_pbt_py(i, target, config, by_id, env))
     return results
+
+
+def _run_pbt_py(i, target, config, by_id, env) -> CheckResult:
+    test_cmd = shlex.split(config.python.test_command)  # e.g. "uv run pytest"
+    try:
+        proc = subprocess.run(
+            [*test_cmd, target, "-q", "--no-header", "-p", "no:cacheprovider"],
+            cwd=config.project_root, env=env, capture_output=True, text=True, timeout=300,
+        )
+    except FileNotFoundError:
+        return CheckResult(i, "pbt", True, by_id[i].severity, skipped_reason=f"test runner not found: {test_cmd[0]}")
+    out = proc.stdout + "\n" + proc.stderr
+    if proc.returncode == 0:
+        return CheckResult(i, "pbt", True, by_id[i].severity)
+    if proc.returncode == 5:  # pytest: no tests collected
+        return CheckResult(i, "pbt", True, by_id[i].severity, skipped_reason=f"property not found: {target}")
+    return CheckResult(i, "pbt", False, by_id[i].severity, findings=[Finding("", 0, _pbt_failure(out))])
+
+
+def _run_pbt_js(i, target, rel, config, by_id, env) -> CheckResult:
+    test_cmd = shlex.split(config.ts.test_command)  # e.g. "npx vitest run"
+    name = target.split("::", 1)[1] if "::" in target else None
+    cmd = [*test_cmd, rel, *(["-t", name] if name else [])]  # vitest & jest both accept -t <name>
+    try:
+        proc = subprocess.run(cmd, cwd=config.project_root, env=env, capture_output=True, text=True, timeout=300)
+    except FileNotFoundError:
+        return CheckResult(i, "pbt", True, by_id[i].severity, skipped_reason=f"test runner not found: {test_cmd[0]}")
+    out = proc.stdout + "\n" + proc.stderr
+    if proc.returncode == 0:
+        return CheckResult(i, "pbt", True, by_id[i].severity)
+    return CheckResult(i, "pbt", False, by_id[i].severity, findings=[Finding("", 0, _pbt_failure(out))])
 
 
 def _pbt_failure(out: str) -> str:
     for line in out.splitlines():
-        if "Falsifying example" in line:
+        if "Falsifying example" in line or "Counterexample" in line:  # Hypothesis / fast-check
             return line.strip()[:120]
     for line in reversed(out.splitlines()):
         s = line.strip()
-        if s.startswith(("E ", "assert", "FAILED")) or "Error" in s:
+        if s.startswith(("E ", "assert", "FAILED")) or "Error" in s or "Property failed" in s:
             return s[:120]
     return "property failed"
 

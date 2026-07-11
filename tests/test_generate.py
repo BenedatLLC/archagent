@@ -78,6 +78,25 @@ def test_property_stateful_scaffolds_state_machine(tmp_path):
     assert "TestWorkflow = WorkflowMachine.TestCase" in stub
 
 
+def test_property_ts_scaffolds_fastcheck(tmp_path):
+    cfg = _cfg(tmp_path, langs=("ts",))
+    res = generate([_inv(id="TP1", type="INVARIANT", tier="pbt", applies_to="ts",
+                         rule="property tests/props.test.ts::sorted")], cfg)
+    assert res.pbt_ids == ["TP1"]
+    stub = (tmp_path / "tests" / "props.test.ts").read_text()
+    assert "fast-check" in stub
+    assert "fc.assert(" in stub and "fc.property(" in stub
+    assert 'test("sorted"' in stub
+
+
+def test_property_ts_stateful_scaffolds_commands(tmp_path):
+    cfg = _cfg(tmp_path, langs=("ts",))
+    generate([_inv(id="TP2", type="INVARIANT", tier="pbt", applies_to="ts",
+                   rule="property stateful tests/state.test.ts::machine")], cfg)
+    stub = (tmp_path / "tests" / "state.test.ts").read_text()
+    assert "fc.commands(" in stub and 'test("machine"' in stub
+
+
 def test_unsupported_is_skipped_not_guessed(tmp_path):
     cfg = _cfg(tmp_path)
     res = generate([_inv(id="Q", type="PURPOSE", tier="prose", rule="just prose")], cfg)

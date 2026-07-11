@@ -10,15 +10,16 @@ Add (or modify) a row in `architecture/invariants.md` and confirm it works.
    - `forbid-pattern <ast-grep pattern> [in|outside <scope>]` (STRUCTURAL) — `in <scope>` flags only
      there; `outside <scope>` flags everywhere except there ("only `<scope>` may do this"). `<scope>`
      is a path/glob or a dotted module.
-   - `property <path::test>` (PBT — behavioral/data invariants). `gen` scaffolds a Hypothesis `@given`
-     stub; **write the property yourself** (it needs system knowledge). Shape it as a preserved-invariant
-     or model/round-trip check; the property IS the spec. Needs `[python] test_command` (e.g.
-     `uv run pytest`) so `check` can run it in the project's env.
+   - `property <path::test>` (PBT — behavioral/data invariants). The target's file extension picks the
+     framework: a `.py` target scaffolds a Hypothesis `@given` stub, a JS/TS target a **fast-check**
+     `fc.property` stub. **Write the property yourself** (it needs system knowledge) — a preserved-invariant
+     or model/round-trip check; the property IS the spec. Needs the language's `test_command`
+     (`[python]` e.g. `uv run pytest`, `[ts]` e.g. `npx vitest run`) so `check` can run it.
    - `property stateful <path::TestCase>` (PBT — **stateful** systems: state machines, stores,
-     lifecycles). `gen` scaffolds a Hypothesis `RuleBasedStateMachine`: model operations as `@rule`
-     methods (Hypothesis composes them into random sequences) and assert what must always hold as
-     `@invariant` methods. This is the right tool for state/data-layer invariants a single `@given`
-     can't catch (e.g. "state resets on error", "writes are reflected in reads").
+     lifecycles). `gen` scaffolds a Hypothesis `RuleBasedStateMachine` (Python) or a fast-check
+     `fc.commands` model-based stub (JS/TS): model operations as commands/rules that get composed into
+     random sequences, and assert what must always hold after each. The right tool for state/data-layer
+     invariants a single property can't catch (e.g. "state resets on error", "writes reflected in reads").
 3. Add the row: ID, Type, Tier, Applies-to (language), Rule, Severity, Why (link an ADR), Status.
 4. Write or extend the ADR in `decisions/` explaining what the invariant prevents and why it matters.
 5. Run `archagent check`. Confirm it PASSES on current clean code, and (sanity-check) that it would FAIL

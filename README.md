@@ -110,12 +110,12 @@ _A lifecycle is a state machine + a one-line caption: what it shows and the key 
     (the "only `<scope>` may do this" case). `<scope>` is a path/glob (`src/app/domain`) or a dotted
     module (`app.domain.workflow`); omit it to scan all sources.
   - `property <path::test>` — a **behavioral / data invariant** ("all state is per-user", round-trip
-    properties) checked by a **property-based test**. `gen` scaffolds a Hypothesis `@given` stub (you
-    fill in the property); `check` runs it in the *project's* env (`[python] test_command`) and reports
-    the minimal counterexample on failure.
+    properties) checked by a **property-based test**. The target's file extension picks the framework:
+    `.py` → a Hypothesis `@given` stub, a JS/TS file → a **fast-check** `fc.property` stub. `check` runs it
+    in the *project's* env (`[python] test_command` / `[ts] test_command`) and reports the counterexample.
   - `property stateful <path::TestCase>` — for **stateful** systems (state machines, stores, lifecycles):
-    `gen` scaffolds a Hypothesis `RuleBasedStateMachine` (random sequences of `@rule` operations checked
-    against `@invariant` methods) — the right tool for state/data-layer bugs a single `@given` can't catch.
+    a Hypothesis `RuleBasedStateMachine` (Python) or a fast-check `fc.commands` model-based stub (JS/TS) —
+    random operation sequences checked against invariants, the right tool for state/data-layer bugs.
 - **Severity**: `error` fails `check`; `warn` is reported but doesn't fail.
 - **Why**: a link to the ADR with the rationale.
 
@@ -134,7 +134,7 @@ tool per `(invariant tier × language)`:
 |------------------|--------|---------|
 | BOUNDARY / layering | import-linter | dependency-cruiser |
 | STRUCTURAL (code shape) | ast-grep | ast-grep |
-| PBT (behavioral / data) | Hypothesis | fast-check *(planned)* |
+| PBT (behavioral / data) | Hypothesis | fast-check |
 
 Adding a language is adding a column, not rewriting anything. Generated configs live under
 `.archagent/generated/` and are gitignored — they're derived from the table and regenerated on every
