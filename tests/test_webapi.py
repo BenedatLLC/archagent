@@ -49,6 +49,35 @@ def test_non_route_decorator_is_ignored(tmp_path):
     assert extract_routes(tmp_path, files) == []
 
 
+def test_express_and_fastify_routes(tmp_path):
+    files = _files(tmp_path, {
+        "src/routes.ts": (
+            "app.get('/users', h)\n"
+            "router.post('/users/:id', h)\n"
+            "fastify.delete('/users/:id', h)\n"
+        ),
+    })
+    routes = extract_routes(tmp_path, files)
+    assert Route("GET", "users") in routes
+    assert Route("POST", "users/{}") in routes      # :id normalized to {}
+    assert Route("DELETE", "users/{}") in routes
+
+
+def test_nestjs_controller_routes(tmp_path):
+    files = _files(tmp_path, {
+        "src/users.controller.ts": (
+            "@Controller('users')\n"
+            "export class UsersController {\n"
+            "  @Get()\n  findAll() {}\n"
+            "  @Post(':id')\n  create() {}\n"
+            "}\n"
+        ),
+    })
+    paths = {(r.method, r.path) for r in extract_routes(tmp_path, files)}
+    assert ("GET", "users") in paths           # controller prefix + empty method path
+    assert ("POST", "users/{}") in paths       # prefix + :id
+
+
 def test_load_openapi_json(tmp_path):
     (tmp_path / "openapi.json").write_text(
         '{"paths": {"/items": {"get": {}, "post": {}}, "/items/{id}": {"get": {}}}}')

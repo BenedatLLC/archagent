@@ -55,8 +55,9 @@ design-review time (does a proposed design fit the architecture?) and periodical
     (extend a `**Covers:**` glob), or leave it if it's intentionally out of scope.
   - **undeclared dependency** — a subsystem imports another it doesn't declare: add it to `Depends-on`
     (if the coupling is intended) or remove the import (if it isn't).
-  - **stale dependency / undocumented entry point** — a `Depends-on` with no matching import, or a
-    `[project.scripts]` command absent from the docs: fix the declaration, or document the entry point.
+  - **stale dependency / undocumented entry point / undocumented route** — a `Depends-on` with no
+    matching import, a `[project.scripts]`/`package.json bin` command absent from the docs, or a web route
+    not in the OpenAPI spec/docs: fix the declaration, or document the entry point / route.
 - **Verify, don't rewrite.** Re-check each existing claim and invariant against the *current* code. Leave
   what still holds; only change what moved.
 - **Declare coverage & dependencies.** Give each `subsystems/<name>.md` a `**Covers:** <glob>` line and a

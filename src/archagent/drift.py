@@ -13,6 +13,8 @@ explicit `**Covers:** <globs>` line when present, else the `path/to/file.py` ref
 from __future__ import annotations
 
 import ast
+import json
+import posixpath
 import re
 import subprocess
 from dataclasses import dataclass, field
@@ -112,13 +114,13 @@ def find_drift(config: Config) -> DriftResult:
             if f not in covered_by_globs and not f.endswith("__init__.py")
         )
 
-    # dependency-edge + entry-point + interface-surface drift (Python only in v1)
-    if "python" in config.languages:
-        doc_text = "\n".join(all_text)
-        result.undeclared_deps, result.stale_deps = _dependency_drift(root, config, subs, source_files)
-        result.undocumented_entrypoints = _entrypoint_drift(root, doc_text)
-        result.undocumented_routes, result.dangling_routes, result.openapi_spec = \
-            _interface_drift(root, source_files, doc_text)
+    # dependency-edge + entry-point + interface-surface drift (Python + JS/TS)
+    doc_text = "\n".join(all_text)
+    import_graph = _import_graph(root, config, source_files)
+    result.undeclared_deps, result.stale_deps = _dependency_drift(subs, import_graph)
+    result.undocumented_entrypoints = _entrypoint_drift(root, doc_text)
+    result.undocumented_routes, result.dangling_routes, result.openapi_spec = \
+        _interface_drift(root, source_files, doc_text)
 
     return result
 
@@ -238,13 +240,12 @@ def _depends_on(text: str) -> list[str] | None:
     return [p.strip().strip("`") for p in re.split(r"[,\s]+", m.group(1).strip()) if p.strip()]
 
 
-def _dependency_drift(root, config, subs, source_files):
+def _dependency_drift(subs, import_graph):
     """Declared `**Depends-on:**` vs the actual cross-subsystem import graph (only for docs that declare)."""
     file_subs: dict[str, set[str]] = {}
     for name, files, _ in subs:
         for f in files:
             file_subs.setdefault(f, set()).add(name)
-    module_index = _module_index(source_files, config.python.source_paths)
 
     undeclared: list[tuple[str, str]] = []
     stale: list[tuple[str, str]] = []
@@ -253,11 +254,56 @@ def _dependency_drift(root, config, subs, source_files):
             continue
         actual: set[str] = set()
         for f in files:
-            for target_file in _internal_targets(root, f, config.python.source_paths, module_index):
+            for target_file in import_graph.get(f, ()):
                 actual |= {t for t in file_subs.get(target_file, ()) if t != name}
         undeclared += [(name, t) for t in sorted(actual - declared)]
         stale += [(name, t) for t in sorted(declared - actual)]
     return undeclared, stale
+
+
+def _import_graph(root: Path, config: Config, source_files: set[str]) -> dict[str, set[str]]:
+    """file -> set of internal files it imports. Python via `ast`, JS/TS via regex (no node)."""
+    py_index = _module_index(source_files, config.python.source_paths)
+    graph: dict[str, set[str]] = {}
+    for f in source_files:
+        if f.endswith(".py"):
+            graph[f] = _internal_targets(root, f, config.python.source_paths, py_index)
+        elif f.endswith(_JS_EXTS):
+            graph[f] = _js_targets(root, f, source_files)
+    return graph
+
+
+# --- JS/TS imports (regex, no node) --------------------------------------
+
+_JS_EXTS = (".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs")
+_JS_IMPORT = re.compile(
+    r"""(?:import|export)\s+(?:[^'"]*?\sfrom\s+)?['"]([^'"]+)['"]"""  # import/export ... from '...'
+    r"""|require\(\s*['"]([^'"]+)['"]\s*\)"""                          # require('...')
+    r"""|import\(\s*['"]([^'"]+)['"]\s*\)""",                          # dynamic import('...')
+)
+
+
+def _js_targets(root: Path, rel_file: str, source_files: set[str]) -> set[str]:
+    try:
+        text = (root / rel_file).read_text()
+    except OSError:
+        return set()
+    targets: set[str] = set()
+    for m in _JS_IMPORT.finditer(text):
+        spec = m.group(1) or m.group(2) or m.group(3)
+        if spec and spec.startswith("."):  # relative -> internal; bare specifiers are npm packages
+            resolved = _resolve_js(rel_file, spec, source_files)
+            if resolved and resolved != rel_file:
+                targets.add(resolved)
+    return targets
+
+
+def _resolve_js(rel_file: str, spec: str, source_files: set[str]) -> str | None:
+    target = posixpath.normpath(posixpath.join(posixpath.dirname(rel_file), spec))
+    cands = [target] + [target + e for e in _JS_EXTS] + [posixpath.join(target, "index" + e) for e in _JS_EXTS]
+    if target.endswith(".js"):  # NodeNext: a '.js' specifier often maps to a '.ts' source
+        cands += [target[:-3] + ".ts", target[:-3] + ".tsx"]
+    return next((c for c in cands if c in source_files), None)
 
 
 def _module_of(rel_path: str, source_paths: list[str]) -> str | None:
@@ -316,6 +362,10 @@ def _internal_targets(root: Path, rel_file: str, source_paths: list[str], module
 
 
 def _entry_points(root: Path) -> list[tuple[str, str]]:
+    return _pyproject_scripts(root) + _package_json_bin(root)
+
+
+def _pyproject_scripts(root: Path) -> list[tuple[str, str]]:
     pp = root / "pyproject.toml"
     if tomllib is None or not pp.exists():
         return []
@@ -328,6 +378,22 @@ def _entry_points(root: Path) -> list[tuple[str, str]]:
     eps.update(proj.get("scripts", {}) or {})
     eps.update(proj.get("gui-scripts", {}) or {})
     return list(eps.items())
+
+
+def _package_json_bin(root: Path) -> list[tuple[str, str]]:
+    pj = root / "package.json"
+    if not pj.exists():
+        return []
+    try:
+        data = json.loads(pj.read_text())
+    except (OSError, json.JSONDecodeError):
+        return []
+    b = data.get("bin")
+    if isinstance(b, str):
+        return [(data.get("name", "(package)"), b)]
+    if isinstance(b, dict):
+        return list(b.items())
+    return []
 
 
 def _entrypoint_drift(root: Path, doc_text: str) -> list[tuple[str, str]]:

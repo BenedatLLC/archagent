@@ -193,9 +193,10 @@ CLI:
   error-severity failure).
 - `archagent drift` — reflexion-diff the `architecture/` docs against the code: dangling references,
   stale docs (git), undocumented modules (via `**Covers:**`), undeclared/stale subsystem dependencies
-  (declared `**Depends-on:**` vs the actual import graph), undocumented entry points, and the **web-route
-  surface** (Flask / FastAPI / Django routes, static, vs a committed OpenAPI spec if present, else the
-  docs). Informational; `--json` for tooling/agents, `--exit-code` to fail CI on any drift.
+  (declared `**Depends-on:**` vs the actual import graph — Python `ast` + JS/TS regex), undocumented entry
+  points (`[project.scripts]` + `package.json` `bin`), and the **web-route surface** (Flask/FastAPI/Django
+  + Express/Fastify/NestJS, static, vs a committed OpenAPI spec if present, else the docs). Informational;
+  `--json` for tooling/agents, `--exit-code` to fail CI on any drift.
 - `archagent gen` — regenerate only the checker configs from `architecture/invariants.md` (`check` does
   this for you).
 - `archagent upgrade` — refresh the archagent-owned prompts (skills + `architecture/AGENTS.md`) to the

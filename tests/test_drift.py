@@ -143,6 +143,47 @@ def test_dependency_drift_gated_on_declaration(tmp_path):
     assert find_drift(cfg).undeclared_deps == []
 
 
+def _js_repo(tmp):
+    (tmp / "src" / "app").mkdir(parents=True)
+    (tmp / "src" / "app" / "a.ts").write_text("import { thing } from './b';\nexport const x = thing;\n")  # a -> b
+    (tmp / "src" / "app" / "b.ts").write_text("export const thing = 1;\n")
+    (tmp / "architecture" / "subsystems").mkdir(parents=True)
+    return Config(
+        project_root=tmp, languages=["ts"],
+        python=PythonConfig(root_package=None, source_paths=["src"]),
+        ts=TSConfig(source_paths=["src"]),
+    )
+
+
+def test_ts_undeclared_dependency(tmp_path):
+    cfg = _js_repo(tmp_path)
+    _doc(cfg, "sa.md", "# SA\n\n**Covers:** `src/app/a.ts`\n**Depends-on:** placeholder\n")
+    _doc(cfg, "sb.md", "# SB\n\n**Covers:** `src/app/b.ts`\n")
+    assert ("sa", "sb") in find_drift(cfg).undeclared_deps      # a.ts imports ./b
+
+
+def test_ts_declared_dependency_satisfied(tmp_path):
+    cfg = _js_repo(tmp_path)
+    _doc(cfg, "sa.md", "# SA\n\n**Covers:** `src/app/a.ts`\n**Depends-on:** sb\n")
+    _doc(cfg, "sb.md", "# SB\n\n**Covers:** `src/app/b.ts`\n")
+    r = find_drift(cfg)
+    assert r.undeclared_deps == [] and r.stale_deps == []
+
+
+def test_ts_package_json_bin_entrypoint(tmp_path):
+    cfg = _js_repo(tmp_path)
+    (tmp_path / "package.json").write_text('{"name": "app", "bin": {"mycli": "dist/cli.js"}}')
+    _doc(cfg, "sa.md", "# SA\n\nNo mention here.\n")
+    assert ("mycli", "dist/cli.js") in find_drift(cfg).undocumented_entrypoints
+
+
+def test_ts_route_undocumented(tmp_path):
+    cfg = _js_repo(tmp_path)
+    (tmp_path / "src" / "app" / "routes.ts").write_text("app.get('/widgets', h)\n")
+    _doc(cfg, "sa.md", "# SA\n\nno routes mentioned\n")
+    assert ("GET", "/widgets") in find_drift(cfg).undocumented_routes
+
+
 def test_undocumented_entrypoint_flagged(tmp_path):
     cfg = _repo(tmp_path)
     (tmp_path / "pyproject.toml").write_text('[project]\nname = "x"\n\n[project.scripts]\nmytool = "pkg.cli:main"\n')

@@ -25,6 +25,12 @@ except ModuleNotFoundError:  # pragma: no cover
 
 _VERBS = {"get", "post", "put", "delete", "patch", "head", "options"}
 _PARAM = re.compile(r"<[^>]+>|\{[^}]+\}|:[A-Za-z_]\w*|\(\?P<[^>]+>[^)]*\)")
+_JS_EXTS = (".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs")
+# Express / Fastify: `x.get('/path', ...)` — the "/path" first arg is the signal.
+_JS_ROUTE = re.compile(r"""\.(get|post|put|delete|patch|head|options|all)\s*\(\s*['"`](/[^'"`]*)""", re.IGNORECASE)
+# NestJS: `@Controller('prefix')` + `@Get('sub')` method decorators.
+_NEST_CTRL = re.compile(r"""@Controller\(\s*['"`]?([^'"`)]*)""")
+_NEST_METHOD = re.compile(r"""@(Get|Post|Put|Delete|Patch|Head|Options|All)\(\s*['"`]?([^'"`)]*)""")
 _SKIP_DIRS = {".git", ".archagent", "__pycache__", "node_modules", ".venv"}
 _SPEC_NAMES = ("openapi.json", "openapi.yaml", "openapi.yml", "swagger.json", "swagger.yaml", "swagger.yml")
 
@@ -45,16 +51,35 @@ def _norm(path: str) -> str:
 
 def extract_routes(root: Path, source_files: set[str]) -> list[Route]:
     routes: list[Route] = []
-    for rel in sorted(f for f in source_files if f.endswith(".py")):
+    for rel in sorted(source_files):
         try:
             text = (root / rel).read_text()
-            tree = ast.parse(text)
-        except (SyntaxError, OSError, ValueError):
+        except OSError:
             continue
-        routes += _decorator_routes(tree, rel)
-        if rel.endswith("urls.py") or "urlpatterns" in text:
-            routes += _django_routes(tree, rel)
+        if rel.endswith(".py"):
+            try:
+                tree = ast.parse(text)
+            except (SyntaxError, ValueError):
+                continue
+            routes += _decorator_routes(tree, rel)
+            if rel.endswith("urls.py") or "urlpatterns" in text:
+                routes += _django_routes(tree, rel)
+        elif rel.endswith(_JS_EXTS):
+            routes += _js_routes(text, rel)
     return list(dict.fromkeys(routes))
+
+
+def _js_routes(text: str, rel: str) -> list[Route]:
+    out: list[Route] = []
+    for verb, path in _JS_ROUTE.findall(text):  # Express / Fastify: x.get('/path', ...)
+        out.append(Route("*" if verb.lower() == "all" else verb.upper(), _norm(path), path, rel))
+    if "@Controller" in text:  # NestJS: combine controller prefix + method decorator
+        prefixes = _NEST_CTRL.findall(text)
+        prefix = prefixes[0] if prefixes else ""
+        for verb, sub in _NEST_METHOD.findall(text):
+            raw = "/" + "/".join(p.strip("/") for p in (prefix, sub) if p.strip("/"))
+            out.append(Route("*" if verb.lower() == "all" else verb.upper(), _norm(raw), raw, rel))
+    return out
 
 
 def _first_str(call: ast.Call) -> str | None:
