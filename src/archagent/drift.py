@@ -27,6 +27,7 @@ except ModuleNotFoundError:  # py < 3.11
 
 from .config import Config
 from .configscan import declared_config_keys, read_config_keys
+from .deployscan import declared_services, extract_services
 from .webapi import extract_routes, load_openapi, matches
 
 CODE_EXTS = (".py", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".go", ".rs", ".java", ".rb")
@@ -48,6 +49,8 @@ class DriftResult:
     dangling_routes: list[tuple[str, str]] = field(default_factory=list)      # (method, path) in spec, not in code
     undocumented_config: list[str] = field(default_factory=list)  # env key read in code, not declared
     dangling_config: list[str] = field(default_factory=list)      # declared config key not read in code
+    undocumented_services: list[str] = field(default_factory=list)  # service in IaC, not declared
+    dangling_services: list[str] = field(default_factory=list)      # declared service, not found in IaC
     openapi_spec: str | None = None  # the committed spec used as the intended interface, if any
     git_available: bool = False
     covers_declared: bool = False  # did any subsystem doc declare **Covers:**? (gates undocumented)
@@ -59,6 +62,7 @@ class DriftResult:
             or self.undeclared_deps or self.stale_deps or self.undocumented_entrypoints
             or self.undocumented_routes or self.dangling_routes
             or self.undocumented_config or self.dangling_config
+            or self.undocumented_services or self.dangling_services
         )
 
 
@@ -132,6 +136,13 @@ def find_drift(config: Config) -> DriftResult:
         read_cfg = read_config_keys(root, source_files)
         result.undocumented_config = sorted(read_cfg - declared_cfg)
         result.dangling_config = sorted(declared_cfg - read_cfg)
+
+    # deployment drift: services in IaC vs a declared **Services:** list (gated on a declaration)
+    declared_svc = declared_services(doc_text)
+    if declared_svc:
+        actual_svc = extract_services(root)
+        result.undocumented_services = sorted(actual_svc - declared_svc)
+        result.dangling_services = sorted(declared_svc - actual_svc)
 
     return result
 

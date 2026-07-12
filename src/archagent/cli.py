@@ -180,6 +180,8 @@ def drift(
             "dangling_routes": [{"method": m, "path": p} for m, p in result.dangling_routes],
             "undocumented_config": result.undocumented_config,
             "dangling_config": result.dangling_config,
+            "undocumented_services": result.undocumented_services,
+            "dangling_services": result.dangling_services,
             "openapi_spec": result.openapi_spec,
             "git_available": result.git_available,
             "covers_declared": result.covers_declared,
@@ -242,6 +244,16 @@ def drift(
         console.print(f"[yellow]Dangling config ({len(result.dangling_config)})[/] — declared but not read in code:")
         for k in result.dangling_config:
             console.print(f"  {k}")
+        console.print("")
+    if result.undocumented_services:
+        console.print(f"[red]Undocumented services ({len(result.undocumented_services)})[/] — in IaC, not in the deployment view:")
+        for s in result.undocumented_services:
+            console.print(f"  {s}")
+        console.print("")
+    if result.dangling_services:
+        console.print(f"[yellow]Dangling services ({len(result.dangling_services)})[/] — declared but not found in IaC:")
+        for s in result.dangling_services:
+            console.print(f"  {s}")
         console.print("")
 
     if not result.git_available:

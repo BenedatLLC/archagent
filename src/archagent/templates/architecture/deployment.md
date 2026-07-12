@@ -5,6 +5,10 @@ How the system is deployed and configured. Keep this honest — `archagent drift
 
 ## Deployment view
 
+**Services:** web, worker
+<!-- The services/processes the system deploys. `archagent drift` flags services found in IaC
+     (docker-compose / Procfile / k8s) but not listed here, and listed-but-missing ones. -->
+
 What runs where: processes/services, their runtimes/containers, and the external infrastructure they
 depend on (datastores, queues, third-party APIs). One line per unit; note how they're wired.
 

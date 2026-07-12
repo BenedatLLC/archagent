@@ -195,6 +195,23 @@ def test_config_drift_against_manifest(tmp_path):
     assert "DOC_HOME" not in r.undocumented_config    # in both
 
 
+def test_service_drift_against_compose(tmp_path):
+    cfg = _repo(tmp_path)
+    (tmp_path / "docker-compose.yml").write_text("services:\n  web:\n    image: x\n  worker:\n    image: y\n")
+    _doc(cfg, "deployment.md", "# Deploy\n\n**Services:** web, ghost\n")
+    r = find_drift(cfg)
+    assert "worker" in r.undocumented_services   # in compose, not declared
+    assert "ghost" in r.dangling_services         # declared, not in IaC
+    assert "web" not in r.undocumented_services   # in both
+
+
+def test_service_drift_gated_on_declaration(tmp_path):
+    cfg = _repo(tmp_path)
+    (tmp_path / "docker-compose.yml").write_text("services:\n  web:\n    image: x\n")
+    r = find_drift(cfg)  # no **Services:** declared -> skipped
+    assert r.undocumented_services == [] and r.dangling_services == []
+
+
 def test_config_drift_gated_on_manifest(tmp_path):
     cfg = _repo(tmp_path)
     (tmp_path / "src" / "pkg" / "settings.py").write_text("import os\nA = os.getenv('DOC_HOME')\n")
