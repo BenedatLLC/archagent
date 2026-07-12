@@ -50,10 +50,15 @@ architecture is well-formed.**
   adjacent layer, or invert with an interface.
 - **Hard-coded endpoint** (D) — a literal address in code; a barrier to local development and relocation.
   Move to config / service discovery.
-- **Service without a healthcheck** (D) — orchestration can't tell when it's ready; add one.
 
-To enable the layering checks, give each subsystem doc a `**Tier:**` line (e.g. `ui` / `domain` / `infra`).
+## History signals (regime B, from git co-change)
+Mined from `git log`; require a git repo (skip with `--no-history`, window with `--since`).
+- **Shotgun surgery / implicit cross-module coupling** (group B) — two subsystems co-change often but neither
+  depends on the other. A change to one keeps forcing a change to the other with no code link — the boundary
+  is wrong. Merge the shared concern, or add the missing explicit interface. The highest-value smell here.
+- **Unstable interface** (B) — a widely-depended-on subsystem that keeps changing with its dependents,
+  spreading churn. Freeze its contract, or split the volatile part from the stable one.
 
-> Later phases add history-based signals (shotgun surgery, unstable interface — from git co-change) and
-> data-ownership signals (shared persistence, single-source-of-truth). Judge what the tool surfaces today
-> and note where a suspected problem needs those signals to confirm.
+To enable the layering checks, give each subsystem doc a `**Tier:**` line (e.g. `ui` / `domain` / `infra`);
+for the data signals, give the services a `**Service:**` line. Co-change quality depends on clean history —
+if a repo has few commits or huge bulk commits, weight the history signals lightly.

@@ -143,21 +143,17 @@ def test_hardcoded_endpoint_flags_only_real_service_endpoints(tmp_path):
     assert not any("internal.host" in h for h in hits)  # in a comment
 
 
-# --- Missing healthcheck (service level) --------------------------------------------------
+# --- Service cycle (distributed monolith) -------------------------------------------------
 
-def test_missing_healthcheck_and_service_cycle(tmp_path):
+def test_service_cycle_from_compose(tmp_path):
     cfg = _cfg(tmp_path)
     (tmp_path / "docker-compose.yml").write_text(
         "services:\n"
         "  a:\n    image: a\n    depends_on:\n      - b\n"
-        "  b:\n    image: b\n    healthcheck:\n      test: ['CMD', 'true']\n    depends_on:\n      - a\n"
+        "  b:\n    image: b\n    depends_on:\n      - a\n"
     )
-    r = evaluate(cfg)
-    # 'a' has no healthcheck, 'b' does
-    hc = _of(r, "no-healthcheck")
-    assert [f.subjects[0] for f in hc] == ["a"]
     # a <-> b is a cyclic service dependency (distributed-monolith signal)
-    cyc = _of(r, "cycle-service")
+    cyc = _of(evaluate(cfg), "cycle-service")
     assert cyc and sorted(cyc[0].subjects) == ["a", "b"]
 
 

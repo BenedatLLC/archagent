@@ -295,12 +295,14 @@ def evaluate(
     project: Path = typer.Option(Path("."), help="Target repo root"),
     group: str = typer.Option("", help="Limit to one group: A, B, C, or D"),
     min_severity: str = typer.Option("low", help="Only show findings at/above this severity: low|med|high"),
+    no_history: bool = typer.Option(False, "--no-history", help="Skip git co-change mining (regime A only, offline)"),
+    since: str = typer.Option("", help="Co-change window as a git date, e.g. '12.months' or '2025-01-01'"),
     as_json: bool = typer.Option(False, "--json", help="Emit findings as JSON (for the skill / tooling)"),
     exit_code: bool = typer.Option(False, "--exit-code", help="Exit 1 if any shown finding remains (opt-in CI gate)"),
 ) -> None:
     """Judge the architecture for system-level smells (candidate signals for /archagent-evaluate)."""
     config = load_config(project.resolve())
-    result = run_evaluate(config)
+    result = run_evaluate(config, history=not no_history, since=since or None)
 
     sev_floor = {"low": 0, "med": 1, "high": 2}.get(min_severity.lower(), 0)
     order = {"low": 0, "med": 1, "high": 2}
@@ -319,6 +321,7 @@ def evaluate(
             } for f in findings],
             "tier_declared": result.tier_declared,
             "git_available": result.git_available,
+            "history_analyzed": result.history_analyzed,
         }, indent=2))
         if exit_code and findings:
             raise typer.Exit(code=1)
@@ -343,6 +346,10 @@ def evaluate(
 
     if not result.tier_declared:
         console.print("[dim](no **Tier:** in subsystem docs — leaky-abstraction / layering check skipped)[/]")
+    if no_history:
+        console.print("[dim](--no-history — co-change smells skipped)[/]")
+    elif not result.git_available:
+        console.print("[dim](git not available — co-change smells skipped)[/]")
     if not findings:
         console.print("[green]No system-level smells found.[/]")
         return

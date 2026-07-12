@@ -18,9 +18,10 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .cochange import mine_cochange
 from .config import Config
 from .datamap import store_touches, table_defs
-from .deployscan import extract_service_edges, services_without_healthcheck
+from .deployscan import extract_service_edges
 from .drift import (
     _covers_globs,
     _depends_on,
@@ -36,6 +37,9 @@ from .drift import (
 HUB_DEGREE = 3          # a subsystem depended-on by >= this many AND depending on >= this many => hub
 SIZE_SHARE = 0.35       # a subsystem owning >= this fraction of all covered files => oversized
 DOUD_THRESHOLD = 0.30   # Arcan: flag Unstable Dependency when bad/total dependencies >= this
+COCHANGE_THR = 4        # subsystems co-changing >= this many times are coupled (Mo/Cai/Kazman default)
+IMPACT_MIN = 3          # an interface depended on by >= this many subsystems has real impact scope
+UNSTABLE_DEPENDENTS_MIN = 2  # ... and co-changing with >= this many of them => unstable interface
 _EPS = 1e-9
 
 _TIER = re.compile(r"^\s*\*{0,2}Tier:?\*{0,2}\s*[:：]?\s*(.+)$", re.IGNORECASE | re.MULTILINE)
@@ -71,6 +75,7 @@ class EvaluationResult:
     findings: list[Finding] = field(default_factory=list)
     tier_declared: bool = False
     git_available: bool = False
+    history_analyzed: int = 0  # commits mined for co-change (0 = regime B not run)
 
     @property
     def any(self) -> bool:
@@ -163,7 +168,7 @@ def _tier_of(text: str) -> str | None:
 
 # --- entry point --------------------------------------------------------------------------
 
-def evaluate(config: Config) -> EvaluationResult:
+def evaluate(config: Config, history: bool = True, since: str | None = None) -> EvaluationResult:
     root = config.project_root
     result = EvaluationResult(git_available=_git_available(root))
     model = _build_model(config)
@@ -176,6 +181,12 @@ def evaluate(config: Config) -> EvaluationResult:
     result.findings += _group_a(root, model)  # data & source-of-truth (needs >= 2 services)
     result.findings += _shared_libraries(model)
 
+    # regime B — git co-change history (shotgun surgery, unstable interface)
+    if history and result.git_available and model.subs:
+        cc = mine_cochange(root, model.file_subs, since=since)
+        result.history_analyzed = cc.commits_analyzed
+        result.findings += _cochange_smells(model, cc)
+
     # service-level (deployment) static signals
     svc_edges = extract_service_edges(root)
     if svc_edges:
@@ -183,7 +194,6 @@ def evaluate(config: Config) -> EvaluationResult:
         result.findings += _cycles(sorted(sedges), sedges, sweight, "service")
 
     result.findings += _hardcoded_endpoints(config)
-    result.findings += _missing_healthchecks(root)
     return result
 
 
@@ -480,6 +490,61 @@ def _shared_libraries(model: _Model) -> list[Finding]:
     return out
 
 
+# --- Group B (history / regime B): co-change smells --------------------------------------
+
+def _cochange_smells(model, cc) -> list[Finding]:
+    out: list[Finding] = []
+
+    # shotgun surgery / implicit cross-module dependency: subsystems that co-change often but have
+    # no structural dependency between them — a coupling the code doesn't declare.
+    seen: set[frozenset] = set()
+    for a in model.subs:
+        for b in model.subs:
+            if a >= b:
+                continue
+            n = cc.between(a, b)
+            if n < COCHANGE_THR:
+                continue
+            structural = b in model.edges.get(a, set()) or a in model.edges.get(b, set())
+            if structural:
+                continue  # a declared/real dependency already explains the co-change
+            key = frozenset((a, b))
+            if key in seen:
+                continue
+            seen.add(key)
+            sev = "high" if n >= 2 * COCHANGE_THR else "med"
+            out.append(Finding(
+                sign="implicit-coupling", group="B", severity=sev,
+                title="Shotgun surgery (implicit cross-module coupling)",
+                subjects=[a, b],
+                detail=f"{a} and {b} co-change in {n} commits but neither depends on the other",
+                recommendation=("A change to one keeps forcing a change to the other with no code link — the "
+                                "boundary is in the wrong place. Merge the shared concern, or introduce the "
+                                "missing explicit interface between them."),
+                regime="history", confidence="med",
+            ))
+
+    # unstable interface: a widely-depended-on subsystem that keeps changing with its dependents.
+    for s in model.subs:
+        dependents = model.rev.get(s, set())
+        if len(dependents) < IMPACT_MIN:
+            continue
+        churny = sorted(d for d in dependents if cc.between(s, d) >= COCHANGE_THR)
+        if len(churny) >= UNSTABLE_DEPENDENTS_MIN:
+            out.append(Finding(
+                sign="unstable-interface", group="B", severity="high",
+                title="Unstable interface",
+                subjects=[s],
+                detail=(f"{len(dependents)} subsystems depend on {s}; it co-changes frequently with "
+                        f"{', '.join(churny)}"),
+                recommendation=("A high-impact interface that keeps changing forces churn across its "
+                                "dependents. Stabilize it: freeze the contract, or split the volatile part "
+                                "out from the stable one."),
+                regime="history", confidence="med",
+            ))
+    return out
+
+
 # --- Group D: hard-coded endpoints -------------------------------------------------------
 
 def _hardcoded_endpoints(config: Config) -> list[Finding]:
@@ -520,18 +585,3 @@ def _endpoint_in(line: str) -> str | None:
     return None
 
 
-# --- Group D: missing healthchecks -------------------------------------------------------
-
-def _missing_healthchecks(root: Path) -> list[Finding]:
-    missing = services_without_healthcheck(root)
-    return [
-        Finding(
-            sign="no-healthcheck", group="D", severity="low",
-            title="Service without a healthcheck",
-            subjects=[svc], detail="no healthcheck in docker-compose",
-            recommendation=("Add a healthcheck so orchestration and dependents can tell when the service is "
-                            "ready — a prerequisite for reliable startup ordering and observability."),
-            confidence="high",
-        )
-        for svc in missing
-    ]
