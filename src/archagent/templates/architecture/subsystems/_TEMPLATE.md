@@ -8,6 +8,11 @@
 <!-- Other subsystems (by doc name) this one is allowed to import. `archagent drift` compares this to
      the actual import graph and flags undeclared couplings + stale declarations. Optional. -->
 
+**Service:** <deployment-service-name>
+<!-- The deployment service this subsystem runs as (a name from deployment.md's **Services:**). When set,
+     `archagent drift` checks the code's cross-service dependencies against docker-compose depends_on. -->
+
+
 > **Purpose.** One short paragraph: what this subsystem is for and why it exists.
 > A new engineer should understand it here without opening other files.
 

@@ -65,6 +65,9 @@ design-review time (does a proposed design fit the architecture?) and periodical
     `architecture/deployment.md`'s `**Config:**` or `.env.example`), or a declared key never read (remove it).
   - **undocumented / dangling service** — a service in IaC (docker-compose/Procfile/k8s) not in the
     deployment view's `**Services:**` (add it), or a declared service no longer deployed (remove it).
+  - **missing / extra deployment edge** — the code depends across services (via subsystem `**Service:**`
+    mappings) that `docker-compose depends_on` doesn't wire (add the `depends_on` — likely a runtime bug),
+    or a `depends_on` with no matching code dependency (remove it or record why).
 - **Verify, don't rewrite.** Re-check each existing claim and invariant against the *current* code. Leave
   what still holds; only change what moved.
 - **Declare coverage & dependencies.** Give each `subsystems/<name>.md` a `**Covers:** <glob>` line and a

@@ -27,7 +27,7 @@ except ModuleNotFoundError:  # py < 3.11
 
 from .config import Config
 from .configscan import declared_config_keys, read_config_keys
-from .deployscan import declared_services, extract_services
+from .deployscan import declared_services, extract_service_edges, extract_services
 from .webapi import extract_routes, load_openapi, matches
 
 CODE_EXTS = (".py", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".go", ".rs", ".java", ".rb")
@@ -35,6 +35,7 @@ _SKIP_DIRS = {".git", ".archagent", "__pycache__", "node_modules", ".venv", ".my
 _BACKTICK = re.compile(r"`([^`\n]+)`")
 _COVERS = re.compile(r"^\s*\*{0,2}Covers:?\*{0,2}\s*[:：]?\s*(.+)$", re.IGNORECASE | re.MULTILINE)
 _DEPENDS = re.compile(r"^\s*\*{0,2}Depends[- ]?on:?\*{0,2}\s*[:：]?\s*(.+)$", re.IGNORECASE | re.MULTILINE)
+_SERVICE = re.compile(r"^\s*\*{0,2}Service(?!s):?\*{0,2}\s*[:：]?\s*(.+)$", re.IGNORECASE | re.MULTILINE)
 
 
 @dataclass
@@ -51,6 +52,8 @@ class DriftResult:
     dangling_config: list[str] = field(default_factory=list)      # declared config key not read in code
     undocumented_services: list[str] = field(default_factory=list)  # service in IaC, not declared
     dangling_services: list[str] = field(default_factory=list)      # declared service, not found in IaC
+    missing_deploy_edges: list[tuple[str, str]] = field(default_factory=list)  # code needs it, compose doesn't wire it
+    extra_deploy_edges: list[tuple[str, str]] = field(default_factory=list)    # compose wires it, code doesn't need it
     openapi_spec: str | None = None  # the committed spec used as the intended interface, if any
     git_available: bool = False
     covers_declared: bool = False  # did any subsystem doc declare **Covers:**? (gates undocumented)
@@ -63,6 +66,7 @@ class DriftResult:
             or self.undocumented_routes or self.dangling_routes
             or self.undocumented_config or self.dangling_config
             or self.undocumented_services or self.dangling_services
+            or self.missing_deploy_edges or self.extra_deploy_edges
         )
 
 
@@ -77,6 +81,7 @@ def find_drift(config: Config) -> DriftResult:
     covered_by_globs: set[str] = set()    # accumulates files claimed by any **Covers:** glob
     all_text: list[str] = []
     subs: list[tuple[str, set[str], set[str] | None]] = []  # (name, covered files, declared Depends-on)
+    sub_service: dict[str, str] = {}  # subsystem name -> the deployment service it runs as (**Service:**)
 
     for doc in sorted(arch.rglob("*.md")):
         if doc.name.endswith("_TEMPLATE.md"):
@@ -105,6 +110,9 @@ def find_drift(config: Config) -> DriftResult:
                 covered_files.update(_glob_files(root, glob))
             declared = _depends_on(text)
             subs.append((doc.stem, covered_files, set(declared) if declared is not None else None))
+            svc = _service_of(text)
+            if svc:
+                sub_service[doc.stem] = svc
 
             # staleness: only subsystem docs describe code, and only when git can tell us
             if result.git_available:
@@ -139,10 +147,15 @@ def find_drift(config: Config) -> DriftResult:
 
     # deployment drift: services in IaC vs a declared **Services:** list (gated on a declaration)
     declared_svc = declared_services(doc_text)
-    if declared_svc:
+    if declared_svc or sub_service:
         actual_svc = extract_services(root)
-        result.undocumented_services = sorted(actual_svc - declared_svc)
-        result.dangling_services = sorted(declared_svc - actual_svc)
+        if declared_svc:
+            result.undocumented_services = sorted(actual_svc - declared_svc)
+            result.dangling_services = sorted(declared_svc - actual_svc)
+        # service-dependency edge cross-check: code's cross-service deps vs compose depends_on
+        if sub_service and actual_svc:
+            result.missing_deploy_edges, result.extra_deploy_edges = _service_edge_drift(
+                subs, sub_service, import_graph, extract_service_edges(root))
 
     return result
 
@@ -260,6 +273,37 @@ def _depends_on(text: str) -> list[str] | None:
     if not m:
         return None
     return [p.strip().strip("`") for p in re.split(r"[,\s]+", m.group(1).strip()) if p.strip()]
+
+
+def _service_of(text: str) -> str | None:
+    """Parse a subsystem doc's `**Service:** <name>` line (the service it deploys as). Not `Services:`."""
+    m = _SERVICE.search(text)
+    if not m:
+        return None
+    parts = [p.strip().strip("`") for p in re.split(r"[,\s]+", m.group(1).strip()) if p.strip()]
+    return parts[0] if parts else None
+
+
+def _service_edge_drift(subs, sub_service, import_graph, compose_edges):
+    """Cross-service code dependencies (subsystem edges mapped via **Service:**) vs compose depends_on."""
+    file_subs: dict[str, set[str]] = {}
+    for name, files, _ in subs:
+        for f in files:
+            file_subs.setdefault(f, set()).add(name)
+    # actual cross-service edges the code requires
+    needed: set[tuple[str, str]] = set()
+    for name, files, _ in subs:
+        for f in files:
+            for target_file in import_graph.get(f, ()):
+                for tsub in file_subs.get(target_file, ()):
+                    ss, st = sub_service.get(name), sub_service.get(tsub)
+                    if ss and st and ss != st:
+                        needed.add((ss, st))
+    compose = set(compose_edges)
+    hosting = set(sub_service.values())  # services that actually host a subsystem
+    missing = sorted(needed - compose)  # code needs the dependency; the deployment doesn't wire it
+    extra = sorted(e for e in compose - needed if e[0] in hosting and e[1] in hosting)  # wired, unneeded
+    return missing, extra
 
 
 def _dependency_drift(subs, import_graph):

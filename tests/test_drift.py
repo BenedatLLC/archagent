@@ -184,6 +184,33 @@ def test_ts_route_undocumented(tmp_path):
     assert ("GET", "/widgets") in find_drift(cfg).undocumented_routes
 
 
+def test_missing_deployment_edge(tmp_path):
+    cfg = _dep_repo(tmp_path)  # a.py imports b
+    _doc(cfg, "sa.md", "# SA\n\n**Covers:** `src/pkg/a.py`\n**Service:** web\n")
+    _doc(cfg, "sb.md", "# SB\n\n**Covers:** `src/pkg/b.py`\n**Service:** db\n")
+    (tmp_path / "docker-compose.yml").write_text("services:\n  web: {}\n  db: {}\n")  # no depends_on
+    r = find_drift(cfg)
+    assert ("web", "db") in r.missing_deploy_edges   # code needs web->db, compose doesn't wire it
+
+
+def test_satisfied_deployment_edge(tmp_path):
+    cfg = _dep_repo(tmp_path)
+    _doc(cfg, "sa.md", "# SA\n\n**Covers:** `src/pkg/a.py`\n**Service:** web\n")
+    _doc(cfg, "sb.md", "# SB\n\n**Covers:** `src/pkg/b.py`\n**Service:** db\n")
+    (tmp_path / "docker-compose.yml").write_text("services:\n  web:\n    depends_on: [db]\n  db: {}\n")
+    r = find_drift(cfg)
+    assert r.missing_deploy_edges == []
+
+
+def test_deployment_edge_gated_on_service_mapping(tmp_path):
+    cfg = _dep_repo(tmp_path)
+    _doc(cfg, "sa.md", "# SA\n\n**Covers:** `src/pkg/a.py`\n")  # no **Service:**
+    _doc(cfg, "sb.md", "# SB\n\n**Covers:** `src/pkg/b.py`\n")
+    (tmp_path / "docker-compose.yml").write_text("services:\n  web: {}\n  db: {}\n")
+    r = find_drift(cfg)
+    assert r.missing_deploy_edges == [] and r.extra_deploy_edges == []
+
+
 def test_config_drift_against_manifest(tmp_path):
     cfg = _repo(tmp_path)
     (tmp_path / "src" / "pkg" / "settings.py").write_text(

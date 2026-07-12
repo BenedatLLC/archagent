@@ -182,6 +182,8 @@ def drift(
             "dangling_config": result.dangling_config,
             "undocumented_services": result.undocumented_services,
             "dangling_services": result.dangling_services,
+            "missing_deploy_edges": [{"service": a, "depends_on": b} for a, b in result.missing_deploy_edges],
+            "extra_deploy_edges": [{"service": a, "depends_on": b} for a, b in result.extra_deploy_edges],
             "openapi_spec": result.openapi_spec,
             "git_available": result.git_available,
             "covers_declared": result.covers_declared,
@@ -254,6 +256,16 @@ def drift(
         console.print(f"[yellow]Dangling services ({len(result.dangling_services)})[/] — declared but not found in IaC:")
         for s in result.dangling_services:
             console.print(f"  {s}")
+        console.print("")
+    if result.missing_deploy_edges:
+        console.print(f"[red]Missing deployment edges ({len(result.missing_deploy_edges)})[/] — the code depends across services the deployment doesn't wire (depends_on):")
+        for a, b in result.missing_deploy_edges:
+            console.print(f"  {a} → {b}")
+        console.print("")
+    if result.extra_deploy_edges:
+        console.print(f"[yellow]Extra deployment edges ({len(result.extra_deploy_edges)})[/] — depends_on with no matching code dependency:")
+        for a, b in result.extra_deploy_edges:
+            console.print(f"  {a} → {b}")
         console.print("")
 
     if not result.git_available:

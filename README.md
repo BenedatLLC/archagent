@@ -200,8 +200,9 @@ CLI:
   points (`[project.scripts]` + `package.json` `bin`), the **web-route surface** (Flask/FastAPI/Django +
   Express/Fastify/NestJS, static, vs a committed OpenAPI spec if present, else the docs), and
   **configuration** (env keys read in code vs a `.env.example` / `**Config:**` manifest), and **deployment
-  topology** (services from docker-compose/Procfile/k8s vs a `**Services:**` list). Informational;
-  `--json` for tooling/agents, `--exit-code` to fail CI on any drift.
+  topology** (services from docker-compose/Procfile/k8s vs a `**Services:**` list, plus code cross-service
+  dependencies vs compose `depends_on` via subsystem `**Service:**` mappings). Informational; `--json` for
+  tooling/agents, `--exit-code` to fail CI on any drift.
 - `archagent gen` — regenerate only the checker configs from `architecture/invariants.md` (`check` does
   this for you).
 - `archagent upgrade` — refresh the archagent-owned prompts (skills + `architecture/AGENTS.md`) to the

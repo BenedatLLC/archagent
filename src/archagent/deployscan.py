@@ -28,6 +28,24 @@ def extract_services(root: Path) -> set[str]:
     return _from_compose(root) | _from_procfile(root) | _from_k8s(root)
 
 
+def extract_service_edges(root: Path) -> list[tuple[str, str]]:
+    """`(service, depends_on)` edges from docker-compose `depends_on` (list or long form)."""
+    edges: list[tuple[str, str]] = []
+    for name in _COMPOSE_NAMES:
+        for p in _find(root, name):
+            data = _load(p)
+            svc = data.get("services") if isinstance(data, dict) else None
+            if not isinstance(svc, dict):
+                continue
+            for sname, sconf in svc.items():
+                if not isinstance(sconf, dict):
+                    continue
+                dep = sconf.get("depends_on")
+                deps = list(dep.keys()) if isinstance(dep, dict) else (dep if isinstance(dep, list) else [])
+                edges += [(sname, d) for d in deps if isinstance(d, str)]
+    return edges
+
+
 def declared_services(doc_text: str) -> set[str]:
     out: set[str] = set()
     for m in _SERVICES_DOC.finditer(doc_text):

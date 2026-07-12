@@ -1,6 +1,6 @@
 """Deployment topology: services extracted from IaC vs a declared list."""
 
-from archagent.deployscan import declared_services, extract_services
+from archagent.deployscan import declared_services, extract_service_edges, extract_services
 
 
 def test_extract_compose_services(tmp_path):
@@ -31,3 +31,15 @@ def test_declared_services_from_doc():
 def test_non_k8s_yaml_ignored(tmp_path):
     (tmp_path / "openapi.yaml").write_text("openapi: 3.0.0\npaths: {}\n")  # no apiVersion/kind
     assert extract_services(tmp_path) == set()
+
+
+def test_extract_compose_depends_on_edges(tmp_path):
+    (tmp_path / "docker-compose.yml").write_text(
+        "services:\n"
+        "  web:\n    depends_on: [db]\n"
+        "  worker:\n    depends_on:\n      redis:\n        condition: service_started\n"
+        "  db: {}\n  redis: {}\n"
+    )
+    edges = set(extract_service_edges(tmp_path))
+    assert ("web", "db") in edges          # list form
+    assert ("worker", "redis") in edges    # long form (map)
