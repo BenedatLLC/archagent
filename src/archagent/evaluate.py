@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .config import Config
+from .datamap import store_touches, table_defs
 from .deployscan import extract_service_edges, services_without_healthcheck
 from .drift import (
     _covers_globs,
@@ -95,6 +96,17 @@ class _Model:
     edges: dict[str, set[str]]            # subsystem -> subsystems it depends on
     rev: dict[str, set[str]]              # subsystem -> subsystems that depend on it
     weight: dict[tuple[str, str], int]    # (a, b) -> number of underlying file-import edges
+    service: dict[str, str]               # subsystem -> deployment service (**Service:**), if declared
+    import_graph: dict[str, set[str]]     # file -> internal files it imports
+    file_subs: dict[str, set[str]]        # file -> subsystems that cover it
+
+    def file_service(self, f: str) -> str | None:
+        """The deployment service a file belongs to, via its subsystem's **Service:** (if any)."""
+        for sub in self.file_subs.get(f, ()):
+            svc = self.service.get(sub)
+            if svc:
+                return svc
+        return None
 
 
 def _build_model(config: Config) -> _Model:
@@ -105,6 +117,7 @@ def _build_model(config: Config) -> _Model:
 
     files: dict[str, set[str]] = {}
     tier: dict[str, str] = {}
+    service: dict[str, str] = {}
     if arch.is_dir():
         for doc in sorted(arch.rglob("*.md")):
             if doc.name.endswith("_TEMPLATE.md") or not _is_subsystem(doc, arch):
@@ -117,6 +130,9 @@ def _build_model(config: Config) -> _Model:
             t = _tier_of(text)
             if t:
                 tier[doc.stem] = t
+            svc = _service_of(text)
+            if svc:
+                service[doc.stem] = svc
 
     file_subs: dict[str, set[str]] = {}
     for name, fs in files.items():
@@ -134,7 +150,7 @@ def _build_model(config: Config) -> _Model:
                         edges[name].add(tsub)
                         rev[tsub].add(name)
                         weight[(name, tsub)] = weight.get((name, tsub), 0) + 1
-    return _Model(list(files), files, tier, edges, rev, weight)
+    return _Model(list(files), files, tier, edges, rev, weight, service, import_graph, file_subs)
 
 
 def _tier_of(text: str) -> str | None:
@@ -157,6 +173,8 @@ def evaluate(config: Config) -> EvaluationResult:
     result.findings += _cycles(model.subs, model.edges, model.weight, "subsystem")
     result.findings += _unstable_dependencies(model)
     result.findings += _tier_violations(model)
+    result.findings += _group_a(root, model)  # data & source-of-truth (needs >= 2 services)
+    result.findings += _shared_libraries(model)
 
     # service-level (deployment) static signals
     svc_edges = extract_service_edges(root)
@@ -359,6 +377,106 @@ def _tier_violations(model: _Model) -> list[Finding]:
                                     "ripple up; hide the target behind the adjacent layer's abstraction."),
                     confidence="med",
                 ))
+    return out
+
+
+# --- Group A: data & source-of-truth (needs >= 2 services) -------------------------------
+
+def _group_a(root: Path, model: _Model) -> list[Finding]:
+    services = set(model.service.values())
+    if len(services) < 2:  # single-service repo: none of these smells apply — stay quiet
+        return []
+
+    # aggregate datastore touch points to the service level
+    defs: dict[str, set[str]] = {}    # table -> services that OWN (declare) it
+    uses: dict[str, set[str]] = {}    # store id -> services that touch it (owned + queried + connected)
+    all_files = {f for fs in model.files.values() for f in fs}
+    for f in all_files:
+        svc = model.file_service(f)
+        if not svc:
+            continue
+        for t in table_defs(root, f):
+            defs.setdefault(t, set()).add(svc)
+        for sid in store_touches(root, f):
+            uses.setdefault(sid, set()).add(svc)
+
+    out: list[Finding] = []
+
+    # duplicated source of truth: the same table's schema declared by >= 2 services
+    for table in sorted(defs):
+        owners = defs[table]
+        if len(owners) >= 2:
+            out.append(Finding(
+                sign="duplicated-source-of-truth", group="A", severity="high",
+                title="Unclear single source of truth",
+                subjects=sorted(owners), detail=f"table '{table}' is declared by {len(owners)} services",
+                recommendation=("Two services own the same entity — the schemas will drift. Make one the "
+                                "owner and have the other consume it via an API/event, or split the data."),
+                confidence="med",
+            ))
+
+    # inappropriate service intimacy: a service touches a table another service exclusively owns
+    for table in sorted(defs):
+        owners = defs[table]
+        if len(owners) != 1:
+            continue
+        owner = next(iter(owners))
+        intruders = sorted(uses.get(f"table:{table}", set()) - owners)
+        if intruders:
+            out.append(Finding(
+                sign="service-intimacy", group="A", severity="high",
+                title="Inappropriate service intimacy",
+                subjects=[*intruders, owner],
+                detail=f"{', '.join(intruders)} read '{table}', owned by {owner}",
+                recommendation=(f"Reach {owner}'s data through its API/events, not its tables — direct access "
+                                "couples the services and lets a schema change break a neighbor."),
+                confidence="med",
+            ))
+
+    # shared persistency: a store touched by >= 2 services with no single clear owner
+    for sid in sorted(uses):
+        touchers = uses[sid]
+        table = sid[len("table:"):] if sid.startswith("table:") else None
+        if table is not None and len(defs.get(table, set())) >= 1:
+            continue  # ownership cases are covered by the two signals above
+        if len(touchers) >= 2:
+            label = table if table is not None else sid[len("store:"):]
+            out.append(Finding(
+                sign="shared-persistency", group="A", severity="high",
+                title="Shared persistency",
+                subjects=sorted(touchers), detail=f"{len(touchers)} services share '{label}'",
+                recommendation=("Give each service its own store (or a private schema); share data through "
+                                "an API/events. A shared datastore couples deploys and hides ownership."),
+                confidence="med",
+            ))
+    return out
+
+
+def _shared_libraries(model: _Model) -> list[Finding]:
+    """An internal module imported by files from >= 2 different services couples their releases."""
+    services = set(model.service.values())
+    if len(services) < 2:
+        return []
+    importers_of: dict[str, set[str]] = {}  # imported file -> services importing it
+    for f, targets in model.import_graph.items():
+        svc = model.file_service(f)
+        if not svc:
+            continue
+        for tgt in targets:
+            importers_of.setdefault(tgt, set()).add(svc)
+    out: list[Finding] = []
+    for tgt, svcs in sorted(importers_of.items()):
+        owner = model.file_service(tgt)
+        cross = svcs - ({owner} if owner else set())
+        if len(svcs) >= 2 and cross:
+            out.append(Finding(
+                sign="shared-library", group="A", severity="med",
+                title="Shared library across services",
+                subjects=sorted(svcs), detail=f"{tgt} is imported by {len(svcs)} services",
+                recommendation=("A module shared across services forces coordinated releases. Vendor a copy "
+                                "for independence, or extract it into its own versioned service/package."),
+                confidence="med",
+            ))
     return out
 
 

@@ -170,11 +170,13 @@ Adding a language is adding a column, not rewriting anything. Generated configs 
   manifest), and **deployment topology** (IaC services vs a `**Services:**` list). Informational — its
   output (`--json` for tooling) is the update work-list.
 - **Evaluate the architecture** — `archagent evaluate` (or **`/archagent-evaluate`**) judges the *model
-  itself* for **system-level** smells and recommends fixes: **God Components**, **circular subsystem/service
-  dependencies** (with shape + severity), **unstable dependencies** (Martin's `I = Ce/(Ca+Ce)`), **leaky
-  abstractions** (layer inversion/skip, via `**Tier:**`), **hard-coded endpoints**, and services **missing a
-  healthcheck**. It emits *candidate* signals (`--json`); the skill judges them in context, clusters to
-  roots, and prioritizes. Advisory (not a commit gate). Runs at design-review + periodically.
+  itself* for **system-level** smells and recommends fixes: **data & source-of-truth** (shared persistency,
+  duplicated ownership, cross-service data intimacy, shared libraries — via `**Service:**` maps),
+  **God Components**, **circular subsystem/service dependencies** (with shape + severity), **unstable
+  dependencies** (Martin's `I = Ce/(Ca+Ce)`), **leaky abstractions** (layer inversion/skip, via `**Tier:**`),
+  **hard-coded endpoints**, and services **missing a healthcheck**. It emits *candidate* signals (`--json`);
+  the skill judges them in context, clusters to roots, and prioritizes. Advisory (not a commit gate). Runs at
+  design-review + periodically.
 - **Update the architecture** (a new design, or the code changed) — re-run **`/archagent-describe`**:
   it's *build-**or-update***. Start from `archagent drift`, then refresh the subsystem(s) that changed and
   reconcile the invariants. Do this at **design-review time** (does the proposed design fit the
@@ -210,11 +212,12 @@ CLI:
   dependencies vs compose `depends_on` via subsystem `**Service:**` mappings). Informational; `--json` for
   tooling/agents, `--exit-code` to fail CI on any drift.
 - `archagent evaluate` — judge the architecture for **system-level** smells (candidates for
-  `/archagent-evaluate`): God Components, circular subsystem/service dependencies (shape + severity),
-  unstable dependencies (`I = Ce/(Ca+Ce)`, `DoUD ≥ 0.30`), leaky abstractions (layer inversion/skip via
-  `**Tier:**`), hard-coded service endpoints, and services missing a healthcheck. Static (regime A) for now;
-  git co-change and data-ownership signals come next. `--json`, `--group A|B|C|D`, `--min-severity`,
-  `--exit-code`.
+  `/archagent-evaluate`): **data & source-of-truth** (shared persistency, duplicated ownership, cross-service
+  data intimacy, shared libraries — from a static datastore→service map via `**Service:**`), God Components,
+  circular subsystem/service dependencies (shape + severity), unstable dependencies (`I = Ce/(Ca+Ce)`,
+  `DoUD ≥ 0.30`), leaky abstractions (layer inversion/skip via `**Tier:**`), hard-coded service endpoints, and
+  services missing a healthcheck. Static (regime A); git co-change signals come next. `--json`,
+  `--group A|B|C|D`, `--min-severity`, `--exit-code`.
 - `archagent gen` — regenerate only the checker configs from `architecture/invariants.md` (`check` does
   this for you).
 - `archagent upgrade` — refresh the archagent-owned prompts (skills + `architecture/AGENTS.md`) to the

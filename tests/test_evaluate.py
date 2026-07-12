@@ -161,6 +161,67 @@ def test_missing_healthcheck_and_service_cycle(tmp_path):
     assert cyc and sorted(cyc[0].subjects) == ["a", "b"]
 
 
+# --- Group A: data & source-of-truth ------------------------------------------------------
+
+def _svc_sub(cfg, name, service, covers, extra=""):
+    _sub(cfg, name, f"# {name}\n\n**Service:** {service}\n\n**Covers:** `{covers}`\n{extra}")
+
+
+def test_duplicated_source_of_truth(tmp_path):
+    cfg = _cfg(tmp_path)
+    _src(cfg, "pkg/amodels.py", '__tablename__ = "orders"\n')
+    _src(cfg, "pkg/bmodels.py", '__tablename__ = "orders"\n')
+    _svc_sub(cfg, "a", "svc-a", "src/pkg/amodels.py")
+    _svc_sub(cfg, "b", "svc-b", "src/pkg/bmodels.py")
+    dup = _of(evaluate(cfg), "duplicated-source-of-truth")
+    assert dup and "orders" in dup[0].detail and sorted(dup[0].subjects) == ["svc-a", "svc-b"]
+
+
+def test_service_intimacy(tmp_path):
+    cfg = _cfg(tmp_path)
+    _src(cfg, "pkg/amodels.py", '__tablename__ = "orders"\n')          # svc-a owns orders
+    _src(cfg, "pkg/bq.py", 'q = "SELECT * FROM orders WHERE id = 1"\n')  # svc-b reaches in
+    _svc_sub(cfg, "a", "svc-a", "src/pkg/amodels.py")
+    _svc_sub(cfg, "b", "svc-b", "src/pkg/bq.py")
+    r = evaluate(cfg)
+    intim = _of(r, "service-intimacy")
+    assert intim and "orders" in intim[0].detail and "svc-b" in intim[0].detail
+    assert "duplicated-source-of-truth" not in _signs(r)  # single owner
+
+
+def test_shared_persistency_via_db_conn_key(tmp_path):
+    cfg = _cfg(tmp_path)
+    _src(cfg, "pkg/adb.py", 'import os\nu = os.getenv("ANALYTICS_DB_URL")\n')
+    _src(cfg, "pkg/bdb.py", 'import os\nu = os.getenv("ANALYTICS_DB_URL")\n')
+    _svc_sub(cfg, "a", "svc-a", "src/pkg/adb.py")
+    _svc_sub(cfg, "b", "svc-b", "src/pkg/bdb.py")
+    sp = _of(evaluate(cfg), "shared-persistency")
+    assert sp and "ANALYTICS_DB_URL" in sp[0].detail
+
+
+def test_shared_library_across_services(tmp_path):
+    cfg = _cfg(tmp_path)
+    _src(cfg, "pkg/shared.py", "helper = 1\n")
+    _src(cfg, "pkg/a.py", "from pkg import shared\n")
+    _src(cfg, "pkg/b.py", "from pkg import shared\n")
+    _svc_sub(cfg, "shared", "svc-a", "src/pkg/shared.py")
+    _svc_sub(cfg, "a", "svc-a", "src/pkg/a.py")
+    _svc_sub(cfg, "b", "svc-b", "src/pkg/b.py")
+    lib = _of(evaluate(cfg), "shared-library")
+    assert lib and "src/pkg/shared.py" in lib[0].detail
+    assert sorted(lib[0].subjects) == ["svc-a", "svc-b"]
+
+
+def test_group_a_gated_on_multiple_services(tmp_path):
+    cfg = _cfg(tmp_path)
+    _src(cfg, "pkg/amodels.py", '__tablename__ = "orders"\n')
+    _src(cfg, "pkg/bmodels.py", '__tablename__ = "orders"\n')
+    _svc_sub(cfg, "a", "svc-a", "src/pkg/amodels.py")   # both in the same service
+    _svc_sub(cfg, "b", "svc-a", "src/pkg/bmodels.py")
+    signs = _signs(evaluate(cfg))
+    assert not ({"duplicated-source-of-truth", "shared-persistency", "service-intimacy"} & signs)
+
+
 def test_clean_project_has_no_findings(tmp_path):
     cfg = _cfg(tmp_path)
     _src(cfg, "pkg/a.py", "from pkg import b\n")

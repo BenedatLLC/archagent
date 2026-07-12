@@ -32,6 +32,12 @@ architecture is well-formed.**
    the team decides to act on.
 
 ## What the signals mean (regime A, static)
+- **Unclear single source of truth / Shared persistency / Service intimacy** (group A) — two services declare
+  the same table (the schemas will drift), share a datastore, or one reads another's owned tables directly.
+  Give each service its own store and share data through an API/events. Needs `**Service:**` on subsystem
+  docs (so files map to services); only fires when ≥2 services exist.
+- **Shared library across services** (A) — an internal module imported by ≥2 services couples their releases.
+  Vendor a copy or extract a versioned package/service.
 - **God Component / Blob** (group C) — a subsystem with outsized fan-in **and** fan-out, or an outsized share
   of the code. Split along its seams; extract the most-depended-on responsibility behind a narrow interface.
 - **Tangled / circular dependency** (C) — a dependency cycle among subsystems or services. Service cycles are
