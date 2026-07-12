@@ -178,6 +178,8 @@ def drift(
             "undocumented_entrypoints": [{"name": n, "target": t} for n, t in result.undocumented_entrypoints],
             "undocumented_routes": [{"method": m, "path": p} for m, p in result.undocumented_routes],
             "dangling_routes": [{"method": m, "path": p} for m, p in result.dangling_routes],
+            "undocumented_config": result.undocumented_config,
+            "dangling_config": result.dangling_config,
             "openapi_spec": result.openapi_spec,
             "git_available": result.git_available,
             "covers_declared": result.covers_declared,
@@ -230,6 +232,16 @@ def drift(
         console.print(f"[yellow]Dangling routes ({len(result.dangling_routes)})[/] — in the OpenAPI spec, not in code:")
         for m, p in result.dangling_routes:
             console.print(f"  {m} {p}")
+        console.print("")
+    if result.undocumented_config:
+        console.print(f"[red]Undocumented config ({len(result.undocumented_config)})[/] — env keys read in code, not in the manifest:")
+        for k in result.undocumented_config:
+            console.print(f"  {k}")
+        console.print("")
+    if result.dangling_config:
+        console.print(f"[yellow]Dangling config ({len(result.dangling_config)})[/] — declared but not read in code:")
+        for k in result.dangling_config:
+            console.print(f"  {k}")
         console.print("")
 
     if not result.git_available:

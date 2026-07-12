@@ -184,6 +184,25 @@ def test_ts_route_undocumented(tmp_path):
     assert ("GET", "/widgets") in find_drift(cfg).undocumented_routes
 
 
+def test_config_drift_against_manifest(tmp_path):
+    cfg = _repo(tmp_path)
+    (tmp_path / "src" / "pkg" / "settings.py").write_text(
+        "import os\nA = os.getenv('DOC_HOME')\nB = os.environ['SECRET_KEY']\n")
+    (tmp_path / ".env.example").write_text("DOC_HOME=/data\nUNUSED_KEY=1\n")
+    r = find_drift(cfg)
+    assert "SECRET_KEY" in r.undocumented_config     # read in code, not in manifest
+    assert "UNUSED_KEY" in r.dangling_config          # declared, never read
+    assert "DOC_HOME" not in r.undocumented_config    # in both
+
+
+def test_config_drift_gated_on_manifest(tmp_path):
+    cfg = _repo(tmp_path)
+    (tmp_path / "src" / "pkg" / "settings.py").write_text("import os\nA = os.getenv('DOC_HOME')\n")
+    # no .env.example and no **Config:** anywhere -> skipped (low-noise)
+    r = find_drift(cfg)
+    assert r.undocumented_config == [] and r.dangling_config == []
+
+
 def test_undocumented_entrypoint_flagged(tmp_path):
     cfg = _repo(tmp_path)
     (tmp_path / "pyproject.toml").write_text('[project]\nname = "x"\n\n[project.scripts]\nmytool = "pkg.cli:main"\n')

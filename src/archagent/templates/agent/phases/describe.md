@@ -31,6 +31,9 @@ the user first, and never overwrite their existing content.
    files. Record provenance (doc vs code) and mark anything unverified.
 4. **Fill `architecture/constitution.md`** (terse, always-loaded): conventions, the patterns the system
    relies on, how to work here.
+4b. **Fill `architecture/deployment.md`**: the deployment view (services/runtimes/infra, from
+   `docker-compose.yml` / k8s / `Procfile`) and the **Configuration** — list the env keys the system reads
+   under `**Config:**` (or maintain a `.env.example`). Consider a config-access boundary invariant.
 5. **Capture invariants** in `architecture/invariants.md` (the table). Prefer checkable rules:
    - BOUNDARY (layering / forbidden deps) → `forbid <a> -> <b>`
    - STRUCTURAL (banned code shape) → `forbid-pattern <ast-grep pattern>`
@@ -58,6 +61,8 @@ design-review time (does a proposed design fit the architecture?) and periodical
   - **stale dependency / undocumented entry point / undocumented route** — a `Depends-on` with no
     matching import, a `[project.scripts]`/`package.json bin` command absent from the docs, or a web route
     not in the OpenAPI spec/docs: fix the declaration, or document the entry point / route.
+  - **undocumented / dangling config** — an env key read in code but not in the manifest (add it to
+    `architecture/deployment.md`'s `**Config:**` or `.env.example`), or a declared key never read (remove it).
 - **Verify, don't rewrite.** Re-check each existing claim and invariant against the *current* code. Leave
   what still holds; only change what moved.
 - **Declare coverage & dependencies.** Give each `subsystems/<name>.md` a `**Covers:** <glob>` line and a

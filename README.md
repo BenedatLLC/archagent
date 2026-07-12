@@ -60,6 +60,7 @@ shared source of truth that both humans and agents read and write:
 | `decisions/NNNN-*.md` | cold | ADRs — the *why* behind decisions, and the rejected alternatives |
 | `index.md` | hot | catalog of the docs |
 | `log.md` | — | append-only, chronological change log (grep/tail friendly) |
+| `deployment.md` | cold | deployment view (services/runtimes/infra) + configuration (the `**Config:**` env-key manifest) |
 | `AGENTS.md` | — | how to work with archagent in this repo (archagent-owned; refreshed by `upgrade`) |
 
 Two tiers, on purpose: the **hot** files are loaded into the agent every session, so they stay terse.
@@ -164,8 +165,9 @@ Adding a language is adding a column, not rewriting anything. Generated configs 
 - **See what drifted** — `archagent drift` reflexion-diffs the `architecture/` docs against the code:
   **dangling references**, **stale docs** (git), **undocumented modules** (via `**Covers:**`),
   **undeclared/stale subsystem dependencies** (declared `**Depends-on:**` vs the actual import graph),
-  **undocumented entry points**, and the **web-route surface** (Flask/FastAPI/Django routes vs a committed
-  OpenAPI spec, else the docs). Informational — its output (`--json` for tooling) is the update work-list.
+  **undocumented entry points**, the **web-route surface** (Flask/FastAPI/Django routes vs a committed
+  OpenAPI spec, else the docs), and **configuration** (env keys read vs a `.env.example` / `**Config:**`
+  manifest). Informational — its output (`--json` for tooling) is the update work-list.
 - **Update the architecture** (a new design, or the code changed) — re-run **`/archagent-describe`**:
   it's *build-**or-update***. Start from `archagent drift`, then refresh the subsystem(s) that changed and
   reconcile the invariants. Do this at **design-review time** (does the proposed design fit the
@@ -194,8 +196,9 @@ CLI:
 - `archagent drift` — reflexion-diff the `architecture/` docs against the code: dangling references,
   stale docs (git), undocumented modules (via `**Covers:**`), undeclared/stale subsystem dependencies
   (declared `**Depends-on:**` vs the actual import graph — Python `ast` + JS/TS regex), undocumented entry
-  points (`[project.scripts]` + `package.json` `bin`), and the **web-route surface** (Flask/FastAPI/Django
-  + Express/Fastify/NestJS, static, vs a committed OpenAPI spec if present, else the docs). Informational;
+  points (`[project.scripts]` + `package.json` `bin`), the **web-route surface** (Flask/FastAPI/Django +
+  Express/Fastify/NestJS, static, vs a committed OpenAPI spec if present, else the docs), and
+  **configuration** (env keys read in code vs a `.env.example` / `**Config:**` manifest). Informational;
   `--json` for tooling/agents, `--exit-code` to fail CI on any drift.
 - `archagent gen` — regenerate only the checker configs from `architecture/invariants.md` (`check` does
   this for you).

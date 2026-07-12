@@ -26,6 +26,7 @@ except ModuleNotFoundError:  # py < 3.11
     tomllib = None
 
 from .config import Config
+from .configscan import declared_config_keys, read_config_keys
 from .webapi import extract_routes, load_openapi, matches
 
 CODE_EXTS = (".py", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".go", ".rs", ".java", ".rb")
@@ -45,6 +46,8 @@ class DriftResult:
     undocumented_entrypoints: list[tuple[str, str]] = field(default_factory=list)  # (name, target)
     undocumented_routes: list[tuple[str, str]] = field(default_factory=list)  # (method, path) in code, not intended
     dangling_routes: list[tuple[str, str]] = field(default_factory=list)      # (method, path) in spec, not in code
+    undocumented_config: list[str] = field(default_factory=list)  # env key read in code, not declared
+    dangling_config: list[str] = field(default_factory=list)      # declared config key not read in code
     openapi_spec: str | None = None  # the committed spec used as the intended interface, if any
     git_available: bool = False
     covers_declared: bool = False  # did any subsystem doc declare **Covers:**? (gates undocumented)
@@ -55,6 +58,7 @@ class DriftResult:
             self.dangling or self.stale or self.undocumented
             or self.undeclared_deps or self.stale_deps or self.undocumented_entrypoints
             or self.undocumented_routes or self.dangling_routes
+            or self.undocumented_config or self.dangling_config
         )
 
 
@@ -121,6 +125,13 @@ def find_drift(config: Config) -> DriftResult:
     result.undocumented_entrypoints = _entrypoint_drift(root, doc_text)
     result.undocumented_routes, result.dangling_routes, result.openapi_spec = \
         _interface_drift(root, source_files, doc_text)
+
+    # configuration drift: env keys read in code vs a declared manifest (gated on one existing)
+    declared_cfg = declared_config_keys(root, doc_text)
+    if declared_cfg:
+        read_cfg = read_config_keys(root, source_files)
+        result.undocumented_config = sorted(read_cfg - declared_cfg)
+        result.dangling_config = sorted(declared_cfg - read_cfg)
 
     return result
 
