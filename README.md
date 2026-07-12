@@ -174,9 +174,10 @@ Adding a language is adding a column, not rewriting anything. Generated configs 
   duplicated ownership, cross-service data intimacy, shared libraries — via `**Service:**` maps),
   **shotgun surgery** and **unstable interfaces** (from git **co-change** history), **God Components**,
   **circular subsystem/service dependencies** (with shape + severity), **unstable dependencies** (Martin's
-  `I = Ce/(Ca+Ce)`), **leaky abstractions** (layer inversion/skip, via `**Tier:**`), and **hard-coded
-  endpoints**. It emits *candidate* signals (`--json`); the skill judges them in context, clusters to roots,
-  and prioritizes. Advisory (not a commit gate). Runs at design-review + periodically.
+  `I = Ce/(Ca+Ce)`), **leaky abstractions** (layer inversion/skip, via `**Tier:**`), **hard-coded
+  endpoints**, and **cross-boundary observability** (services that call each other but can't trace a request
+  across the boundary). It emits *candidate* signals (`--json`); the skill judges them in context, clusters
+  to roots, and prioritizes. Advisory (not a commit gate). Runs at design-review + periodically.
 - **Update the architecture** (a new design, or the code changed) — re-run **`/archagent-describe`**:
   it's *build-**or-update***. Start from `archagent drift` (reconcile doc-vs-code), then `archagent evaluate`
   (assess system-level health); refresh the subsystem(s) that changed and reconcile the invariants. Drift
@@ -218,9 +219,10 @@ CLI:
   `/archagent-evaluate`): **data & source-of-truth** (shared persistency, duplicated ownership, cross-service
   data intimacy, shared libraries — from a static datastore→service map via `**Service:**`), God Components,
   circular subsystem/service dependencies (shape + severity), unstable dependencies (`I = Ce/(Ca+Ce)`,
-  `DoUD ≥ 0.30`), leaky abstractions (layer inversion/skip via `**Tier:**`), and hard-coded service endpoints;
-  plus **git co-change** signals (**shotgun surgery** / implicit coupling, **unstable interface**). `--json`,
-  `--group A|B|C|D`, `--min-severity`, `--no-history`, `--since`, `--exit-code`.
+  `DoUD ≥ 0.30`), leaky abstractions (layer inversion/skip via `**Tier:**`), hard-coded service endpoints, and
+  **cross-boundary observability** (no request tracing across services); plus **git co-change** signals
+  (**shotgun surgery** / implicit coupling, **unstable interface**). `--json`, `--group A|B|C|D`,
+  `--min-severity`, `--no-history`, `--since`, `--exit-code`.
 - `archagent gen` — regenerate only the checker configs from `architecture/invariants.md` (`check` does
   this for you).
 - `archagent upgrade` — refresh the archagent-owned prompts (skills + `architecture/AGENTS.md`) to the

@@ -50,6 +50,10 @@ architecture is well-formed.**
   adjacent layer, or invert with an interface.
 - **Hard-coded endpoint** (D) — a literal address in code; a barrier to local development and relocation.
   Move to config / service discovery.
+- **No request tracing across services / trace-chain gap** (D) — services make cross-service calls but
+  can't be followed as one request: either nothing anywhere traces/correlates, or one service makes outbound
+  calls with no trace context while others have it. Adopt distributed tracing or a propagated correlation ID.
+  Needs `**Service:**` on the subsystem docs; only fires with ≥2 services that actually call each other.
 
 ## History signals (regime B, from git co-change)
 Mined from `git log`; require a git repo (skip with `--no-history`, window with `--since`).

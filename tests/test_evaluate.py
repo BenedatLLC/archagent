@@ -218,6 +218,48 @@ def test_group_a_gated_on_multiple_services(tmp_path):
     assert not ({"duplicated-source-of-truth", "shared-persistency", "service-intimacy"} & signs)
 
 
+# --- Group D: cross-boundary observability ------------------------------------------------
+
+def test_no_request_tracing_systemic(tmp_path):
+    cfg = _cfg(tmp_path)
+    _src(cfg, "pkg/a.py", 'import requests\nr = requests.get("http://svc-b/x")\n')
+    _src(cfg, "pkg/b.py", 'import requests\nr = requests.get("http://svc-a/y")\n')
+    _svc_sub(cfg, "a", "svc-a", "src/pkg/a.py")
+    _svc_sub(cfg, "b", "svc-b", "src/pkg/b.py")
+    nt = _of(evaluate(cfg), "no-request-tracing")
+    assert nt and sorted(nt[0].subjects) == ["svc-a", "svc-b"]
+
+
+def test_trace_chain_gap_when_only_some_instrument(tmp_path):
+    cfg = _cfg(tmp_path)
+    _src(cfg, "pkg/a.py", 'import opentelemetry\nimport requests\nr = requests.get("http://svc-b/x")\n')
+    _src(cfg, "pkg/b.py", 'import requests\nr = requests.get("http://svc-a/y")\n')  # no instrumentation
+    _svc_sub(cfg, "a", "svc-a", "src/pkg/a.py")
+    _svc_sub(cfg, "b", "svc-b", "src/pkg/b.py")
+    r = evaluate(cfg)
+    assert "no-request-tracing" not in _signs(r)
+    gap = _of(r, "trace-chain-gap")
+    assert gap and [f.subjects[0] for f in gap] == ["svc-b"]
+
+
+def test_no_observability_finding_without_cross_service_calls(tmp_path):
+    cfg = _cfg(tmp_path)
+    _src(cfg, "pkg/a.py", "x = 1\n")
+    _src(cfg, "pkg/b.py", "y = 2\n")
+    _svc_sub(cfg, "a", "svc-a", "src/pkg/a.py")
+    _svc_sub(cfg, "b", "svc-b", "src/pkg/b.py")
+    assert not ({"no-request-tracing", "trace-chain-gap"} & _signs(evaluate(cfg)))
+
+
+def test_no_observability_finding_when_all_instrumented(tmp_path):
+    cfg = _cfg(tmp_path)
+    _src(cfg, "pkg/a.py", 'import opentelemetry\nimport requests\nr = requests.get("http://svc-b")\n')
+    _src(cfg, "pkg/b.py", 'import opentelemetry\nimport requests\nr = requests.get("http://svc-a")\n')
+    _svc_sub(cfg, "a", "svc-a", "src/pkg/a.py")
+    _svc_sub(cfg, "b", "svc-b", "src/pkg/b.py")
+    assert not ({"no-request-tracing", "trace-chain-gap"} & _signs(evaluate(cfg)))
+
+
 def test_clean_project_has_no_findings(tmp_path):
     cfg = _cfg(tmp_path)
     _src(cfg, "pkg/a.py", "from pkg import b\n")

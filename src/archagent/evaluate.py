@@ -22,6 +22,7 @@ from .cochange import mine_cochange
 from .config import Config
 from .datamap import store_touches, table_defs
 from .deployscan import extract_service_edges
+from .obsscan import scan as _obs_scan
 from .drift import (
     _covers_globs,
     _depends_on,
@@ -194,6 +195,7 @@ def evaluate(config: Config, history: bool = True, since: str | None = None) -> 
         result.findings += _cycles(sorted(sedges), sedges, sweight, "service")
 
     result.findings += _hardcoded_endpoints(config)
+    result.findings += _observability(root, model)
     return result
 
 
@@ -583,5 +585,58 @@ def _endpoint_in(line: str) -> str | None:
         if m.group(1).lower() not in _LOCAL_HOSTS:
             return m.group(0)
     return None
+
+
+# --- Group D: cross-boundary observability -----------------------------------------------
+
+def _observability(root: Path, model: _Model) -> list[Finding]:
+    """Can a request be traced across service boundaries? Needs >= 2 services that actually make
+    cross-service calls. Systemic gap (nobody instruments) or per-service gap (a caller with no
+    trace/correlation context while others have it)."""
+    services = set(model.service.values())
+    if len(services) < 2:
+        return []
+
+    instrumented: set[str] = set()   # services with a tracing / correlation marker
+    calling: set[str] = set()        # services that make outbound cross-service calls
+    for f in {f for fs in model.files.values() for f in fs}:
+        svc = model.file_service(f)
+        if not svc:
+            continue
+        has_obs, outbound = _obs_scan(root, f)
+        if has_obs:
+            instrumented.add(svc)
+        if outbound:
+            calling.add(svc)
+
+    if not calling:  # no cross-service communication seen — can't claim a tracing gap
+        return []
+
+    if not instrumented:
+        # systemic: services talk to each other but nothing traces or correlates
+        return [Finding(
+            sign="no-request-tracing", group="D", severity="high",
+            title="No request tracing across services",
+            subjects=sorted(services),
+            detail="services make cross-service calls but no tracing/correlation instrumentation was found",
+            recommendation=("Adopt distributed tracing or a propagated correlation ID (e.g. OpenTelemetry, "
+                            "or a request-id header threaded through calls) so a request can be followed "
+                            "across service boundaries."),
+            confidence="med",
+        )]
+
+    # per-service gap: a caller with no instrumentation while other services have it
+    out: list[Finding] = []
+    for svc in sorted(calling - instrumented):
+        out.append(Finding(
+            sign="trace-chain-gap", group="D", severity="med",
+            title="Service breaks the trace chain",
+            subjects=[svc],
+            detail="makes cross-service calls but carries no trace/correlation context (others do)",
+            recommendation=("Propagate the incoming trace/correlation ID on this service's outbound calls "
+                            "so requests through it stay traceable end to end."),
+            confidence="med",
+        ))
+    return out
 
 
