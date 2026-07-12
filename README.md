@@ -178,16 +178,19 @@ Adding a language is adding a column, not rewriting anything. Generated configs 
   endpoints**. It emits *candidate* signals (`--json`); the skill judges them in context, clusters to roots,
   and prioritizes. Advisory (not a commit gate). Runs at design-review + periodically.
 - **Update the architecture** (a new design, or the code changed) — re-run **`/archagent-describe`**:
-  it's *build-**or-update***. Start from `archagent drift`, then refresh the subsystem(s) that changed and
-  reconcile the invariants. Do this at **design-review time** (does the proposed design fit the
-  architecture?) and **periodically** as the code evolves; record decisions as ADRs in
-  `architecture/decisions/`.
+  it's *build-**or-update***. Start from `archagent drift` (reconcile doc-vs-code), then `archagent evaluate`
+  (assess system-level health); refresh the subsystem(s) that changed and reconcile the invariants. Drift
+  items are record fixes; evaluate findings are design decisions — change the structure or accept it with an
+  ADR, and graduate the fixes you want to hold into `check` invariants. Do this at **design-review time**
+  (does the proposed design fit — and does it introduce a smell?) and **periodically** as the code evolves;
+  record decisions as ADRs in `architecture/decisions/`.
 - **Upgrade the prompts** — update the tool, then `archagent upgrade` (refreshes the skills +
   `architecture/AGENTS.md` only, leaving your config and architecture content untouched). See
   [Upgrading](#upgrading).
 
-> Cadence: `describe` at design-review + periodically; `check` on every commit. archagent enforces *your
-> system's* design rules — not generic metrics (cycle counts, coupling scores).
+> Cadence: `describe` + `evaluate` at design-review + periodically; `check` on every commit. archagent
+> enforces *your system's* design rules and flags *system-level* smells (candidates its skill judges in
+> context) — it isn't a generic metrics dashboard (cycle counts, coupling scores).
 
 The three skills (`describe`, `check`, `invariant`) come from one neutral source and are installed per
 agent — Claude Code `.claude/skills/`, Cursor `.cursor/skills/`, OpenHands `.openhands/microagents/` — plus

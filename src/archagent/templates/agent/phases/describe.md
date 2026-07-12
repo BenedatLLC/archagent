@@ -28,7 +28,9 @@ the user first, and never overwrite their existing content.
 3. **Per subsystem**, write `architecture/subsystems/<name>.md` across the six dimensions: process
    topology & components · key abstractions/patterns · state & tiering · lifecycles (Mermaid
    `stateDiagram` + caption) · key flows (Mermaid `sequenceDiagram` + caption) · invariants. Cite real
-   files. Record provenance (doc vs code) and mark anything unverified.
+   files. Record provenance (doc vs code) and mark anything unverified. Fill the doc's metadata lines —
+   `**Covers:**`, `**Depends-on:**`, and where they apply `**Service:**` (deployment service) and `**Tier:**`
+   (layer, e.g. `ui` / `domain` / `infra`) — so `drift` and `evaluate` have the inputs they need.
 4. **Fill `architecture/constitution.md`** (terse, always-loaded): conventions, the patterns the system
    relies on, how to work here.
 4b. **Fill `architecture/deployment.md`**: the deployment view (services/runtimes/infra, from
@@ -41,7 +43,11 @@ the user first, and never overwrite their existing content.
    as a rule: record them as prose in the subsystem doc and mark Tier `prose`.
 6. **Validate.** Run `archagent gen`, then `archagent check`. Confirm each new invariant parses and flags
    what it should (try a quick local violation if unsure). Fix or refine.
-7. **Index + log.** Update `architecture/index.md` and append a line to `architecture/log.md`.
+7. **Evaluate health.** Run `archagent evaluate` (the `evaluate` skill judges the candidates). For each
+   confirmed *system-level* smell, decide with the team: change the design, or accept it and record why.
+   Turn accepted fixes into an ADR under `decisions/` and — where enforceable — a `check` invariant so it
+   can't regress. This is how `evaluate` feeds back into the artifact and the enforcement tier.
+8. **Index + log.** Update `architecture/index.md` and append a line to `architecture/log.md`.
 
 First pass: the top-level map, 1–3 subsystems, and the highest-value invariants. Then iterate.
 
@@ -70,12 +76,19 @@ design-review time (does a proposed design fit the architecture?) and periodical
     or a `depends_on` with no matching code dependency (remove it or record why).
 - **Verify, don't rewrite.** Re-check each existing claim and invariant against the *current* code. Leave
   what still holds; only change what moved.
-- **Declare coverage & dependencies.** Give each `subsystems/<name>.md` a `**Covers:** <glob>` line and a
-  `**Depends-on:** <subsystems>` line so `drift` can check both staleness and the subsystem topology.
+- **Declare coverage, dependencies, tier & service.** Give each `subsystems/<name>.md` a `**Covers:** <glob>`
+  and `**Depends-on:** <subsystems>` line (so `drift` checks staleness + topology), plus `**Tier:**` and
+  `**Service:**` where they apply (so `evaluate` can check layering and per-service data ownership).
 - **Flag drift.** Where a doc or invariant disagrees with the code, surface it and decide: fix the code,
   or update the doc/invariant (with an ADR if it's a real decision) — don't silently overwrite intent.
 - **Refresh what changed.** Update the affected `subsystems/<name>.md` and reconcile the invariants table
   (add rules for new boundaries; retire rules for removed ones).
+- **Evaluate the architecture's health.** Beyond doc-vs-code drift, run `archagent evaluate` for
+  *system-level smells* (god components, cycles, shotgun surgery, shared persistence, leaky layering).
+  These are not record fixes — each confirmed one is a design decision: change the structure, or accept it
+  with an ADR. Graduate the fixes you want to hold into `check` invariants (`/archagent-evaluate` does the
+  judging, clustering, and prioritizing).
 - **For a new design:** describe the proposed design first, check it against the existing architecture and
-  invariants, and only then update the artifact to match once it's built.
+  invariants, and **run `archagent evaluate` to catch smells the change would introduce** — before it's
+  built. Only update the artifact to match once it's built.
 - **Record it:** append a line to `architecture/log.md` and add/adjust ADRs in `architecture/decisions/`.
