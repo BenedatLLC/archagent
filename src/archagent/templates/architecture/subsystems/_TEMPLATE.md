@@ -12,6 +12,11 @@
 <!-- The deployment service this subsystem runs as (a name from deployment.md's **Services:**). When set,
      `archagent drift` checks the code's cross-service dependencies against docker-compose depends_on. -->
 
+**Tier:** <ui | domain | infra>
+<!-- The architectural layer this subsystem lives in (e.g. ui / app / domain / infra / data). When set on
+     related subsystems, `archagent evaluate` flags leaky abstractions: a lower tier depending up on a
+     higher one, or a tier reaching past its neighbor to a distant one. Optional. -->
+
 
 > **Purpose.** One short paragraph: what this subsystem is for and why it exists.
 > A new engineer should understand it here without opening other files.

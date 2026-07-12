@@ -1,0 +1,53 @@
+# archagent: evaluate — judge the architecture for system-level problems
+
+Assess the *health of the architecture itself* and recommend fixes. This is **system-level** work —
+subsystems, services, tiers, data ownership — not a class/inheritance linter. A fix may be a new
+abstraction or a rearrangement of classes, but every finding is framed at the subsystem/service level.
+
+Run this at design-review time and periodically. It complements the others: `drift` checks the model
+still matches the code; `check` enforces declared invariants; **`evaluate` asks whether the described
+architecture is well-formed.**
+
+## Principles
+- **Candidates, not verdicts.** `archagent evaluate` computes deterministic *candidate signals* from the
+  model + structure graph. Your job is to judge each one in this system's context — confirm, dismiss with
+  a reason, or reframe — then prioritize. Do not just echo the tool's list.
+- **Cluster to roots.** A few structural roots usually explain most findings. Group related candidates and
+  report the underlying cause once, not every symptom.
+- **Rank by value.** Order by severity × confidence × how much the fix would help. Lead with the few that matter.
+
+## Steps
+1. Run `archagent evaluate --json` and read the findings. Also read the relevant `architecture/subsystems/*.md`,
+   `deployment.md`, and `constitution.md` for the intended design.
+2. For each candidate, decide:
+   - **Confirm** — real problem. Explain the impact in this system's terms (what change becomes risky/slow).
+   - **Dismiss** — expected here (say why: e.g. an intentional shared kernel, a framework-imposed hub).
+   - **Reframe** — the signal points at a deeper cause; describe that instead.
+3. **Cluster** confirmed findings into a handful of architectural roots.
+4. Write a prioritized report: for each root — the problem, the evidence (subsystems/services + metric), the
+   **recommended fix** (the new boundary/abstraction/move), and the effort/risk. Highest value first.
+5. Where a fix should be protected against regression, propose a **`check` invariant** for it (e.g. a
+   forbidden dependency or a layer rule) — this is how an evaluation finding graduates into enforcement.
+6. Record it: append to `architecture/log.md`, and open an ADR under `architecture/decisions/` for any root
+   the team decides to act on.
+
+## What the signals mean (regime A, static)
+- **God Component / Blob** (group C) — a subsystem with outsized fan-in **and** fan-out, or an outsized share
+  of the code. Split along its seams; extract the most-depended-on responsibility behind a narrow interface.
+- **Tangled / circular dependency** (C) — a dependency cycle among subsystems or services. Service cycles are
+  worse (they block independent deployment — a distributed monolith). Break with an interface, inversion, or
+  async messaging.
+- **Unstable Dependency** (B) — a subsystem depends on more-volatile ones (instability `I = Ce/(Ca+Ce)`).
+  Depend toward stability; put a stable interface in front of the volatile target.
+- **Leaky abstraction — layer inversion / skip** (B) — a lower tier depends up on a higher one, or a tier
+  reaches past its neighbor to a distant one. Needs `**Tier:**` on the subsystem docs. Route through the
+  adjacent layer, or invert with an interface.
+- **Hard-coded endpoint** (D) — a literal address in code; a barrier to local development and relocation.
+  Move to config / service discovery.
+- **Service without a healthcheck** (D) — orchestration can't tell when it's ready; add one.
+
+To enable the layering checks, give each subsystem doc a `**Tier:**` line (e.g. `ui` / `domain` / `infra`).
+
+> Later phases add history-based signals (shotgun surgery, unstable interface — from git co-change) and
+> data-ownership signals (shared persistence, single-source-of-truth). Judge what the tool surfaces today
+> and note where a suspected problem needs those signals to confirm.

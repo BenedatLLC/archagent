@@ -17,6 +17,7 @@ from rich.table import Table
 from .check import run_checks
 from .config import load_config
 from .drift import find_drift
+from .evaluate import evaluate as run_evaluate
 from .generate import generate
 from .init import KNOWN_AGENTS, detect_agents, init_project, upgrade_project
 from .invariants import parse_invariants
@@ -276,6 +277,76 @@ def drift(
         console.print("[green]No drift found.[/]")
         return
     console.print("[dim]Reconcile via /archagent-describe (update mode).[/]")
+    if exit_code:
+        raise typer.Exit(code=1)
+
+
+_GROUP_TITLES = {
+    "A": "Data & source-of-truth",
+    "B": "Wrong boundaries / abstractions",
+    "C": "Static structural",
+    "D": "Lifecycle support",
+}
+_SEV_STYLE = {"high": "red", "med": "yellow", "low": "cyan"}
+
+
+@app.command()
+def evaluate(
+    project: Path = typer.Option(Path("."), help="Target repo root"),
+    group: str = typer.Option("", help="Limit to one group: A, B, C, or D"),
+    min_severity: str = typer.Option("low", help="Only show findings at/above this severity: low|med|high"),
+    as_json: bool = typer.Option(False, "--json", help="Emit findings as JSON (for the skill / tooling)"),
+    exit_code: bool = typer.Option(False, "--exit-code", help="Exit 1 if any shown finding remains (opt-in CI gate)"),
+) -> None:
+    """Judge the architecture for system-level smells (candidate signals for /archagent-evaluate)."""
+    config = load_config(project.resolve())
+    result = run_evaluate(config)
+
+    sev_floor = {"low": 0, "med": 1, "high": 2}.get(min_severity.lower(), 0)
+    order = {"low": 0, "med": 1, "high": 2}
+    want_group = group.strip().upper()
+    findings = [
+        f for f in result.findings
+        if order[f.severity] >= sev_floor and (not want_group or f.group == want_group)
+    ]
+
+    if as_json:
+        print(json.dumps({
+            "findings": [{
+                "sign": f.sign, "group": f.group, "severity": f.severity, "title": f.title,
+                "subjects": f.subjects, "detail": f.detail, "recommendation": f.recommendation,
+                "regime": f.regime, "confidence": f.confidence,
+            } for f in findings],
+            "tier_declared": result.tier_declared,
+            "git_available": result.git_available,
+        }, indent=2))
+        if exit_code and findings:
+            raise typer.Exit(code=1)
+        return
+
+    console.print("[bold]Architecture evaluation[/] — system-level smell candidates\n")
+    grouped: dict[str, list] = {}
+    for f in sorted(findings, key=lambda x: order[x.severity], reverse=True):
+        grouped.setdefault(f.group, []).append(f)
+    for g in ("A", "B", "C", "D"):
+        items = grouped.get(g)
+        if not items:
+            continue
+        console.print(f"[bold]{g} — {_GROUP_TITLES[g]}[/] ({len(items)})")
+        for f in items:
+            style = _SEV_STYLE[f.severity]
+            subj = ", ".join(f.subjects[:4]) + (f" (+{len(f.subjects) - 4} more)" if len(f.subjects) > 4 else "")
+            console.print(f"  [{style}]{f.severity.upper():4}[/] {f.title} — {subj}")
+            console.print(f"       {f.detail}")
+            console.print(f"       [dim]→ {f.recommendation} ({f.confidence} confidence, {f.regime})[/]")
+        console.print("")
+
+    if not result.tier_declared:
+        console.print("[dim](no **Tier:** in subsystem docs — leaky-abstraction / layering check skipped)[/]")
+    if not findings:
+        console.print("[green]No system-level smells found.[/]")
+        return
+    console.print("[dim]These are candidates — run /archagent-evaluate to judge, cluster, and prioritize.[/]")
     if exit_code:
         raise typer.Exit(code=1)
 

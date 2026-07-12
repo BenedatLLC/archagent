@@ -46,6 +46,25 @@ def extract_service_edges(root: Path) -> list[tuple[str, str]]:
     return edges
 
 
+def services_without_healthcheck(root: Path) -> list[str]:
+    """Compose services that declare no `healthcheck` (sorted). Empty if no compose file / no services."""
+    missing: list[str] = []
+    seen: set[str] = set()
+    for name in _COMPOSE_NAMES:
+        for p in _find(root, name):
+            data = _load(p)
+            svc = data.get("services") if isinstance(data, dict) else None
+            if not isinstance(svc, dict):
+                continue
+            for sname, sconf in svc.items():
+                if sname in seen:
+                    continue
+                seen.add(sname)
+                if not (isinstance(sconf, dict) and sconf.get("healthcheck")):
+                    missing.append(sname)
+    return sorted(missing)
+
+
 def declared_services(doc_text: str) -> set[str]:
     out: set[str] = set()
     for m in _SERVICES_DOC.finditer(doc_text):

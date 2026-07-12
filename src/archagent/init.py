@@ -41,6 +41,7 @@ PHASES = [
     Phase("describe", "Build or update the architecture artifact for this repo (trust-but-verify)."),
     Phase("check", "Run archagent check and resolve architecture violations."),
     Phase("invariant", "Add or change a checkable architectural invariant and verify it."),
+    Phase("evaluate", "Evaluate the architecture for system-level smells and recommend fixes."),
 ]
 
 
