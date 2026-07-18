@@ -222,6 +222,7 @@ as `/archagent-describe` (etc.) or just describe the task and Claude activates i
 ## Commands
 
 CLI:
+- `archagent help` — concise overview of the lifecycle and the command/skill for each step.
 - `archagent init [PATH]` — scaffold `archagent.toml` + `architecture/` templates + agent skills.
   Auto-detects agents (`--agents auto`); override with `--agents claude,cursor` / `all` / `none`.
   `--wire` adds an additive pointer to top-level `CLAUDE.md`/`AGENTS.md`; `--force` re-scaffolds everything.
@@ -256,6 +257,7 @@ Agent skills (invoke in your coding agent; Claude Code slash form shown):
 - `/archagent-check` — run `archagent check` and resolve violations.
 - `/archagent-invariant` — add or change a checkable invariant.
 - `/archagent-evaluate` — judge the architecture for system-level smells and recommend fixes.
+- `/archagent-help` — overview of the lifecycle and which command/skill to use at each step.
 
 ## Configuration
 

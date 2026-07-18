@@ -42,6 +42,7 @@ PHASES = [
     Phase("check", "Run archagent check and resolve architecture violations."),
     Phase("invariant", "Add or change a checkable architectural invariant and verify it."),
     Phase("evaluate", "Evaluate the architecture for system-level smells and recommend fixes."),
+    Phase("help", "Overview of the archagent lifecycle and the command/skill for each step."),
 ]
 
 

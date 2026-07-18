@@ -60,6 +60,39 @@ def _report(result, root: Path) -> None:
         console.print(f"  [yellow]exists, skipped[/] {p.relative_to(root)}  (use --force)")
 
 
+@app.command(name="help")
+def help_command() -> None:
+    """Concise overview of the archagent lifecycle and the command/skill for each step."""
+    console.print(
+        "\n[bold]archagent[/] runs a reflexion loop over your architecture:\n"
+        "  [bold]describe[/] the intended design → [bold]check[/] & [bold]diff[/] against the code → "
+        "[bold]evaluate[/] its health → [bold]update[/].\n"
+        "Set up once, then cycle at design-review time and per-commit.\n"
+    )
+    table = Table(show_header=True, header_style="bold")
+    table.add_column("Step")
+    table.add_column("Run")
+    table.add_column("What it does")
+    for step, run, what in (
+        ("Set up", "archagent init", "scaffold architecture/ + install the agent skills"),
+        ("1. Describe", "/archagent-describe", "document the architecture — build first, update after"),
+        ("2. Add rules", "/archagent-invariant", "add a checkable invariant (or edit invariants.md)"),
+        ("3. Enforce", "archagent check · /archagent-check", "run the checkers, report pass/fail per invariant"),
+        ("4. Diff", "archagent drift", "where docs and code diverged — the update work-list"),
+        ("5. Evaluate", "archagent evaluate · /archagent-evaluate", "system-level architecture smells + fixes"),
+        ("6. Update", "/archagent-describe", "reconcile the artifact from drift + evaluate; add ADRs"),
+        ("Maintain", "archagent upgrade", "refresh the installed skills/prompts to the latest"),
+    ):
+        table.add_row(step, run, what)
+    console.print(table)
+    console.print(
+        "\n[dim]Cadence: check on every commit; describe + evaluate at design-review and periodically.\n"
+        "`archagent gen` regenerates checker configs (check does this for you). Run any command with "
+        "[bold]--help[/] for its options.\n"
+        "Format spec: docs/ADL-SPEC.md  ·  planned work: docs/ROADMAP.md[/]\n"
+    )
+
+
 @app.command()
 def init(
     project: Path = typer.Argument(Path("."), help="Target repo to scaffold into"),
