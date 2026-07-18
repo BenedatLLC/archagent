@@ -24,8 +24,9 @@ from .datamap import store_touches, table_defs
 from .deployscan import extract_service_edges
 from .obsscan import scan as _obs_scan
 from .drift import (
+    _SYNC_KINDS,
+    _connectors,
     _covers_globs,
-    _depends_on,
     _git_available,
     _glob_files,
     _import_graph,
@@ -105,6 +106,7 @@ class _Model:
     service: dict[str, str]               # subsystem -> deployment service (**Service:**), if declared
     import_graph: dict[str, set[str]]     # file -> internal files it imports
     file_subs: dict[str, set[str]]        # file -> subsystems that cover it
+    connectors: dict[tuple[str, str], str]  # declared (a, b) -> connector kind (**Connects:**)
 
     def file_service(self, f: str) -> str | None:
         """The deployment service a file belongs to, via its subsystem's **Service:** (if any)."""
@@ -124,6 +126,7 @@ def _build_model(config: Config) -> _Model:
     files: dict[str, set[str]] = {}
     tier: dict[str, str] = {}
     service: dict[str, str] = {}
+    connectors: dict[tuple[str, str], str] = {}
     if arch.is_dir():
         for doc in sorted(arch.rglob("*.md")):
             if doc.name.endswith("_TEMPLATE.md") or not _is_subsystem(doc, arch):
@@ -139,6 +142,8 @@ def _build_model(config: Config) -> _Model:
             svc = _service_of(text)
             if svc:
                 service[doc.stem] = svc
+            for target, kind in (_connectors(text) or {}).items():
+                connectors[(doc.stem, target)] = kind
 
     file_subs: dict[str, set[str]] = {}
     for name, fs in files.items():
@@ -156,7 +161,7 @@ def _build_model(config: Config) -> _Model:
                         edges[name].add(tsub)
                         rev[tsub].add(name)
                         weight[(name, tsub)] = weight.get((name, tsub), 0) + 1
-    return _Model(list(files), files, tier, edges, rev, weight, service, import_graph, file_subs)
+    return _Model(list(files), files, tier, edges, rev, weight, service, import_graph, file_subs, connectors)
 
 
 def _tier_of(text: str) -> str | None:
@@ -193,6 +198,9 @@ def evaluate(config: Config, history: bool = True, since: str | None = None) -> 
     if svc_edges:
         sedges, sweight = _adjacency(svc_edges)
         result.findings += _cycles(sorted(sedges), sedges, sweight, "service")
+
+    # connector-typed edge signals (declared **Connects:** kinds)
+    result.findings += _connector_signals(model)
 
     result.findings += _hardcoded_endpoints(config)
     result.findings += _observability(root, model)
@@ -389,6 +397,69 @@ def _tier_violations(model: _Model) -> list[Finding]:
                                     "ripple up; hide the target behind the adjacent layer's abstraction."),
                     confidence="med",
                 ))
+    return out
+
+
+# --- connector-typed edges (declared **Connects:** kinds) --------------------------------
+
+def _connector_signals(model: _Model) -> list[Finding]:
+    if not model.connectors:
+        return []
+    out: list[Finding] = []
+
+    # Extraneous Adjacent Connector (Garcia): a subsystem pair wired by >= 2 different connector kinds —
+    # the parallel paths cancel each other's guarantees (e.g. a sync call *and* an event between the pair).
+    kinds_between: dict[frozenset, set[str]] = {}
+    for (a, b), kind in model.connectors.items():
+        kinds_between.setdefault(frozenset((a, b)), set()).add(kind)
+    for pair in sorted(kinds_between, key=sorted):
+        kinds = kinds_between[pair]
+        if len(kinds) >= 2:
+            a, b = sorted(pair)
+            out.append(Finding(
+                sign="extraneous-adjacent-connector", group="B", severity="med",
+                title="Extraneous adjacent connector",
+                subjects=[a, b],
+                detail=f"{a} ↔ {b} connected by {len(kinds)} kinds: {', '.join(sorted(kinds))}",
+                recommendation=("Two connector types between the same pair undercut each other (a synchronous "
+                                "call defeats an event's decoupling). Consolidate to one interaction kind."),
+                confidence="med",
+            ))
+
+    # Distributed monolith: a cycle of *services* whose declared connectors are synchronous — they can't be
+    # deployed independently. An all-async cycle is event-decoupled, so it's only informational.
+    svc_edges: dict[str, set[str]] = {}
+    svc_kinds: dict[tuple[str, str], set[str]] = {}
+    for (a, b), kind in model.connectors.items():
+        sa, sb = model.service.get(a), model.service.get(b)
+        if sa and sb and sa != sb:
+            svc_edges.setdefault(sa, set()).add(sb)
+            svc_edges.setdefault(sb, set())
+            svc_kinds.setdefault((sa, sb), set()).add(kind)
+    for comp in _sccs(sorted(svc_edges), svc_edges):
+        if len(comp) < 2:
+            continue
+        cs = set(comp)
+        cycle_kinds: set[str] = set()
+        for a in comp:
+            for b in svc_edges.get(a, ()):
+                if b in cs:
+                    cycle_kinds |= svc_kinds.get((a, b), set())
+        synchronous = any(k in _SYNC_KINDS for k in cycle_kinds)
+        out.append(Finding(
+            sign="distributed-monolith", group="C",
+            severity="high" if synchronous else "low",
+            title="Distributed monolith" if synchronous else "Event-coupled service cycle",
+            subjects=sorted(comp),
+            detail=f"service cycle via {', '.join(sorted(cycle_kinds))} connector(s)",
+            recommendation=(
+                ("Synchronously-coupled services in a cycle can't deploy independently. Break it with async "
+                 "messaging, an API gateway, or by moving the shared concern.")
+                if synchronous else
+                ("A cycle of event-decoupled services is usually fine — confirm neither side blocks on the "
+                 "other so it isn't a hidden synchronous dependency.")),
+            confidence="med",
+        ))
     return out
 
 

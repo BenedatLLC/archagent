@@ -35,7 +35,13 @@ _SKIP_DIRS = {".git", ".archagent", "__pycache__", "node_modules", ".venv", ".my
 _BACKTICK = re.compile(r"`([^`\n]+)`")
 _COVERS = re.compile(r"^\s*\*{0,2}Covers:?\*{0,2}\s*[:：]?\s*(.+)$", re.IGNORECASE | re.MULTILINE)
 _DEPENDS = re.compile(r"^\s*\*{0,2}Depends[- ]?on:?\*{0,2}\s*[:：]?\s*(.+)$", re.IGNORECASE | re.MULTILINE)
+_CONNECTS = re.compile(r"^\s*\*{0,2}Connects:?\*{0,2}\s*[:：]?\s*(.+)$", re.IGNORECASE | re.MULTILINE)
 _SERVICE = re.compile(r"^\s*\*{0,2}Service(?!s):?\*{0,2}\s*[:：]?\s*(.+)$", re.IGNORECASE | re.MULTILINE)
+
+# The connector kinds a **Connects:** edge may declare (Wright's canonical interaction types, mapped to
+# what real systems do). `import` = in-process code dependency = the classic **Depends-on:** meaning.
+CONNECTOR_KINDS = ("import", "sync-call", "async-event", "shared-data", "pipe")
+_SYNC_KINDS = ("import", "sync-call", "shared-data")  # tight coupling (caller/data blocks)
 
 
 @dataclass
@@ -80,7 +86,7 @@ def find_drift(config: Config) -> DriftResult:
     source_files = _source_files(config)  # relative posix paths, for robust ref resolution
     covered_by_globs: set[str] = set()    # accumulates files claimed by any **Covers:** glob
     all_text: list[str] = []
-    subs: list[tuple[str, set[str], set[str] | None]] = []  # (name, covered files, declared Depends-on)
+    subs: list[tuple[str, set[str], dict[str, str] | None]] = []  # (name, covered files, declared connectors {target: kind})
     sub_service: dict[str, str] = {}  # subsystem name -> the deployment service it runs as (**Service:**)
 
     for doc in sorted(arch.rglob("*.md")):
@@ -108,8 +114,7 @@ def find_drift(config: Config) -> DriftResult:
             covered_files = set()
             for glob in covers:
                 covered_files.update(_glob_files(root, glob))
-            declared = _depends_on(text)
-            subs.append((doc.stem, covered_files, set(declared) if declared is not None else None))
+            subs.append((doc.stem, covered_files, _connectors(text)))
             svc = _service_of(text)
             if svc:
                 sub_service[doc.stem] = svc
@@ -267,12 +272,30 @@ def _committed_after(root: Path, file_rel: str, doc_rel: str) -> bool:
 
 # --- dependency-edge + entry-point drift (Python v1) ---------------------
 
-def _depends_on(text: str) -> list[str] | None:
-    """Parse a `**Depends-on:** a, b` line into [names]; None if the doc doesn't declare one."""
-    m = _DEPENDS.search(text)
-    if not m:
+def _connectors(text: str) -> dict[str, str] | None:
+    """Parse `**Connects:** a via sync-call, b` (preferred) or the `**Depends-on:** a, b` alias into
+    `{target: kind}`. Kind defaults to `import` (what Depends-on always meant); an unknown kind falls back
+    to `import` so a typo stays low-noise. None if the doc declares neither field."""
+    src = _CONNECTS.search(text) or _DEPENDS.search(text)
+    if not src:
         return None
-    return [p.strip().strip("`") for p in re.split(r"[,\s]+", m.group(1).strip()) if p.strip()]
+    out: dict[str, str] = {}
+    for item in src.group(1).strip().split(","):
+        item = item.strip()
+        if not item:
+            continue
+        parts = re.split(r"\s+via\s+", item, maxsplit=1, flags=re.IGNORECASE)
+        if len(parts) == 2:
+            target = parts[0].strip().strip("`")
+            kind = parts[1].strip().strip("`").lower()
+            if target:
+                out[target] = kind if kind in CONNECTOR_KINDS else "import"
+        else:  # no "via" — legacy form, one or more whitespace-separated targets, all import-kind
+            for tok in item.split():
+                t = tok.strip("`")
+                if t:
+                    out[t] = "import"
+    return out
 
 
 def _service_of(text: str) -> str | None:
@@ -285,11 +308,22 @@ def _service_of(text: str) -> str | None:
 
 
 def _service_edge_drift(subs, sub_service, import_graph, compose_edges):
-    """Cross-service code dependencies (subsystem edges mapped via **Service:**) vs compose depends_on."""
+    """Cross-service code dependencies (subsystem edges mapped via **Service:**) vs compose depends_on.
+
+    A service pair declared as an `async-event` connector is exempt from needing a compose `depends_on`:
+    an event consumer doesn't need the producer up at startup, so the deployment needn't wire it."""
     file_subs: dict[str, set[str]] = {}
     for name, files, _ in subs:
         for f in files:
             file_subs.setdefault(f, set()).add(name)
+    # service pairs the docs declare as async-event (either direction) — exempt from depends_on
+    async_pairs: set[tuple[str, str]] = set()
+    for name, _, declared in subs:
+        for target, kind in (declared or {}).items():
+            if kind == "async-event":
+                ss, st = sub_service.get(name), sub_service.get(target)
+                if ss and st and ss != st:
+                    async_pairs.add((ss, st))
     # actual cross-service edges the code requires
     needed: set[tuple[str, str]] = set()
     for name, files, _ in subs:
@@ -301,13 +335,17 @@ def _service_edge_drift(subs, sub_service, import_graph, compose_edges):
                         needed.add((ss, st))
     compose = set(compose_edges)
     hosting = set(sub_service.values())  # services that actually host a subsystem
-    missing = sorted(needed - compose)  # code needs the dependency; the deployment doesn't wire it
+    missing = sorted(needed - compose - async_pairs)  # code needs it, deploy doesn't wire it (async exempt)
     extra = sorted(e for e in compose - needed if e[0] in hosting and e[1] in hosting)  # wired, unneeded
     return missing, extra
 
 
 def _dependency_drift(subs, import_graph):
-    """Declared `**Depends-on:**` vs the actual cross-subsystem import graph (only for docs that declare)."""
+    """Declared connectors vs the actual cross-subsystem import graph (only for docs that declare).
+
+    Only `import`-kind connectors are checked against the import graph: a `sync-call`/`async-event`/
+    `shared-data` edge is a *runtime* connector, not an import, so it must not be reported as stale for
+    lacking one. An actual import is "undeclared" only if the target isn't acknowledged under any kind."""
     file_subs: dict[str, set[str]] = {}
     for name, files, _ in subs:
         for f in files:
@@ -316,14 +354,16 @@ def _dependency_drift(subs, import_graph):
     undeclared: list[tuple[str, str]] = []
     stale: list[tuple[str, str]] = []
     for name, files, declared in subs:
-        if declared is None:  # gated: only subsystems that declare Depends-on participate
+        if declared is None:  # gated: only subsystems that declare connectors participate
             continue
         actual: set[str] = set()
         for f in files:
             for target_file in import_graph.get(f, ()):
                 actual |= {t for t in file_subs.get(target_file, ()) if t != name}
-        undeclared += [(name, t) for t in sorted(actual - declared)]
-        stale += [(name, t) for t in sorted(declared - actual)]
+        declared_any = set(declared)                                     # acknowledged under any kind
+        declared_import = {t for t, k in declared.items() if k == "import"}
+        undeclared += [(name, t) for t in sorted(actual - declared_any)]
+        stale += [(name, t) for t in sorted(declared_import - actual)]   # only import-kind can be import-stale
     return undeclared, stale
 
 

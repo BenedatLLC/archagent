@@ -4,9 +4,14 @@
 <!-- Glob(s) of the code this subsystem owns. `archagent drift` uses this to flag when the code
      changed but this doc didn't. Optional — if omitted, drift falls back to the file refs below. -->
 
-**Depends-on:** other-subsystem, another-subsystem
-<!-- Other subsystems (by doc name) this one is allowed to import. `archagent drift` compares this to
-     the actual import graph and flags undeclared couplings + stale declarations. Optional. -->
+**Connects:** other-subsystem via sync-call, another-subsystem via async-event, a-third
+<!-- Other subsystems (by doc name) this one connects to, each optionally typed by connector kind:
+     `import` (in-process code dependency — the default if `via <kind>` is omitted), `sync-call` (blocking
+     request/response — HTTP/gRPC/RPC), `async-event` (pub/sub, message queue), `shared-data` (both read/
+     write a shared store), `pipe` (one-way stream). `archagent drift` checks `import` edges against the
+     actual import graph; `archagent evaluate` uses the kinds to tell tight coupling (a synchronous service
+     cycle = distributed monolith) from loose (an event-coupled cycle is usually fine). Optional.
+     Legacy alias: `**Depends-on:** a, b` == `**Connects:** a via import, b via import`. -->
 
 **Service:** <deployment-service-name>
 <!-- The deployment service this subsystem runs as (a name from deployment.md's **Services:**). When set,

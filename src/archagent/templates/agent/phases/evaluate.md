@@ -40,9 +40,14 @@ architecture is well-formed.**
   Vendor a copy or extract a versioned package/service.
 - **God Component / Blob** (group C) — a subsystem with outsized fan-in **and** fan-out, or an outsized share
   of the code. Split along its seams; extract the most-depended-on responsibility behind a narrow interface.
-- **Tangled / circular dependency** (C) — a dependency cycle among subsystems or services. Service cycles are
-  worse (they block independent deployment — a distributed monolith). Break with an interface, inversion, or
-  async messaging.
+- **Tangled / circular dependency** (C) — a dependency cycle among subsystems or services. Break with an
+  interface, inversion, or async messaging.
+- **Distributed monolith / event-coupled cycle** (C) — a cycle of *services* built from the declared
+  `**Connects:**` kinds. If any edge is synchronous (`sync-call` / `shared-data` / `import`) the services
+  can't deploy independently → a distributed monolith (high). An all-`async-event` cycle is only
+  informational. Needs `**Connects:**` with kinds + `**Service:**` on the subsystem docs.
+- **Extraneous adjacent connector** (B) — the same subsystem pair wired by two different connector kinds
+  (e.g. a `sync-call` *and* an `async-event`). The parallel paths cancel each other's guarantees — pick one.
 - **Unstable Dependency** (B) — a subsystem depends on more-volatile ones (instability `I = Ce/(Ca+Ce)`).
   Depend toward stability; put a stable interface in front of the volatile target.
 - **Leaky abstraction — layer inversion / skip** (B) — a lower tier depends up on a higher one, or a tier
@@ -64,5 +69,6 @@ Mined from `git log`; require a git repo (skip with `--no-history`, window with 
   spreading churn. Freeze its contract, or split the volatile part from the stable one.
 
 To enable the layering checks, give each subsystem doc a `**Tier:**` line (e.g. `ui` / `domain` / `infra`);
-for the data signals, give the services a `**Service:**` line. Co-change quality depends on clean history —
-if a repo has few commits or huge bulk commits, weight the history signals lightly.
+for the data + connector signals, give the subsystems a `**Service:**` line and a `**Connects:** … via
+<kind>` line (typed edges). Co-change quality depends on clean history — if a repo has few commits or huge
+bulk commits, weight the history signals lightly.

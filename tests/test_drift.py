@@ -8,7 +8,20 @@ import subprocess
 import pytest
 
 from archagent.config import Config, PythonConfig, TSConfig
-from archagent.drift import find_drift
+from archagent.drift import _connectors, find_drift
+
+
+def test_connectors_parsing():
+    assert _connectors("no fields here") is None
+    assert _connectors("**Depends-on:** a, b") == {"a": "import", "b": "import"}         # alias, default kind
+    assert _connectors("**Depends-on:** a b") == {"a": "import", "b": "import"}          # legacy space form
+    assert _connectors("**Connects:** billing via sync-call, utils") == {
+        "billing": "sync-call", "utils": "import"}                                        # mixed, default import
+    assert _connectors("**Connects:** q via async-event, db via shared-data") == {
+        "q": "async-event", "db": "shared-data"}
+    assert _connectors("**Connects:** x via bogus-kind") == {"x": "import"}              # unknown kind -> import
+    # Connects takes precedence over a Depends-on alias in the same doc
+    assert _connectors("**Connects:** a via async-event\n**Depends-on:** z") == {"a": "async-event"}
 
 
 def _repo(tmp):
@@ -141,6 +154,33 @@ def test_dependency_drift_gated_on_declaration(tmp_path):
     _doc(cfg, "sa.md", "# SA\n\n**Covers:** `src/pkg/a.py`\n")  # no Depends-on
     _doc(cfg, "sb.md", "# SB\n\n**Covers:** `src/pkg/b.py`\n")
     assert find_drift(cfg).undeclared_deps == []
+
+
+def test_connects_alias_behaves_like_depends_on(tmp_path):
+    cfg = _dep_repo(tmp_path)
+    _doc(cfg, "sa.md", "# SA\n\n**Covers:** `src/pkg/a.py`\n**Connects:** sb\n")  # default kind = import
+    _doc(cfg, "sb.md", "# SB\n\n**Covers:** `src/pkg/b.py`\n")
+    r = find_drift(cfg)
+    assert r.undeclared_deps == [] and r.stale_deps == []  # a imports b, sb declared via import
+
+
+def test_sync_call_connector_not_flagged_stale(tmp_path):
+    # sa declares a runtime sync-call to sb but does NOT import it — must NOT be "stale" (it's not an import)
+    cfg = _dep_repo(tmp_path)
+    (tmp_path / "src" / "pkg" / "a.py").write_text("x = 1\n")  # a does not import b
+    _doc(cfg, "sa.md", "# SA\n\n**Covers:** `src/pkg/a.py`\n**Connects:** sb via sync-call\n")
+    _doc(cfg, "sb.md", "# SB\n\n**Covers:** `src/pkg/b.py`\n")
+    r = find_drift(cfg)
+    assert r.stale_deps == []               # a sync-call is not expected in the import graph
+    assert r.undeclared_deps == []
+
+
+def test_import_kind_connector_still_stale_when_unused(tmp_path):
+    cfg = _dep_repo(tmp_path)
+    (tmp_path / "src" / "pkg" / "a.py").write_text("x = 1\n")  # a does not import b
+    _doc(cfg, "sa.md", "# SA\n\n**Covers:** `src/pkg/a.py`\n**Connects:** sb via import\n")
+    _doc(cfg, "sb.md", "# SB\n\n**Covers:** `src/pkg/b.py`\n")
+    assert ("sa", "sb") in find_drift(cfg).stale_deps  # import-kind is checked against the import graph
 
 
 def _js_repo(tmp):

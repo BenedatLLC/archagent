@@ -29,8 +29,11 @@ the user first, and never overwrite their existing content.
    topology & components · key abstractions/patterns · state & tiering · lifecycles (Mermaid
    `stateDiagram` + caption) · key flows (Mermaid `sequenceDiagram` + caption) · invariants. Cite real
    files. Record provenance (doc vs code) and mark anything unverified. Fill the doc's metadata lines —
-   `**Covers:**`, `**Depends-on:**`, and where they apply `**Service:**` (deployment service) and `**Tier:**`
-   (layer, e.g. `ui` / `domain` / `infra`) — so `drift` and `evaluate` have the inputs they need.
+   `**Covers:**`, `**Connects:**` (subsystems this one connects to, each typed by connector kind — `import`
+   / `sync-call` / `async-event` / `shared-data` / `pipe`), and where they apply `**Service:**` (deployment
+   service) and `**Tier:**` (layer, e.g. `ui` / `domain` / `infra`) — so `drift` and `evaluate` have the
+   inputs they need. Getting the connector *kind* right matters: it's how `evaluate` tells a distributed
+   monolith (a synchronous service cycle) from a benign event-coupled one.
 4. **Fill `architecture/constitution.md`** (terse, always-loaded): conventions, the patterns the system
    relies on, how to work here.
 4b. **Fill `architecture/deployment.md`**: the deployment view (services/runtimes/infra, from
@@ -62,11 +65,11 @@ design-review time (does a proposed design fit the architecture?) and periodical
     against the current code and update what moved.
   - **undocumented module** — code owned by no subsystem's `Covers`: document it under the right subsystem
     (extend a `**Covers:**` glob), or leave it if it's intentionally out of scope.
-  - **undeclared dependency** — a subsystem imports another it doesn't declare: add it to `Depends-on`
+  - **undeclared dependency** — a subsystem imports another it doesn't declare: add it to `Connects`
     (if the coupling is intended) or remove the import (if it isn't).
-  - **stale dependency / undocumented entry point / undocumented route** — a `Depends-on` with no
-    matching import, a `[project.scripts]`/`package.json bin` command absent from the docs, or a web route
-    not in the OpenAPI spec/docs: fix the declaration, or document the entry point / route.
+  - **stale dependency / undocumented entry point / undocumented route** — a `Connects` `import`-kind edge
+    with no matching import, a `[project.scripts]`/`package.json bin` command absent from the docs, or a web
+    route not in the OpenAPI spec/docs: fix the declaration, or document the entry point / route.
   - **undocumented / dangling config** — an env key read in code but not in the manifest (add it to
     `architecture/deployment.md`'s `**Config:**` or `.env.example`), or a declared key never read (remove it).
   - **undocumented / dangling service** — a service in IaC (docker-compose/Procfile/k8s) not in the
@@ -76,9 +79,10 @@ design-review time (does a proposed design fit the architecture?) and periodical
     or a `depends_on` with no matching code dependency (remove it or record why).
 - **Verify, don't rewrite.** Re-check each existing claim and invariant against the *current* code. Leave
   what still holds; only change what moved.
-- **Declare coverage, dependencies, tier & service.** Give each `subsystems/<name>.md` a `**Covers:** <glob>`
-  and `**Depends-on:** <subsystems>` line (so `drift` checks staleness + topology), plus `**Tier:**` and
-  `**Service:**` where they apply (so `evaluate` can check layering and per-service data ownership).
+- **Declare coverage, connectors, tier & service.** Give each `subsystems/<name>.md` a `**Covers:** <glob>`
+  and a `**Connects:** <subsystem> via <kind>, …` line (kinds: `import` / `sync-call` / `async-event` /
+  `shared-data` / `pipe`; so `drift` checks import staleness + topology and `evaluate` can judge coupling),
+  plus `**Tier:**` and `**Service:**` where they apply (layering + per-service data ownership).
 - **Flag drift.** Where a doc or invariant disagrees with the code, surface it and decide: fix the code,
   or update the doc/invariant (with an ADR if it's a real decision) — don't silently overwrite intent.
 - **Refresh what changed.** Update the affected `subsystems/<name>.md` and reconcile the invariants table

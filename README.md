@@ -164,8 +164,8 @@ Adding a language is adding a column, not rewriting anything. Generated configs 
   the right thing.
 - **See what drifted** — `archagent drift` reflexion-diffs the `architecture/` docs against the code:
   **dangling references**, **stale docs** (git), **undocumented modules** (via `**Covers:**`),
-  **undeclared/stale subsystem dependencies** (declared `**Depends-on:**` vs the actual import graph),
-  **undocumented entry points**, the **web-route surface** (Flask/FastAPI/Django routes vs a committed
+  **undeclared/stale subsystem dependencies** (declared `**Connects:**` `import`-kind edges vs the actual
+  import graph), **undocumented entry points**, the **web-route surface** (Flask/FastAPI/Django routes vs a committed
   OpenAPI spec, else the docs), **configuration** (env keys read vs a `.env.example` / `**Config:**`
   manifest), and **deployment topology** (IaC services vs a `**Services:**` list). Informational — its
   output (`--json` for tooling) is the update work-list.
@@ -174,10 +174,12 @@ Adding a language is adding a column, not rewriting anything. Generated configs 
   duplicated ownership, cross-service data intimacy, shared libraries — via `**Service:**` maps),
   **shotgun surgery** and **unstable interfaces** (from git **co-change** history), **God Components**,
   **circular subsystem/service dependencies** (with shape + severity), **unstable dependencies** (Martin's
-  `I = Ce/(Ca+Ce)`), **leaky abstractions** (layer inversion/skip, via `**Tier:**`), **hard-coded
-  endpoints**, and **cross-boundary observability** (services that call each other but can't trace a request
-  across the boundary). It emits *candidate* signals (`--json`); the skill judges them in context, clusters
-  to roots, and prioritizes. Advisory (not a commit gate). Runs at design-review + periodically.
+  `I = Ce/(Ca+Ce)`), **leaky abstractions** (layer inversion/skip, via `**Tier:**`), **distributed monolith**
+  (a synchronous service cycle, from typed `**Connects:**` edges) and **extraneous adjacent connectors**,
+  **hard-coded endpoints**, and **cross-boundary observability** (services that call each other but can't
+  trace a request across the boundary). It emits *candidate* signals (`--json`); the skill judges them in
+  context, clusters to roots, and prioritizes. Advisory (not a commit gate). Runs at design-review +
+  periodically.
 - **Update the architecture** (a new design, or the code changed) — re-run **`/archagent-describe`**:
   it's *build-**or-update***. Start from `archagent drift` (reconcile doc-vs-code), then `archagent evaluate`
   (assess system-level health); refresh the subsystem(s) that changed and reconcile the invariants. Drift
@@ -208,7 +210,7 @@ CLI:
   error-severity failure).
 - `archagent drift` — reflexion-diff the `architecture/` docs against the code: dangling references,
   stale docs (git), undocumented modules (via `**Covers:**`), undeclared/stale subsystem dependencies
-  (declared `**Depends-on:**` vs the actual import graph — Python `ast` + JS/TS regex), undocumented entry
+  (declared `**Connects:**` `import`-kind edges vs the actual import graph — Python `ast` + JS/TS regex), undocumented entry
   points (`[project.scripts]` + `package.json` `bin`), the **web-route surface** (Flask/FastAPI/Django +
   Express/Fastify/NestJS, static, vs a committed OpenAPI spec if present, else the docs), and
   **configuration** (env keys read in code vs a `.env.example` / `**Config:**` manifest), and **deployment
@@ -219,7 +221,8 @@ CLI:
   `/archagent-evaluate`): **data & source-of-truth** (shared persistency, duplicated ownership, cross-service
   data intimacy, shared libraries — from a static datastore→service map via `**Service:**`), God Components,
   circular subsystem/service dependencies (shape + severity), unstable dependencies (`I = Ce/(Ca+Ce)`,
-  `DoUD ≥ 0.30`), leaky abstractions (layer inversion/skip via `**Tier:**`), hard-coded service endpoints, and
+  `DoUD ≥ 0.30`), leaky abstractions (layer inversion/skip via `**Tier:**`), **distributed monolith** +
+  **extraneous adjacent connectors** (from typed `**Connects:**` edges), hard-coded service endpoints, and
   **cross-boundary observability** (no request tracing across services); plus **git co-change** signals
   (**shotgun surgery** / implicit coupling, **unstable interface**). `--json`, `--group A|B|C|D`,
   `--min-severity`, `--no-history`, `--since`, `--exit-code`.

@@ -213,12 +213,12 @@ def drift(
             console.print(f"  (+{len(result.undocumented) - len(shown)} more)")
         console.print("")
     if result.undeclared_deps:
-        console.print(f"[red]Undeclared dependencies ({len(result.undeclared_deps)})[/] — a subsystem imports another it doesn't declare (Depends-on):")
+        console.print(f"[red]Undeclared dependencies ({len(result.undeclared_deps)})[/] — a subsystem imports another it doesn't declare (Connects):")
         for s, t in result.undeclared_deps:
             console.print(f"  {s} → {t}")
         console.print("")
     if result.stale_deps:
-        console.print(f"[yellow]Stale declared dependencies ({len(result.stale_deps)})[/] — declared Depends-on with no matching import:")
+        console.print(f"[yellow]Stale declared dependencies ({len(result.stale_deps)})[/] — declared Connects import-edge with no matching import:")
         for s, t in result.stale_deps:
             console.print(f"  {s} → {t}")
         console.print("")

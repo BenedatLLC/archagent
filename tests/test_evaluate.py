@@ -218,6 +218,51 @@ def test_group_a_gated_on_multiple_services(tmp_path):
     assert not ({"duplicated-source-of-truth", "shared-persistency", "service-intimacy"} & signs)
 
 
+# --- connector-typed edges (**Connects:**) ------------------------------------------------
+
+def _conn_sub(cfg, name, service, covers, connects):
+    _sub(cfg, name, f"# {name}\n\n**Service:** {service}\n\n**Connects:** {connects}\n\n**Covers:** `{covers}`\n")
+
+
+def test_distributed_monolith_on_sync_cycle(tmp_path):
+    cfg = _cfg(tmp_path)
+    _src(cfg, "pkg/a.py", "x = 1\n")
+    _src(cfg, "pkg/b.py", "y = 1\n")
+    _conn_sub(cfg, "a", "svc-a", "src/pkg/a.py", "b via sync-call")
+    _conn_sub(cfg, "b", "svc-b", "src/pkg/b.py", "a via sync-call")
+    dm = _of(evaluate(cfg), "distributed-monolith")
+    assert dm and dm[0].severity == "high" and sorted(dm[0].subjects) == ["svc-a", "svc-b"]
+
+
+def test_async_service_cycle_is_informational(tmp_path):
+    cfg = _cfg(tmp_path)
+    _src(cfg, "pkg/a.py", "x = 1\n")
+    _src(cfg, "pkg/b.py", "y = 1\n")
+    _conn_sub(cfg, "a", "svc-a", "src/pkg/a.py", "b via async-event")
+    _conn_sub(cfg, "b", "svc-b", "src/pkg/b.py", "a via async-event")
+    dm = _of(evaluate(cfg), "distributed-monolith")
+    assert dm and dm[0].severity == "low"  # event-decoupled cycle -> informational, not a monolith
+
+
+def test_extraneous_adjacent_connector(tmp_path):
+    cfg = _cfg(tmp_path)
+    _src(cfg, "pkg/a.py", "x = 1\n")
+    _src(cfg, "pkg/b.py", "y = 1\n")
+    # a -> b via sync-call AND b -> a via async-event: two kinds between the same pair
+    _conn_sub(cfg, "a", "svc-a", "src/pkg/a.py", "b via sync-call")
+    _conn_sub(cfg, "b", "svc-b", "src/pkg/b.py", "a via async-event")
+    eac = _of(evaluate(cfg), "extraneous-adjacent-connector")
+    assert eac and sorted(eac[0].subjects) == ["a", "b"]
+
+
+def test_no_connector_signals_without_connects(tmp_path):
+    cfg = _cfg(tmp_path)
+    _src(cfg, "pkg/a.py", "x = 1\n")
+    _svc_sub(cfg, "a", "svc-a", "src/pkg/a.py")
+    signs = _signs(evaluate(cfg))
+    assert not ({"distributed-monolith", "extraneous-adjacent-connector"} & signs)
+
+
 # --- Group D: cross-boundary observability ------------------------------------------------
 
 def test_no_request_tracing_systemic(tmp_path):
