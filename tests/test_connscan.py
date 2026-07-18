@@ -1,6 +1,12 @@
 """archagent connscan — static connector-kind inference from code."""
 
-from archagent.connscan import emits_events, resolve_host, sync_call_hosts
+from archagent.connscan import (
+    _endpoint_base,
+    emits_events,
+    resolve_host,
+    sync_call_hosts,
+    sync_call_targets,
+)
 
 
 def _w(tmp, rel, text):
@@ -45,3 +51,34 @@ def test_resolve_host():
     assert resolve_host("ledger.internal", names) == "ledger"    # domain head
     assert resolve_host("unknown-host", names) is None
     assert resolve_host("", names) is None
+
+
+def test_endpoint_base():
+    assert _endpoint_base("BILLING_URL") == "billing"
+    assert _endpoint_base("ORDERS_SERVICE_ENDPOINT") == "orders"
+    assert _endpoint_base("PAYMENT_BASE_URL") == "payment"
+    assert _endpoint_base("DATABASE_TIMEOUT") is None   # not endpoint-shaped
+    assert _endpoint_base("URL") is None                # nothing left after stripping
+
+
+def test_sync_call_targets_resolves_config_driven_endpoint(tmp_path):
+    # host is in an env var, not a literal — resolved via the endpoint-shaped key + HTTP call present
+    _w(tmp_path, "a.py",
+       'import os, requests\n'
+       'requests.get(os.getenv("BILLING_URL") + "/pay")\n')
+    names = {"billing", "orders", "ledger"}
+    assert sync_call_targets(tmp_path, "a.py", names) == {"billing"}
+
+
+def test_env_endpoint_ignored_without_http_call(tmp_path):
+    # reads BILLING_URL but makes no HTTP call -> not a sync-call target (it's just a config read)
+    _w(tmp_path, "a.py", 'import os\nB = os.getenv("BILLING_URL")\n')
+    assert sync_call_targets(tmp_path, "a.py", {"billing"}) == set()
+
+
+def test_sync_call_targets_combines_literal_and_env(tmp_path):
+    _w(tmp_path, "a.py",
+       'import os, requests\n'
+       'requests.get("http://ledger/balance")\n'
+       'requests.post(os.getenv("BILLING_URL"), json=x)\n')
+    assert sync_call_targets(tmp_path, "a.py", {"billing", "ledger"}) == {"billing", "ledger"}

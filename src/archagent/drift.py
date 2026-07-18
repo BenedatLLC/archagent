@@ -27,7 +27,7 @@ except ModuleNotFoundError:  # py < 3.11
 
 from .config import Config
 from .configscan import declared_config_keys, read_config_keys
-from .connscan import resolve_host, sync_call_hosts
+from .connscan import sync_call_targets
 from .deployscan import declared_services, extract_service_edges, extract_services
 from .webapi import extract_routes, load_openapi, matches
 
@@ -358,10 +358,7 @@ def _connector_mismatch(root, subs, sub_service):
             continue
         observed_sync: set[str] = set()  # resolved subsystem/service names this subsystem sync-calls
         for f in files:
-            for host in sync_call_hosts(root, f):
-                resolved = resolve_host(host, names)
-                if resolved:
-                    observed_sync.add(resolved)
+            observed_sync |= sync_call_targets(root, f, names)
         for target in async_targets:
             identity = {target, sub_service.get(target, "")}  # the target subsystem or its service
             if observed_sync & identity:

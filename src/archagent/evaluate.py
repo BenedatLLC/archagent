@@ -20,7 +20,7 @@ from pathlib import Path
 
 from .cochange import mine_cochange
 from .config import Config
-from .connscan import resolve_host, sync_call_hosts
+from .connscan import sync_call_targets
 from .datamap import store_touches, table_defs
 from .deployscan import extract_service_edges
 from .obsscan import scan as _obs_scan
@@ -487,10 +487,7 @@ def _inferred_service_edges(root: Path, model: _Model) -> set[tuple[str, str]]:
         if not ssvc:
             continue
         for f in model.files.get(sub, ()):
-            for host in sync_call_hosts(root, f):
-                tname = resolve_host(host, names)
-                if not tname:
-                    continue
+            for tname in sync_call_targets(root, f, names):
                 tsvc = tname if tname in svc_names else model.service.get(tname)
                 if tsvc and tsvc != ssvc:
                     edges.add((ssvc, tsvc))

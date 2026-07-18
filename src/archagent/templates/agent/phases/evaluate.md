@@ -43,8 +43,9 @@ architecture is well-formed.**
 - **Tangled / circular dependency** (C) — a dependency cycle among subsystems or services. Break with an
   interface, inversion, or async messaging.
 - **Distributed monolith / event-coupled cycle** (C) — a cycle of *services*. Edges come from the declared
-  `**Connects:**` kinds **and** sync-call edges inferred from the code (hard-coded HTTP calls whose host
-  resolves to a service), so this fires even with no declarations — inferred cycles are marked "(inferred
+  `**Connects:**` kinds **and** sync-call edges inferred from the code (hard-coded HTTP calls, or
+  config-driven `*_URL` endpoint env keys, whose target resolves to a service), so this fires even with no
+  declarations — inferred cycles are marked "(inferred
   from code)" at low confidence, so verify them. If any edge is synchronous (`sync-call` / `shared-data` /
   `import`) the services can't deploy independently → distributed monolith (high); an all-`async-event`
   cycle is only informational. Needs `**Service:**` on the subsystem docs (plus `**Connects:**` for the
