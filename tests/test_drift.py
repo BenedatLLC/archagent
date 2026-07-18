@@ -183,6 +183,24 @@ def test_import_kind_connector_still_stale_when_unused(tmp_path):
     assert ("sa", "sb") in find_drift(cfg).stale_deps  # import-kind is checked against the import graph
 
 
+def test_connector_kind_mismatch_async_declared_but_sync_code(tmp_path):
+    # sa declares billing via async-event, but the code makes a blocking HTTP call to billing-svc
+    cfg = _dep_repo(tmp_path)
+    (tmp_path / "src" / "pkg" / "a.py").write_text('import requests\nrequests.post("http://billing-svc/pay")\n')
+    _doc(cfg, "sa.md", "# SA\n\n**Service:** orders-svc\n\n**Connects:** billing via async-event\n\n**Covers:** `src/pkg/a.py`\n")
+    _doc(cfg, "billing.md", "# Billing\n\n**Service:** billing-svc\n\n**Covers:** `src/pkg/b.py`\n")
+    r = find_drift(cfg)
+    assert ("sa", "billing", "async-event", "sync-call") in r.connector_mismatches
+
+
+def test_no_mismatch_when_kinds_agree(tmp_path):
+    cfg = _dep_repo(tmp_path)
+    (tmp_path / "src" / "pkg" / "a.py").write_text('import requests\nrequests.post("http://billing-svc/pay")\n')
+    _doc(cfg, "sa.md", "# SA\n\n**Service:** orders-svc\n\n**Connects:** billing via sync-call\n\n**Covers:** `src/pkg/a.py`\n")
+    _doc(cfg, "billing.md", "# Billing\n\n**Service:** billing-svc\n\n**Covers:** `src/pkg/b.py`\n")
+    assert find_drift(cfg).connector_mismatches == []  # declared sync-call, code does sync-call — agree
+
+
 def _js_repo(tmp):
     (tmp / "src" / "app").mkdir(parents=True)
     (tmp / "src" / "app" / "a.ts").write_text("import { thing } from './b';\nexport const x = thing;\n")  # a -> b

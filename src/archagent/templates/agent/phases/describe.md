@@ -77,6 +77,9 @@ design-review time (does a proposed design fit the architecture?) and periodical
   - **missing / extra deployment edge** — the code depends across services (via subsystem `**Service:**`
     mappings) that `docker-compose depends_on` doesn't wire (add the `depends_on` — likely a runtime bug),
     or a `depends_on` with no matching code dependency (remove it or record why).
+  - **connector-kind mismatch** — a `**Connects:** X via async-event` the code contradicts (it makes a
+    blocking HTTP call to X). The doc claims a decoupling the code doesn't have: fix the connector kind, or
+    change the code to actually be asynchronous.
 - **Verify, don't rewrite.** Re-check each existing claim and invariant against the *current* code. Leave
   what still holds; only change what moved.
 - **Declare coverage, connectors, tier & service.** Give each `subsystems/<name>.md` a `**Covers:** <glob>`

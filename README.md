@@ -167,7 +167,9 @@ Adding a language is adding a column, not rewriting anything. Generated configs 
   **undeclared/stale subsystem dependencies** (declared `**Connects:**` `import`-kind edges vs the actual
   import graph), **undocumented entry points**, the **web-route surface** (Flask/FastAPI/Django routes vs a committed
   OpenAPI spec, else the docs), **configuration** (env keys read vs a `.env.example` / `**Config:**`
-  manifest), and **deployment topology** (IaC services vs a `**Services:**` list). Informational — its
+  manifest), **deployment topology** (IaC services vs a `**Services:**` list), and **connector-kind
+  mismatches** (a `**Connects:** … via async-event` the code contradicts with a blocking HTTP call).
+  Informational — its
   output (`--json` for tooling) is the update work-list.
 - **Evaluate the architecture** — `archagent evaluate` (or **`/archagent-evaluate`**) judges the *model
   itself* for **system-level** smells and recommends fixes: **data & source-of-truth** (shared persistency,
@@ -175,7 +177,8 @@ Adding a language is adding a column, not rewriting anything. Generated configs 
   **shotgun surgery** and **unstable interfaces** (from git **co-change** history), **God Components**,
   **circular subsystem/service dependencies** (with shape + severity), **unstable dependencies** (Martin's
   `I = Ce/(Ca+Ce)`), **leaky abstractions** (layer inversion/skip, via `**Tier:**`), **distributed monolith**
-  (a synchronous service cycle, from typed `**Connects:**` edges) and **extraneous adjacent connectors**,
+  (a synchronous service cycle — from typed `**Connects:**` edges *and* sync-call edges inferred from the
+  code, so it works with no annotation) and **extraneous adjacent connectors**,
   **hard-coded endpoints**, and **cross-boundary observability** (services that call each other but can't
   trace a request across the boundary). It emits *candidate* signals (`--json`); the skill judges them in
   context, clusters to roots, and prioritizes. Advisory (not a commit gate). Runs at design-review +
@@ -215,7 +218,8 @@ CLI:
   Express/Fastify/NestJS, static, vs a committed OpenAPI spec if present, else the docs), and
   **configuration** (env keys read in code vs a `.env.example` / `**Config:**` manifest), and **deployment
   topology** (services from docker-compose/Procfile/k8s vs a `**Services:**` list, plus code cross-service
-  dependencies vs compose `depends_on` via subsystem `**Service:**` mappings). Informational; `--json` for
+  dependencies vs compose `depends_on` via subsystem `**Service:**` mappings), and **connector-kind
+  mismatches** (declared `via async-event` vs a synchronous HTTP call inferred from the code). Informational; `--json` for
   tooling/agents, `--exit-code` to fail CI on any drift.
 - `archagent evaluate` — judge the architecture for **system-level** smells (candidates for
   `/archagent-evaluate`): **data & source-of-truth** (shared persistency, duplicated ownership, cross-service

@@ -42,10 +42,13 @@ architecture is well-formed.**
   of the code. Split along its seams; extract the most-depended-on responsibility behind a narrow interface.
 - **Tangled / circular dependency** (C) — a dependency cycle among subsystems or services. Break with an
   interface, inversion, or async messaging.
-- **Distributed monolith / event-coupled cycle** (C) — a cycle of *services* built from the declared
-  `**Connects:**` kinds. If any edge is synchronous (`sync-call` / `shared-data` / `import`) the services
-  can't deploy independently → a distributed monolith (high). An all-`async-event` cycle is only
-  informational. Needs `**Connects:**` with kinds + `**Service:**` on the subsystem docs.
+- **Distributed monolith / event-coupled cycle** (C) — a cycle of *services*. Edges come from the declared
+  `**Connects:**` kinds **and** sync-call edges inferred from the code (hard-coded HTTP calls whose host
+  resolves to a service), so this fires even with no declarations — inferred cycles are marked "(inferred
+  from code)" at low confidence, so verify them. If any edge is synchronous (`sync-call` / `shared-data` /
+  `import`) the services can't deploy independently → distributed monolith (high); an all-`async-event`
+  cycle is only informational. Needs `**Service:**` on the subsystem docs (plus `**Connects:**` for the
+  declared edges).
 - **Extraneous adjacent connector** (B) — the same subsystem pair wired by two different connector kinds
   (e.g. a `sync-call` *and* an `async-event`). The parallel paths cancel each other's guarantees — pick one.
 - **Unstable Dependency** (B) — a subsystem depends on more-volatile ones (instability `I = Ce/(Ca+Ce)`).

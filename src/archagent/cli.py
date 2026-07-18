@@ -185,6 +185,8 @@ def drift(
             "dangling_services": result.dangling_services,
             "missing_deploy_edges": [{"service": a, "depends_on": b} for a, b in result.missing_deploy_edges],
             "extra_deploy_edges": [{"service": a, "depends_on": b} for a, b in result.extra_deploy_edges],
+            "connector_mismatches": [{"subsystem": s, "target": t, "declared": d, "observed": o}
+                                     for s, t, d, o in result.connector_mismatches],
             "openapi_spec": result.openapi_spec,
             "git_available": result.git_available,
             "covers_declared": result.covers_declared,
@@ -267,6 +269,11 @@ def drift(
         console.print(f"[yellow]Extra deployment edges ({len(result.extra_deploy_edges)})[/] — depends_on with no matching code dependency:")
         for a, b in result.extra_deploy_edges:
             console.print(f"  {a} → {b}")
+        console.print("")
+    if result.connector_mismatches:
+        console.print(f"[red]Connector-kind mismatches ({len(result.connector_mismatches)})[/] — the code contradicts a declared connector kind:")
+        for s, t, d, o in result.connector_mismatches:
+            console.print(f"  {s} → {t}: declared [bold]{d}[/], code does [bold]{o}[/]")
         console.print("")
 
     if not result.git_available:

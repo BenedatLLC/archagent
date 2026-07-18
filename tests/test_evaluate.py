@@ -263,6 +263,18 @@ def test_no_connector_signals_without_connects(tmp_path):
     assert not ({"distributed-monolith", "extraneous-adjacent-connector"} & signs)
 
 
+def test_distributed_monolith_inferred_from_code_without_declarations(tmp_path):
+    # no **Connects:** anywhere — the sync cycle is inferred from hard-coded HTTP calls between the services
+    cfg = _cfg(tmp_path)
+    _src(cfg, "pkg/a.py", 'import requests\nrequests.post("http://svc-b/x")\n')
+    _src(cfg, "pkg/b.py", 'import requests\nrequests.get("http://svc-a/y")\n')
+    _svc_sub(cfg, "a", "svc-a", "src/pkg/a.py")
+    _svc_sub(cfg, "b", "svc-b", "src/pkg/b.py")
+    dm = _of(evaluate(cfg), "distributed-monolith")
+    assert dm and dm[0].severity == "high"
+    assert "inferred" in dm[0].detail and dm[0].confidence == "low"
+
+
 # --- Group D: cross-boundary observability ------------------------------------------------
 
 def test_no_request_tracing_systemic(tmp_path):

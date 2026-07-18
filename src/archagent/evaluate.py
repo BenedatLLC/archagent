@@ -20,6 +20,7 @@ from pathlib import Path
 
 from .cochange import mine_cochange
 from .config import Config
+from .connscan import resolve_host, sync_call_hosts
 from .datamap import store_touches, table_defs
 from .deployscan import extract_service_edges
 from .obsscan import scan as _obs_scan
@@ -199,8 +200,8 @@ def evaluate(config: Config, history: bool = True, since: str | None = None) -> 
         sedges, sweight = _adjacency(svc_edges)
         result.findings += _cycles(sorted(sedges), sedges, sweight, "service")
 
-    # connector-typed edge signals (declared **Connects:** kinds)
-    result.findings += _connector_signals(model)
+    # connector-typed edge signals (declared **Connects:** kinds + inferred sync-call edges)
+    result.findings += _connector_signals(root, model)
 
     result.findings += _hardcoded_endpoints(config)
     result.findings += _observability(root, model)
@@ -402,13 +403,11 @@ def _tier_violations(model: _Model) -> list[Finding]:
 
 # --- connector-typed edges (declared **Connects:** kinds) --------------------------------
 
-def _connector_signals(model: _Model) -> list[Finding]:
-    if not model.connectors:
-        return []
+def _connector_signals(root: Path, model: _Model) -> list[Finding]:
     out: list[Finding] = []
 
-    # Extraneous Adjacent Connector (Garcia): a subsystem pair wired by >= 2 different connector kinds —
-    # the parallel paths cancel each other's guarantees (e.g. a sync call *and* an event between the pair).
+    # Extraneous Adjacent Connector (Garcia): a subsystem pair wired by >= 2 different *declared* connector
+    # kinds — the parallel paths cancel each other's guarantees (a sync call *and* an event between the pair).
     kinds_between: dict[frozenset, set[str]] = {}
     for (a, b), kind in model.connectors.items():
         kinds_between.setdefault(frozenset((a, b)), set()).add(kind)
@@ -426,41 +425,76 @@ def _connector_signals(model: _Model) -> list[Finding]:
                 confidence="med",
             ))
 
-    # Distributed monolith: a cycle of *services* whose declared connectors are synchronous — they can't be
-    # deployed independently. An all-async cycle is event-decoupled, so it's only informational.
+    # Distributed monolith: a cycle of *services* with a synchronous connector — they can't deploy
+    # independently. Edges come from declared **Connects:** kinds AND sync-call edges inferred from the code
+    # (so this fires even with zero declarations). An all-async cycle is event-decoupled → informational.
     svc_edges: dict[str, set[str]] = {}
     svc_kinds: dict[tuple[str, str], set[str]] = {}
-    for (a, b), kind in model.connectors.items():
-        sa, sb = model.service.get(a), model.service.get(b)
+    inferred_pairs: set[tuple[str, str]] = set()
+
+    def _add(sa, sb, kind, inferred):
         if sa and sb and sa != sb:
             svc_edges.setdefault(sa, set()).add(sb)
             svc_edges.setdefault(sb, set())
             svc_kinds.setdefault((sa, sb), set()).add(kind)
+            if inferred:
+                inferred_pairs.add((sa, sb))
+
+    for (a, b), kind in model.connectors.items():
+        _add(model.service.get(a), model.service.get(b), kind, False)
+    for sa, sb in _inferred_service_edges(root, model):
+        _add(sa, sb, "sync-call", True)
+
     for comp in _sccs(sorted(svc_edges), svc_edges):
         if len(comp) < 2:
             continue
         cs = set(comp)
         cycle_kinds: set[str] = set()
+        uses_inferred = False
         for a in comp:
             for b in svc_edges.get(a, ()):
                 if b in cs:
                     cycle_kinds |= svc_kinds.get((a, b), set())
+                    if (a, b) in inferred_pairs:
+                        uses_inferred = True
         synchronous = any(k in _SYNC_KINDS for k in cycle_kinds)
+        note = " (inferred from code)" if uses_inferred else ""
         out.append(Finding(
             sign="distributed-monolith", group="C",
             severity="high" if synchronous else "low",
             title="Distributed monolith" if synchronous else "Event-coupled service cycle",
             subjects=sorted(comp),
-            detail=f"service cycle via {', '.join(sorted(cycle_kinds))} connector(s)",
+            detail=f"service cycle via {', '.join(sorted(cycle_kinds))} connector(s){note}",
             recommendation=(
                 ("Synchronously-coupled services in a cycle can't deploy independently. Break it with async "
                  "messaging, an API gateway, or by moving the shared concern.")
                 if synchronous else
                 ("A cycle of event-decoupled services is usually fine — confirm neither side blocks on the "
                  "other so it isn't a hidden synchronous dependency.")),
-            confidence="med",
+            confidence="low" if uses_inferred else "med",
         ))
     return out
+
+
+def _inferred_service_edges(root: Path, model: _Model) -> set[tuple[str, str]]:
+    """Cross-service sync-call edges inferred from hard-coded HTTP calls whose host resolves to a known
+    subsystem/service name. Conservative — unresolved targets are dropped."""
+    names = set(model.subs) | set(model.service.values())
+    svc_names = set(model.service.values())
+    edges: set[tuple[str, str]] = set()
+    for sub in model.subs:
+        ssvc = model.service.get(sub)
+        if not ssvc:
+            continue
+        for f in model.files.get(sub, ()):
+            for host in sync_call_hosts(root, f):
+                tname = resolve_host(host, names)
+                if not tname:
+                    continue
+                tsvc = tname if tname in svc_names else model.service.get(tname)
+                if tsvc and tsvc != ssvc:
+                    edges.add((ssvc, tsvc))
+    return edges
 
 
 # --- Group A: data & source-of-truth (needs >= 2 services) -------------------------------

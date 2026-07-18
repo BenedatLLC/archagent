@@ -27,6 +27,7 @@ except ModuleNotFoundError:  # py < 3.11
 
 from .config import Config
 from .configscan import declared_config_keys, read_config_keys
+from .connscan import resolve_host, sync_call_hosts
 from .deployscan import declared_services, extract_service_edges, extract_services
 from .webapi import extract_routes, load_openapi, matches
 
@@ -60,6 +61,7 @@ class DriftResult:
     dangling_services: list[str] = field(default_factory=list)      # declared service, not found in IaC
     missing_deploy_edges: list[tuple[str, str]] = field(default_factory=list)  # code needs it, compose doesn't wire it
     extra_deploy_edges: list[tuple[str, str]] = field(default_factory=list)    # compose wires it, code doesn't need it
+    connector_mismatches: list[tuple[str, str, str, str]] = field(default_factory=list)  # (subsystem, target, declared kind, observed kind)
     openapi_spec: str | None = None  # the committed spec used as the intended interface, if any
     git_available: bool = False
     covers_declared: bool = False  # did any subsystem doc declare **Covers:**? (gates undocumented)
@@ -73,6 +75,7 @@ class DriftResult:
             or self.undocumented_config or self.dangling_config
             or self.undocumented_services or self.dangling_services
             or self.missing_deploy_edges or self.extra_deploy_edges
+            or self.connector_mismatches
         )
 
 
@@ -161,6 +164,10 @@ def find_drift(config: Config) -> DriftResult:
         if sub_service and actual_svc:
             result.missing_deploy_edges, result.extra_deploy_edges = _service_edge_drift(
                 subs, sub_service, import_graph, extract_service_edges(root))
+
+    # connector-kind mismatch: a declared connector the code contradicts (declared async-event, but the
+    # code makes a resolved synchronous HTTP call to that target)
+    result.connector_mismatches = _connector_mismatch(root, subs, sub_service)
 
     return result
 
@@ -338,6 +345,28 @@ def _service_edge_drift(subs, sub_service, import_graph, compose_edges):
     missing = sorted(needed - compose - async_pairs)  # code needs it, deploy doesn't wire it (async exempt)
     extra = sorted(e for e in compose - needed if e[0] in hosting and e[1] in hosting)  # wired, unneeded
     return missing, extra
+
+
+def _connector_mismatch(root, subs, sub_service):
+    """A declared connector kind the code contradicts. v1: declared `async-event` but the code makes a
+    resolved synchronous HTTP call to that target — the doc claims a decoupling the code doesn't have."""
+    names = {name for name, _, _ in subs} | set(sub_service.values())
+    out: list[tuple[str, str, str, str]] = []
+    for name, files, declared in subs:
+        async_targets = [t for t, k in (declared or {}).items() if k == "async-event"]
+        if not async_targets:  # only async-event declarations can be contradicted by a sync call
+            continue
+        observed_sync: set[str] = set()  # resolved subsystem/service names this subsystem sync-calls
+        for f in files:
+            for host in sync_call_hosts(root, f):
+                resolved = resolve_host(host, names)
+                if resolved:
+                    observed_sync.add(resolved)
+        for target in async_targets:
+            identity = {target, sub_service.get(target, "")}  # the target subsystem or its service
+            if observed_sync & identity:
+                out.append((name, target, "async-event", "sync-call"))
+    return out
 
 
 def _dependency_drift(subs, import_graph):
