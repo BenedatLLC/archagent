@@ -38,21 +38,48 @@ the user first, and never overwrite their existing content.
    relies on, how to work here.
 4b. **Fill `architecture/deployment.md`**: the deployment view (services/runtimes/infra, from
    `docker-compose.yml` / k8s / `Procfile`) and the **Configuration** — list the env keys the system reads
-   under `**Config:**` (or maintain a `.env.example`). Consider a config-access boundary invariant.
+   under `**Config:**` (or maintain a `.env.example`). Consider a config-access boundary invariant. If the
+   system is a single process with no IaC, **omit `**Services:**`** and describe the runtime in prose (see
+   Metadata field rules below).
 5. **Capture invariants** in `architecture/invariants.md` (the table). Prefer checkable rules:
    - BOUNDARY (layering / forbidden deps) → `forbid <a> -> <b>`
    - STRUCTURAL (banned code shape) → `forbid-pattern <ast-grep pattern>`
-   Choose Tier + Severity and link an ADR in `decisions/` for the *why*. Invariants you can't yet express
-   as a rule: record them as prose in the subsystem doc and mark Tier `prose`.
+   Choose Tier + Severity and link an ADR in `decisions/` for the *why*. **Any row with a real `forbid` /
+   `forbid-pattern` in the Rule column is generated and enforced** regardless of Status (except
+   `deprecated`) — the one exception is **Tier `prose`, which is documented but never generated.** So to
+   record an invariant you can't enforce yet, set its Tier to `prose` (or keep it as a prose bullet in the
+   subsystem doc), not `proposed`.
 6. **Validate.** Run `archagent gen`, then `archagent check`. Confirm each new invariant parses and flags
    what it should (try a quick local violation if unsure). Fix or refine.
 7. **Evaluate health.** Run `archagent evaluate` (the `evaluate` skill judges the candidates). For each
    confirmed *system-level* smell, decide with the team: change the design, or accept it and record why.
    Turn accepted fixes into an ADR under `decisions/` and — where enforceable — a `check` invariant so it
    can't regress. This is how `evaluate` feeds back into the artifact and the enforcement tier.
+   *Expect some candidates to be dismissible:* a shared kernel/`foundation` that every layer depends on will
+   always show `layer-skip`, and flat peer capabilities under one orchestrator show skips whenever the
+   orchestrator calls a capability directly — both are correct. Consider modelling flat peer subsystems as a
+   single `domain` tier rather than forcing a strict `ui → app → domain → infra` ladder.
 8. **Index + log.** Update `architecture/index.md` and append a line to `architecture/log.md`.
 
 First pass: the top-level map, 1–3 subsystems, and the highest-value invariants. Then iterate.
+
+## Metadata field rules (keep drift quiet)
+
+The `**Field:**` lines are parsed and tokenised, so a few rules avoid phantom drift:
+- **Omit a field entirely when it has no value.** Never write `none`, `n/a`, or a sentence as the value —
+  it gets split into fake declarations. A leaf subsystem with no outgoing edges simply has no `**Connects:**`
+  line. Same for `**Service:**`, `**Services:**`, `**Config:**`.
+- **`**Covers:**` matches source-code files only** (`.py`, `.ts`, …). Data files (prompt `.md`, fixtures,
+  SQL, config) can't be Covered — describe them in prose. (A glob that matches only data files is accepted
+  and not flagged, but contributes no code coverage.)
+- **No service topology → no `**Services:**`.** For a single-process app (a CLI, a library, one process)
+  with no `docker-compose`/`Procfile`/k8s, omit `**Services:**` and describe the process in prose. A
+  declared service with no IaC is reported as *dangling* forever.
+- **Incremental first pass vs undocumented-module drift.** As soon as any subsystem declares `**Covers:**`,
+  `drift` reports every *un*-covered source module as "undocumented". That's expected while iterating —
+  treat it as a to-do list, or give every module a (possibly stub) `**Covers:**` so drift stays quiet.
+- **Declarations must use the bold `**Field:**` form** and live outside fenced code blocks; a plain word at
+  a line start, or a Mermaid node, is not parsed as a declaration.
 
 ## Updating an existing artifact (re-running describe)
 

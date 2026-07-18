@@ -12,6 +12,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from .mdutil import is_empty_value
+
 try:
     import yaml
 except ModuleNotFoundError:  # pragma: no cover
@@ -20,7 +22,8 @@ except ModuleNotFoundError:  # pragma: no cover
 _SKIP_DIRS = {".git", ".archagent", "__pycache__", "node_modules", ".venv"}
 _COMPOSE_NAMES = ("docker-compose.yml", "docker-compose.yaml", "compose.yml", "compose.yaml")
 _K8S_KINDS = {"Deployment", "StatefulSet", "DaemonSet", "CronJob", "Job", "Service", "Pod", "ReplicaSet"}
-_SERVICES_DOC = re.compile(r"^\s*\*{0,2}Services:?\*{0,2}\s*[:：]?\s*(.+)$", re.IGNORECASE | re.MULTILINE)
+# require the bold `**Services:**` form so a sentence starting with "services" isn't read as a manifest (issue #1)
+_SERVICES_DOC = re.compile(r"^\s*\*\*\s*Services\s*:?\s*\*\*\s*[:：]?\s*(.+)$", re.IGNORECASE | re.MULTILINE)
 _PROC_LINE = re.compile(r"^([A-Za-z0-9_-]+):\s*\S", re.MULTILINE)
 
 
@@ -49,6 +52,8 @@ def extract_service_edges(root: Path) -> list[tuple[str, str]]:
 def declared_services(doc_text: str) -> set[str]:
     out: set[str] = set()
     for m in _SERVICES_DOC.finditer(doc_text):
+        if is_empty_value(m.group(1)):
+            continue
         out.update(s.strip().strip("`") for s in re.split(r"[,\s]+", m.group(1).strip()) if s.strip())
     return out
 

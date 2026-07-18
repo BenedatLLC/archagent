@@ -28,16 +28,19 @@ except ModuleNotFoundError:  # py < 3.11
 from .config import Config
 from .configscan import declared_config_keys, read_config_keys
 from .connscan import sync_call_targets
+from .mdutil import is_empty_value, strip_code_fences
 from .deployscan import declared_services, extract_service_edges, extract_services
 from .webapi import extract_routes, load_openapi, matches
 
 CODE_EXTS = (".py", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".go", ".rs", ".java", ".rb")
 _SKIP_DIRS = {".git", ".archagent", "__pycache__", "node_modules", ".venv", ".mypy_cache"}
 _BACKTICK = re.compile(r"`([^`\n]+)`")
-_COVERS = re.compile(r"^\s*\*{0,2}Covers:?\*{0,2}\s*[:：]?\s*(.+)$", re.IGNORECASE | re.MULTILINE)
-_DEPENDS = re.compile(r"^\s*\*{0,2}Depends[- ]?on:?\*{0,2}\s*[:：]?\s*(.+)$", re.IGNORECASE | re.MULTILINE)
-_CONNECTS = re.compile(r"^\s*\*{0,2}Connects:?\*{0,2}\s*[:：]?\s*(.+)$", re.IGNORECASE | re.MULTILINE)
-_SERVICE = re.compile(r"^\s*\*{0,2}Service(?!s):?\*{0,2}\s*[:：]?\s*(.+)$", re.IGNORECASE | re.MULTILINE)
+# Metadata declarations MUST use the bold `**Field:**` form (issue #1): the `**` markers are required so
+# that ordinary prose or a Mermaid node that merely starts with the word is not mis-read as a declaration.
+_COVERS = re.compile(r"^\s*\*\*\s*Covers\s*:?\s*\*\*\s*[:：]?\s*(.+)$", re.IGNORECASE | re.MULTILINE)
+_DEPENDS = re.compile(r"^\s*\*\*\s*Depends[- ]?on\s*:?\s*\*\*\s*[:：]?\s*(.+)$", re.IGNORECASE | re.MULTILINE)
+_CONNECTS = re.compile(r"^\s*\*\*\s*Connects\s*:?\s*\*\*\s*[:：]?\s*(.+)$", re.IGNORECASE | re.MULTILINE)
+_SERVICE = re.compile(r"^\s*\*\*\s*Service(?!s)\s*:?\s*\*\*\s*[:：]?\s*(.+)$", re.IGNORECASE | re.MULTILINE)
 
 # The connector kinds a **Connects:** edge may declare (Wright's canonical interaction types, mapped to
 # what real systems do). `import` = in-process code dependency = the classic **Depends-on:** meaning.
@@ -95,7 +98,7 @@ def find_drift(config: Config) -> DriftResult:
     for doc in sorted(arch.rglob("*.md")):
         if doc.name.endswith("_TEMPLATE.md"):
             continue
-        text = doc.read_text()
+        text = strip_code_fences(doc.read_text())  # fenced code / Mermaid can't declare metadata (issue #1)
         all_text.append(text)
         rel_doc = doc.relative_to(root).as_posix()
         refs = _file_refs(text)
@@ -108,9 +111,11 @@ def find_drift(config: Config) -> DriftResult:
             if _resolve_ref(ref, root, source_files) is None:
                 result.dangling.append((rel_doc, ref))
         for glob in covers:
-            matched = _glob_files(root, glob)
+            matched = _glob_files(root, glob)  # code files only; these count toward coverage
             covered_by_globs.update(matched)
-            if not matched:
+            # Only truly dangling if the glob matches NO file at all. A glob that matches non-code assets
+            # (prompt `.md`, fixtures, SQL) is a legitimate data-file Covers, not a dangling ref (issue #1).
+            if not matched and not _glob_matches_any(root, glob):
                 result.dangling.append((rel_doc, f"{glob}  (Covers matches no files)"))
 
         if _is_subsystem(doc, arch):
@@ -189,6 +194,8 @@ def _file_refs(text: str) -> list[str]:
 def _covers_globs(text: str) -> list[str]:
     globs: list[str] = []
     for m in _COVERS.finditer(text):
+        if is_empty_value(m.group(1)):  # e.g. `**Covers:** (none)` — not a real declaration (issue #1)
+            continue
         for part in re.split(r"[,\s]+", m.group(1).strip()):
             g = part.strip().strip("`")
             if g:
@@ -249,6 +256,18 @@ def _glob_files(root: Path, glob: str) -> list[str]:
     ]
 
 
+def _glob_matches_any(root: Path, glob: str) -> bool:
+    """Whether the glob matches any file at all (code or data). Used to tell a legitimate data-file
+    Covers (matches `.md`/fixtures) from a genuinely dangling glob (matches nothing)."""
+    try:
+        return any(
+            p.is_file() and not any(part in _SKIP_DIRS for part in p.parts)
+            for p in root.glob(glob)
+        )
+    except (OSError, ValueError):
+        return False
+
+
 def _is_subsystem(doc: Path, arch: Path) -> bool:
     return doc.parent == arch / "subsystems"
 
@@ -284,7 +303,7 @@ def _connectors(text: str) -> dict[str, str] | None:
     `{target: kind}`. Kind defaults to `import` (what Depends-on always meant); an unknown kind falls back
     to `import` so a typo stays low-noise. None if the doc declares neither field."""
     src = _CONNECTS.search(text) or _DEPENDS.search(text)
-    if not src:
+    if not src or is_empty_value(src.group(1)):  # `**Connects:** _(none)_` is not a declaration (issue #1)
         return None
     out: dict[str, str] = {}
     for item in src.group(1).strip().split(","):
@@ -308,7 +327,7 @@ def _connectors(text: str) -> dict[str, str] | None:
 def _service_of(text: str) -> str | None:
     """Parse a subsystem doc's `**Service:** <name>` line (the service it deploys as). Not `Services:`."""
     m = _SERVICE.search(text)
-    if not m:
+    if not m or is_empty_value(m.group(1)):
         return None
     parts = [p.strip().strip("`") for p in re.split(r"[,\s]+", m.group(1).strip()) if p.strip()]
     return parts[0] if parts else None

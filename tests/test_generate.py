@@ -33,6 +33,15 @@ def test_boundary_python_importlinter(tmp_path):
         assert token in text
 
 
+def test_tier_prose_is_not_generated(tmp_path):
+    # issue #2: a real forbid-pattern with Tier `prose` is documentation, not enforced — skip it uniformly
+    cfg = _cfg(tmp_path)
+    res = generate([_inv(id="STR-P", type="STRUCTURAL", tier="prose",
+                         rule="forbid-pattern print($$$)")], cfg)
+    assert res.astgrep_ids == []
+    assert any(inv_id == "STR-P" for inv_id, _ in res.skipped)
+
+
 def test_structural_astgrep_scoped_in(tmp_path):
     cfg = _cfg(tmp_path)
     res = generate([_inv(id="STR-2", type="STRUCTURAL",

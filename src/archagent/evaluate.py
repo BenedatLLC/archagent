@@ -23,6 +23,7 @@ from .config import Config
 from .connscan import sync_call_targets
 from .datamap import store_touches, table_defs
 from .deployscan import extract_service_edges
+from .mdutil import strip_code_fences
 from .obsscan import scan as _obs_scan
 from .drift import (
     _SYNC_KINDS,
@@ -45,7 +46,7 @@ IMPACT_MIN = 3          # an interface depended on by >= this many subsystems ha
 UNSTABLE_DEPENDENTS_MIN = 2  # ... and co-changing with >= this many of them => unstable interface
 _EPS = 1e-9
 
-_TIER = re.compile(r"^\s*\*{0,2}Tier:?\*{0,2}\s*[:：]?\s*(.+)$", re.IGNORECASE | re.MULTILINE)
+_TIER = re.compile(r"^\s*\*\*\s*Tier\s*:?\s*\*\*\s*[:：]?\s*(.+)$", re.IGNORECASE | re.MULTILINE)
 # higher rank = higher-level layer; allowed dependencies point downward (ui -> domain -> infra)
 _TIER_RANK = {
     "ui": 4, "presentation": 4, "frontend": 4, "web": 4, "view": 4,
@@ -132,7 +133,7 @@ def _build_model(config: Config) -> _Model:
         for doc in sorted(arch.rglob("*.md")):
             if doc.name.endswith("_TEMPLATE.md") or not _is_subsystem(doc, arch):
                 continue
-            text = doc.read_text()
+            text = strip_code_fences(doc.read_text())  # Mermaid/code can't declare metadata (issue #1)
             covered: set[str] = set()
             for glob in _covers_globs(text):
                 covered.update(_glob_files(root, glob))

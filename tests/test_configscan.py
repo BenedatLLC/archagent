@@ -23,3 +23,14 @@ def test_declared_from_env_example_and_doc(tmp_path):
 
 def test_no_manifest_returns_empty(tmp_path):
     assert declared_config_keys(tmp_path, "# doc with no config line\n") == set()
+
+
+def test_non_bold_config_line_is_not_a_manifest(tmp_path):
+    # issue #1: only the bold **Config:** form declares keys; prose must not
+    doc = ("# Deploy\n\n**Config:** REAL_KEY\n\n"
+           "Configuration values are read from the environment.\n")  # sentence starting with 'Config'
+    assert declared_config_keys(tmp_path, doc) == {"REAL_KEY"}
+
+
+def test_config_empty_placeholder_ignored(tmp_path):
+    assert declared_config_keys(tmp_path, "**Config:** _(none)_\n") == set()

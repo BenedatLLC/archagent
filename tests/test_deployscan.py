@@ -28,6 +28,13 @@ def test_declared_services_from_doc():
     assert declared_services("# no services line\n") == set()
 
 
+def test_prose_line_starting_with_services_is_not_a_declaration():
+    # issue #1: a hand-wrapped sentence must not become declared services
+    doc = "services. All entry-point scripts run as the same `cli` process; they differ only in\n"
+    assert declared_services(doc) == set()
+    assert declared_services("**Services:** _(none)_\n") == set()
+
+
 def test_non_k8s_yaml_ignored(tmp_path):
     (tmp_path / "openapi.yaml").write_text("openapi: 3.0.0\npaths: {}\n")  # no apiVersion/kind
     assert extract_services(tmp_path) == set()

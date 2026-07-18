@@ -41,7 +41,17 @@ def generate(invariants: list[Invariant], config: Config) -> GenResult:
 
     il_contracts: list[str] = []
     dc_rules: list[str] = []
-    active = [i for i in invariants if i.status != "deprecated"]
+    # A row is enforced iff it has a real rule AND isn't marked non-enforceable. `Tier: prose` means
+    # "recorded as documentation, not generated" — honour it uniformly for BOUNDARY and STRUCTURAL, so
+    # the describe/invariant guidance ("mark Tier prose") actually holds (issue #2).
+    active: list[Invariant] = []
+    for i in invariants:
+        if i.status == "deprecated":
+            continue
+        if i.tier == "prose":
+            result.skipped.append((i.id, "tier 'prose': recorded as documentation, not enforced"))
+            continue
+        active.append(i)
 
     for inv in active:
         try:

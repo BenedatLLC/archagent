@@ -15,6 +15,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from .mdutil import is_empty_value
+
 _KEY = r"([A-Za-z_][A-Za-z0-9_]*)"
 _ENV_READS = [
     re.compile(r"os\.getenv\(\s*['\"]" + _KEY),
@@ -24,7 +26,8 @@ _ENV_READS = [
     re.compile(r"process\.env\[\s*['\"]" + _KEY),
 ]
 _ENV_FILE = re.compile(r"^\s*(?:export\s+)?" + _KEY + r"\s*=", re.MULTILINE)
-_CONFIG_DOC = re.compile(r"^\s*\*{0,2}Config:?\*{0,2}\s*[:：]?\s*(.+)$", re.IGNORECASE | re.MULTILINE)
+# require the bold `**Config:**` form so prose / a Mermaid `Configured` node isn't read as a manifest (issue #1)
+_CONFIG_DOC = re.compile(r"^\s*\*\*\s*Config\s*:?\s*\*\*\s*[:：]?\s*(.+)$", re.IGNORECASE | re.MULTILINE)
 _MANIFEST_GLOBS = (".env.example", ".env.sample", ".env.template", "*.env.example")
 _CODE_EXTS = (".py", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs")
 
@@ -53,5 +56,7 @@ def declared_config_keys(root: Path, doc_text: str) -> set[str]:
                 except OSError:
                     pass
     for m in _CONFIG_DOC.finditer(doc_text):
+        if is_empty_value(m.group(1)):
+            continue
         keys.update(k.strip().strip("`") for k in re.split(r"[,\s]+", m.group(1).strip()) if k.strip())
     return keys

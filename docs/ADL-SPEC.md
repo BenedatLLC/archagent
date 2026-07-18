@@ -92,17 +92,26 @@ architecture/
 A **field** is a single line associating a name with a value. A field line MUST match, case-insensitively:
 
 ```
-field-line = *WSP [stars] name [":"] [stars] *WSP [colon] *WSP value
-stars      = 1*2 "*"                     ; Markdown bold markers, e.g. "**"
+field-line = *WSP "**" *WSP name *WSP [":"] *WSP "**" *WSP [colon] *WSP value
 colon      = ":" / "："                   ; ASCII or fullwidth
 value      = 1*VCHAR-to-end-of-line
 ```
 
-The **canonical form** a producer SHOULD emit is:
+The **canonical form** is:
 
 ```
 **Name:** value
 ```
+
+Normative constraints (see issue #1 for the failures these prevent):
+
+- The bold `**` markers are **REQUIRED**. A line that merely *begins* with a field word (ordinary prose,
+  a Mermaid node such as `Configured -->`) is not a declaration and MUST NOT be parsed as one.
+- A field line MUST be interpreted only **outside fenced code blocks** (```` ``` ```` / `~~~`). Content
+  inside a fence (Mermaid diagrams, code samples) MUST NOT be scanned for declarations.
+- A value that is empty or a **placeholder** — `(none)`, `n/a`, `tbd`, or a parenthetical aside such as
+  `_(none — base of the graph)_` — MUST be treated as **no declaration**. Producers MUST omit the field
+  entirely rather than writing such a value; consumers MUST NOT tokenise it into items.
 
 Backtick code spans around individual tokens in a value MUST be tolerated and stripped. Unless a field's
 definition states otherwise (see §4.2 `Connects`), a value is a list split on commas and/or whitespace.
@@ -136,10 +145,12 @@ A subsystem document MAY declare the following fields (§3.3). All are OPTIONAL.
 
 Notes:
 
-- `Covers` values are globs resolved against the repository root; a glob matching no code file is a defect
-  a consumer SHOULD report. In the absence of `Covers`, a consumer MAY fall back to **backtick file
-  references** — inline code spans whose text ends in a recognized source extension
-  (`.py .ts .tsx .js .jsx .mjs .cjs .go .rs .java .rb`).
+- `Covers` values are globs resolved against the repository root. They own **source-code files only**
+  (`.py .ts .tsx .js .jsx .mjs .cjs .go .rs .java .rb`); a glob that matches non-code assets (data files,
+  templates) is accepted but contributes no coverage — data files are described in prose, not Covered. A
+  glob matching **no file at all** is a defect a consumer SHOULD report. In the absence of `Covers`, a
+  consumer MAY fall back to **backtick file references** — inline code spans whose text ends in a
+  recognized source extension.
 - `Service` is distinguished from the plural `Services` (§5.1) and MUST NOT match it. If multiple tokens
   are given, the first is used.
 - When both `Connects` and `Depends-on` appear, `Connects` takes precedence.
@@ -241,8 +252,10 @@ The table MUST have the following columns, in any letter case:
 | `Status` | lifecycle | `active` (default) · `proposed` · `deprecated` |
 
 Not every `(Type, Tier)` combination is mechanically enforced; a rule a consumer cannot compile is
-reported as unsupported rather than silently ignored. An invariant that cannot yet be expressed in the
-Rule DSL SHOULD be recorded with tier `prose`.
+reported as unsupported rather than silently ignored. A row with tier **`prose`** is recorded as
+documentation and MUST NOT be generated or enforced; any other tier with a valid Rule is enforced
+regardless of `Status` (except `deprecated`). An invariant that cannot yet be enforced SHOULD therefore be
+recorded with tier `prose` (not status `proposed`, which is still enforced).
 
 ### 6.3 Rule DSL
 

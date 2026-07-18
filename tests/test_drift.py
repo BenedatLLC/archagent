@@ -156,6 +156,54 @@ def test_dependency_drift_gated_on_declaration(tmp_path):
     assert find_drift(cfg).undeclared_deps == []
 
 
+# --- issue #1: prose / Mermaid / placeholder must not be parsed as declarations ----------
+
+def test_prose_line_start_is_not_a_declaration(tmp_path):
+    # a hand-wrapped sentence beginning with "services." must not become declared services
+    cfg = _dep_repo(tmp_path)
+    _doc(cfg, "sa.md", "# SA\n\n**Covers:** `src/pkg/a.py`\n\n"
+                       "services. All entry-point scripts run as the same `cli` process; they differ\n")
+    r = find_drift(cfg)
+    assert r.dangling_services == [] and r.undocumented_services == []
+
+
+def test_mermaid_config_node_is_not_a_config_key(tmp_path):
+    # a lifecycle diagram state named `Configured` must not be read as config keys
+    cfg = _dep_repo(tmp_path)
+    (tmp_path / ".env.example").write_text("REAL_KEY=1\n")            # manifest → config drift active
+    (tmp_path / "src" / "pkg" / "a.py").write_text('import os\nos.getenv("REAL_KEY")\n')  # reads it (not dangling)
+    _doc(cfg, "sa.md", "# SA\n\n**Covers:** `src/pkg/a.py`\n\n"
+                       "```mermaid\nstateDiagram-v2\n  Configured --> Ready: FILE_LOCATIONS + Settings.set\n```\n")
+    r = find_drift(cfg)
+    assert r.dangling_config == [] and r.undocumented_config == []
+    assert "FILE_LOCATIONS" not in r.dangling_config and "-->" not in r.dangling_config
+
+
+def test_connects_none_placeholder_is_not_edges(tmp_path):
+    cfg = _dep_repo(tmp_path)
+    (tmp_path / "src" / "pkg" / "a.py").write_text("x = 1\n")  # no imports
+    _doc(cfg, "sa.md", "# SA\n\n**Covers:** `src/pkg/a.py`\n"
+                       "**Connects:** _(none — this is the base of the dependency graph)_\n")
+    r = find_drift(cfg)
+    assert r.stale_deps == [] and r.undeclared_deps == []
+
+
+def test_covers_data_file_glob_not_dangling(tmp_path):
+    # a Covers glob that matches real non-code assets (prompt .md) is legitimate, not dangling
+    cfg = _dep_repo(tmp_path)
+    (tmp_path / "src" / "pkg" / "prompts").mkdir(parents=True)
+    (tmp_path / "src" / "pkg" / "prompts" / "sys.md").write_text("prompt\n")
+    _doc(cfg, "sa.md", "# SA\n\n**Covers:** `src/pkg/prompts/*.md`\n")
+    dangling = [ref for _, ref in find_drift(cfg).dangling]
+    assert not any("src/pkg/prompts/*.md" in d for d in dangling)
+
+
+def test_covers_glob_matching_nothing_still_dangling(tmp_path):
+    cfg = _dep_repo(tmp_path)
+    _doc(cfg, "sa.md", "# SA\n\n**Covers:** `src/ghost/**`\n")  # matches no file at all
+    assert any("src/ghost/**" in ref for _, ref in find_drift(cfg).dangling)
+
+
 def test_connects_alias_behaves_like_depends_on(tmp_path):
     cfg = _dep_repo(tmp_path)
     _doc(cfg, "sa.md", "# SA\n\n**Covers:** `src/pkg/a.py`\n**Connects:** sb\n")  # default kind = import
