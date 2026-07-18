@@ -220,3 +220,7 @@ __marimo__/
 # archagent: generated checker configs are derived from architecture/invariants.md
 # (match at any depth, e.g. examples/*/.archagent/generated/)
 **/.archagent/generated/
+
+# editor swap files
+*.swp
+*.swo

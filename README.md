@@ -92,6 +92,22 @@ stateDiagram-v2
 ```
 _A lifecycle is a state machine + a one-line caption: what it shows and the key takeaway._
 
+**System-level view.** The six dimensions describe each subsystem in isolation; the *cross-cutting* view —
+how the system is deployed and configured — lives in `deployment.md`:
+
+- **Deployment topology** — the services / runtimes / infra the system runs as (read from
+  `docker-compose` / k8s / `Procfile`), listed under a `**Services:**` manifest.
+- **Configuration** — the environment keys the system reads, declared under a `**Config:**` manifest (or a
+  committed `.env.example`). This is where configuration is modeled: `drift` compares the keys actually
+  read in code (`os.getenv`, `process.env`) against what's declared, and a config-access boundary can be
+  enforced as an invariant (e.g. only a `config` module may read the environment).
+
+These tie back to the subsystems through a few optional metadata fields on each `subsystems/<name>.md`:
+`**Covers:**` (the code it owns), `**Service:**` (which deployment service it runs as), `**Tier:**` (its
+layer), and `**Connects:** … via <kind>` (its dependencies, typed by connector — `import` / `sync-call` /
+`async-event` / `shared-data` / `pipe`). `drift` and `evaluate` read these to check topology, layering,
+data ownership, and deployment coupling.
+
 ## Invariants are a markdown table
 
 `architecture/invariants.md` — the first table is parsed; the prose around it is for humans:
@@ -269,6 +285,37 @@ uv run archagent check --project examples/sample_ts    # TS (dependency-cruiser 
 import-linter (Python boundaries) · dependency-cruiser (JS/TS boundaries) · ast-grep (structural,
 any language) · grep/git for retrieval and history. archagent is the thin layer that turns one
 markdown table into those tools' configs and reports results per invariant.
+
+## Repository layout
+
+The layout of this source repository (distinct from the `architecture/` artifact archagent *generates* in
+a target repo, described above):
+
+```
+archagent/
+├── README.md                 this file
+├── pyproject.toml            package metadata + dependencies (uv)
+├── docs/
+│   ├── ROADMAP.md            planned future work, grouped by theme (checkable)
+│   └── ADL-SPEC.md           the architecture-artifact format, as a standards-style spec
+├── src/archagent/
+│   ├── cli.py                the `archagent` CLI (init · gen · check · drift · evaluate · upgrade)
+│   ├── config.py             archagent.toml loading (languages, source paths, test commands)
+│   ├── invariants.py         parse the invariants.md table  ·  rules.py — the Rule DSL
+│   ├── generate.py           compile invariants → checker configs  ·  check.py — run them, map results
+│   ├── init.py               scaffold the artifact + per-agent skills; upgrade prompts
+│   ├── drift.py              the reflexion-diff (docs vs code): the `drift` command
+│   ├── evaluate.py           system-level architecture smells: the `evaluate` command
+│   ├── <extraction scanners> configscan · deployscan · webapi · datamap · cochange · connscan · obsscan
+│   │                         (static, no-execution extractors: env keys, IaC, routes, datastores,
+│   │                          git co-change, connector kinds, observability)
+│   └── templates/
+│       ├── architecture/     the artifact scaffold (constitution, invariants, subsystems, deployment…)
+│       └── agent/phases/     the neutral skill prompts (describe · check · invariant · evaluate)
+├── examples/                 sample_py, sample_ts — end-to-end fixtures
+├── tests/                    the pytest suite
+└── .github/workflows/ci.yml  CI (runs the suite on every push/PR)
+```
 
 ## Development
 
