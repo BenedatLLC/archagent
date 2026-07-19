@@ -8,6 +8,13 @@ You describe the architecture as markdown in your repo (including a table of mac
 ast-grep) from that single source and runs them, reporting adherence per invariant. The checkers
 are deterministic; the LLM only ever *proposes*.
 
+**It enforces the rules you already wrote down.** Design docs and code are full of stated invariants —
+`# INVARIANT: the query set is always sorted`, "summaries must never be empty", "only the config layer
+reads the environment" — that nothing checks. `archagent scan-invariants` finds them across your docs and
+code, and the `describe` skill classifies each, verifies it against the code, and lifts it into the
+enforceable table. Intent that was buried in prose becomes a checked rule — and a stated rule the code
+*violates* is surfaced as drift (a real bug, or a stale design).
+
 > Status: early. v1 covers BOUNDARY invariants (Python via import-linter, JS/TS via dependency-cruiser),
 > STRUCTURAL invariants (any language via ast-grep, path-scopable), and a PBT tier for behavioral/data
 > invariants (Python via Hypothesis) — all driven by `architecture/invariants.md`, plus per-agent
@@ -167,9 +174,11 @@ Adding a language is adding a column, not rewriting anything. Generated configs 
    and guesses `root_package` / `source_paths` — check those in `archagent.toml`. It **never creates or
    overwrites your top-level `CLAUDE.md` / `AGENTS.md`**; the full instructions go in
    `architecture/AGENTS.md`. Add `--wire` to append a small additive pointer to your top-level file(s).
-2. **`/archagent-describe`** (in your coding agent) — document the *current* architecture: it surveys any
-   existing docs, **verifies them against the code**, and writes the constitution, the per-subsystem docs
-   (the six dimensions), and an initial set of invariants.
+2. **`/archagent-describe`** (in your coding agent) — document the *current* architecture: it locates your
+   docs (via README/`AGENTS.md`/`CLAUDE.md` and any `designs/`/`spec/` dirs), **verifies them against the
+   code**, and writes the constitution, the per-subsystem docs (the six dimensions), and an initial set of
+   invariants — including ones it **mines from your existing design docs and code** (`archagent
+   scan-invariants` surfaces the candidates; see below).
 3. **`archagent check`** (or `/archagent-check`) — verify the code against those invariants.
 
 **Keep it honest as you work:**
@@ -178,6 +187,10 @@ Adding a language is adding a column, not rewriting anything. Generated configs 
 - **Add an invariant** — **`/archagent-invariant`**, or edit `architecture/invariants.md` by hand, to
   encode a new rule (from a design decision, or lifted from a subsystem doc); `check` confirms it catches
   the right thing.
+- **Mine stated invariants** — `archagent scan-invariants` surfaces rules already written in your docs and
+  code (`INVARIANT:` markers, asserts/contracts, and modal prose like "must never" / "only X may"); the
+  `describe` skill classifies each, verifies it, and lifts the checkable ones into the table (capturing the
+  rest as cited prose rows).
 - **See what drifted** — `archagent drift` reflexion-diffs the `architecture/` docs against the code:
   **dangling references**, **stale docs** (git), **undocumented modules** (via `**Covers:**`),
   **undeclared/stale subsystem dependencies** (declared `**Connects:**` `import`-kind edges vs the actual
