@@ -3,16 +3,33 @@ name = "archagent"
 version = "0.1.0"
 description = "Keep code adherent to a described architecture; teach coding agents to reason about it."
 readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
 authors = [
     { name = "Jeff Fischer", email = "jeff.fischer@benedat.com" }
 ]
 requires-python = ">=3.13"
+keywords = ["architecture", "coding-agents", "invariants", "conformance", "import-linter", "ast-grep", "llm"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Quality Assurance",
+    "Topic :: Software Development :: Documentation",
+    "Environment :: Console",
+]
 dependencies = [
     "ast-grep-cli>=0.44.0",
     "import-linter>=2.12",
     "pyyaml>=6.0.3",
     "typer>=0.26.8",
 ]
+
+[project.urls]
+Homepage = "https://github.com/BenedatLLC/archagent"
+Repository = "https://github.com/BenedatLLC/archagent"
+Issues = "https://github.com/BenedatLLC/archagent/issues"
 
 [project.scripts]
 archagent = "archagent:main"
