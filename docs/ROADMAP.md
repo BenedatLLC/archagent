@@ -108,7 +108,7 @@ passing, non-vacuous `check` + confirmation; a stated-but-violated invariant is 
 
 ## Distribution & adoption
 
-- [ ] **Publish to PyPI.** `uvx archagent` with no clone. The single biggest adoption unlock.
+- [x] **Publish to PyPI.** `uvx archagent` / `uv tool install archagent`, no clone. *(v0.1.0 shipped 2026-07-19 — https://pypi.org/project/archagent/)*
 - [ ] **More agents / plugin distribution.** Auto-detect additional coding agents; borrow Archy's plugin
   packaging.
 
