@@ -84,7 +84,7 @@ class DriftResult:
 
 def find_drift(config: Config) -> DriftResult:
     root = config.project_root
-    arch = root / "architecture"
+    arch = config.architecture_dir
     result = DriftResult(git_available=_git_available(root))
     if not arch.is_dir():
         return result

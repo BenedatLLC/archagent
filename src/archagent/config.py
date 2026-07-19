@@ -36,10 +36,17 @@ class Config:
     languages: list[str] = field(default_factory=lambda: ["python"])
     python: PythonConfig = field(default_factory=PythonConfig)
     ts: TSConfig = field(default_factory=TSConfig)
+    # Where the architecture artifact lives, relative to the repo root. Default `architecture`;
+    # `init` may set e.g. `docs/architecture`. Recorded in archagent.toml as `[project] architecture_dir`.
+    arch_dir: str = "architecture"
+
+    @property
+    def architecture_dir(self) -> Path:
+        return self.project_root / self.arch_dir
 
     @property
     def invariants_path(self) -> Path:
-        return self.project_root / "architecture" / "invariants.md"
+        return self.architecture_dir / "invariants.md"
 
     @property
     def generated_dir(self) -> Path:
@@ -76,6 +83,7 @@ def load_config(project_root: Path) -> Config:
     return Config(
         project_root=project_root,
         languages=proj.get("languages", ["python"]),
+        arch_dir=(proj.get("architecture_dir") or "architecture").strip("/") or "architecture",
         python=PythonConfig(
             root_package=py.get("root_package"),
             source_paths=py.get("source_paths", ["src"]),

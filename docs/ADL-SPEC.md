@@ -62,9 +62,12 @@ The key words **MUST**, **MUST NOT**, **REQUIRED**, **SHALL**, **SHOULD**, **SHO
 
 ### 3.1 Directory Layout
 
-A conforming artifact is a directory named `architecture/` at the repository root. It MAY contain the
-following members. A conforming producer SHOULD create them; a conforming consumer MUST tolerate the
-absence of any of them.
+A conforming artifact is a single directory holding the members below. Its location defaults to
+`architecture/` at the repository root but is configurable — recorded as `[project] architecture_dir` in
+`archagent.toml` (e.g. `docs/architecture`) — and consumers MUST read that setting rather than assuming the
+default. Members are referenced relative to the artifact directory, so the artifact moves as a unit. It MAY
+contain the following members; a conforming producer SHOULD create them; a conforming consumer MUST tolerate
+the absence of any of them.
 
 ```
 architecture/

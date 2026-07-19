@@ -71,7 +71,7 @@ def scan_invariants(config: Config) -> list[Candidate]:
                 add(rel, lineno, m.group(1), "marker", "high")
 
     # docs: markers (high) + modal language (low)
-    for rel in _doc_files(root):
+    for rel in _doc_files(root, config.arch_dir):
         for lineno, line in _lines(root, rel):
             if _MARKER.search(line):
                 add(rel, lineno, line, "marker", "high")
@@ -92,9 +92,10 @@ def _guess(text: str) -> str:
     return "prose"
 
 
-def _doc_files(root: Path) -> list[str]:
+def _doc_files(root: Path, arch_dir: str = "architecture") -> list[str]:
     """Doc files worth scanning: root-level markdown (README/AGENTS/CLAUDE + siblings) and everything under
-    the recognized design/spec directories, minus our own `architecture/` output."""
+    the recognized design/spec directories, minus our own architecture artifact (`arch_dir`)."""
+    arch_prefix = arch_dir.strip("/") + "/"
     files: list[str] = []
     for p in root.glob("*"):
         if p.is_file() and p.suffix.lower() in _DOC_EXTS:
@@ -104,8 +105,11 @@ def _doc_files(root: Path) -> list[str]:
         if not base.is_dir():
             continue
         for p in base.rglob("*"):
-            if p.is_file() and p.suffix.lower() in _DOC_EXTS and not any(part in _SKIP_DIRS for part in p.parts):
-                files.append(p.relative_to(root).as_posix())
+            rel = p.relative_to(root).as_posix()
+            if p.is_file() and p.suffix.lower() in _DOC_EXTS \
+                    and not rel.startswith(arch_prefix) \
+                    and not any(part in _SKIP_DIRS for part in p.parts):
+                files.append(rel)
     return sorted(dict.fromkeys(files))
 
 

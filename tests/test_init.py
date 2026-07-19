@@ -1,5 +1,7 @@
-"""init / upgrade: detection, file ownership, top-level wiring."""
+"""init / upgrade: detection, file ownership, top-level wiring, artifact location."""
 
+from archagent.cli import _resolve_arch_dir
+from archagent.config import load_config
 from archagent.init import detect_agents, detect_languages, init_project, upgrade_project
 
 
@@ -38,6 +40,49 @@ def test_init_installs_selected_agent_skills(tmp_path):
     init_project(tmp_path, agents=["claude"])
     for phase in ("describe", "check", "invariant"):
         assert (tmp_path / ".claude" / "skills" / f"archagent-{phase}" / "SKILL.md").exists()
+
+
+# --- configurable architecture location ---------------------------------------------------
+
+def test_default_arch_dir_recorded_in_toml(tmp_path):
+    _pyrepo(tmp_path)
+    init_project(tmp_path, agents=[])
+    toml = (tmp_path / "archagent.toml").read_text()
+    assert 'architecture_dir = "architecture"' in toml
+    assert load_config(tmp_path).arch_dir == "architecture"
+
+
+def test_custom_arch_dir_scaffolds_and_retargets(tmp_path):
+    _pyrepo(tmp_path)
+    init_project(tmp_path, agents=["claude"], wire=True, arch_dir="docs/architecture")
+    # artifact scaffolded under the custom dir, not the default
+    assert (tmp_path / "docs" / "architecture" / "invariants.md").exists()
+    assert not (tmp_path / "architecture").exists()
+    # config records it and load_config reads it
+    assert 'architecture_dir = "docs/architecture"' in (tmp_path / "archagent.toml").read_text()
+    assert load_config(tmp_path).arch_dir == "docs/architecture"
+    # archagent-owned files land under the custom dir and are retargeted to it
+    agents_md = (tmp_path / "docs" / "architecture" / "AGENTS.md").read_text()
+    assert "docs/architecture/" in agents_md and "\narchitecture/" not in agents_md
+    skill = (tmp_path / ".claude" / "skills" / "archagent-describe" / "SKILL.md").read_text()
+    assert "docs/architecture/" in skill
+    # wiring points at the custom location
+    claude = (tmp_path / "CLAUDE.md").read_text()
+    assert "docs/architecture/AGENTS.md" in claude
+
+
+def test_upgrade_uses_recorded_arch_dir(tmp_path):
+    _pyrepo(tmp_path)
+    init_project(tmp_path, agents=["claude"], arch_dir="docs/architecture")
+    cfg = load_config(tmp_path)
+    upgrade_project(tmp_path, agents=["claude"], arch_dir=cfg.arch_dir)
+    assert (tmp_path / "docs" / "architecture" / "AGENTS.md").exists()
+
+
+def test_resolve_arch_dir_explicit_and_noninteractive(tmp_path):
+    assert _resolve_arch_dir(tmp_path, "docs/architecture", yes=False) == "docs/architecture"
+    assert _resolve_arch_dir(tmp_path, "  design/arch/ ", yes=False) == "design/arch"
+    assert _resolve_arch_dir(tmp_path, "", yes=True) == "architecture"   # non-interactive falls back
 
 
 def test_ownership_user_files_preserved_owned_refreshed(tmp_path):

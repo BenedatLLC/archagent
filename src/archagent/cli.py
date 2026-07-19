@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 import typer
@@ -98,6 +99,8 @@ def help_command() -> None:
 def init(
     project: Path = typer.Argument(Path("."), help="Target repo to scaffold into"),
     agents: str = typer.Option("auto", help="Agents: 'auto' (detect), 'all', 'none', or e.g. 'claude,cursor'"),
+    arch_dir: str = typer.Option("", "--arch-dir", help="Where the architecture docs live, relative to the repo (e.g. docs/architecture). Skips the prompt."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Non-interactive: don't prompt; use defaults (architecture/) where an option isn't given."),
     wire: bool = typer.Option(False, "--wire", help="Also add an additive pointer to the repo's top-level CLAUDE.md / AGENTS.md"),
     force: bool = typer.Option(False, "--force", help="Overwrite user-owned files too (re-scaffold — clobbers your edits)"),
 ) -> None:
@@ -106,12 +109,40 @@ def init(
     selected, advisory = _resolve_agents(root, agents, detect_agents)
     if advisory:
         console.print(f"[yellow]{advisory}[/]")
-    result = init_project(root, agents=selected, force=force, wire=wire)
+    location = _resolve_arch_dir(root, arch_dir, yes)
+    result = init_project(root, agents=selected, force=force, wire=wire, arch_dir=location)
     _report(result, root)
+    console.print(f"\nArchitecture docs: [bold]{location}/[/]")
     if selected and not wire:
-        console.print("\nTip: wire archagent into your agent's top-level instructions with [bold]--wire[/], "
-                      "or have the agent add a pointer to [bold]architecture/AGENTS.md[/].")
-    console.print("\nNext: run [bold]/archagent-describe[/] (or edit architecture/invariants.md), then [bold]archagent check[/].")
+        console.print("Tip: wire archagent into your agent's top-level instructions with [bold]--wire[/], "
+                      f"or have the agent add a pointer to [bold]{location}/AGENTS.md[/].")
+    console.print(f"\nNext: run [bold]/archagent-describe[/] (or edit {location}/invariants.md), then [bold]archagent check[/].")
+
+
+_DOC_DIR_CANDIDATES = ("docs", "doc", "design", "designs", "specs", "spec")
+
+
+def _resolve_arch_dir(root: Path, arch_dir_opt: str, yes: bool) -> str:
+    """Resolve where the architecture artifact goes: an explicit --arch-dir wins; --yes / non-interactive
+    falls back to the default; otherwise suggest the default + combos with any doc dirs found, or custom."""
+    if arch_dir_opt.strip():
+        return arch_dir_opt.strip().strip("/")
+    default = "architecture"
+    found = [d for d in _DOC_DIR_CANDIDATES if (root / d).is_dir()]
+    options = [default] + [f"{d}/architecture" for d in found]
+    if yes or not sys.stdin.isatty():
+        return default
+    console.print("\n[bold]Where should the architecture docs live?[/] (relative to the repo root)")
+    for i, opt in enumerate(options, 1):
+        tag = "  [dim](default)[/]" if i == 1 else ""
+        console.print(f"  [bold]{i}[/]) {opt}/{tag}")
+    console.print(f"  [bold]{len(options) + 1}[/]) custom…")
+    choice = typer.prompt("Select", default="1").strip()
+    if choice == str(len(options) + 1) or choice.lower() == "custom":
+        return typer.prompt("Path (relative to repo root)", default=default).strip().strip("/") or default
+    if choice.isdigit() and 1 <= int(choice) <= len(options):
+        return options[int(choice) - 1]
+    return choice.strip("/") or default  # treat a free-typed value as a custom path
 
 
 @app.command()
@@ -128,7 +159,8 @@ def upgrade(
         selected = list(KNOWN_AGENTS)
     else:
         selected = [a.strip() for a in agents.split(",") if a.strip() in KNOWN_AGENTS]
-    result = upgrade_project(root, agents=selected)
+    arch_dir = load_config(root).arch_dir  # honor the location recorded at init time
+    result = upgrade_project(root, agents=selected, arch_dir=arch_dir)
     _report(result, root)
     console.print("[green]Prompts refreshed.[/]")
 

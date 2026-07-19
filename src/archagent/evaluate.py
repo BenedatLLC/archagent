@@ -121,7 +121,7 @@ class _Model:
 
 def _build_model(config: Config) -> _Model:
     root = config.project_root
-    arch = root / "architecture"
+    arch = config.architecture_dir
     source_files = _source_files(config)
     import_graph = _import_graph(root, config, source_files)
 

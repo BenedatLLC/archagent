@@ -23,12 +23,24 @@ KNOWN_AGENTS = ("claude", "cursor", "openhands")
 
 _POINTER_START = "<!-- archagent:start -->"
 _POINTER_END = "<!-- archagent:end -->"
-_POINTER_BODY = (
-    "## Architecture (archagent)\n\n"
-    "This repo's architecture is described and enforced by **archagent**. See "
-    "[architecture/AGENTS.md](architecture/AGENTS.md) for how to work with it "
-    "(describe / check / invariants)."
-)
+
+
+def _pointer_body(arch_dir: str) -> str:
+    p = f"{arch_dir}/AGENTS.md"
+    return (
+        "## Architecture (archagent)\n\n"
+        "This repo's architecture is described and enforced by **archagent**. See "
+        f"[{p}]({p}) for how to work with it (describe / check / invariants)."
+    )
+
+
+def _apply_arch_dir(content: str, arch_dir: str) -> str:
+    """Retarget archagent-owned content (skills, AGENTS.md) at the configured artifact location. Owned
+    content refers to the artifact by its path (`architecture/…`); user files use relative links and move
+    unchanged. Only the `architecture/` *path* prefix is rewritten, never the bare word."""
+    if arch_dir == "architecture":
+        return content
+    return content.replace("architecture/", arch_dir.rstrip("/") + "/")
 
 
 @dataclass
@@ -92,42 +104,47 @@ def detect_languages(root: Path) -> list[str]:
 
 # --- init / upgrade ------------------------------------------------------
 
-def init_project(project_root: Path, agents: list[str], force: bool = False, wire: bool = False) -> InitResult:
+def init_project(project_root: Path, agents: list[str], force: bool = False, wire: bool = False,
+                 arch_dir: str = "architecture") -> InitResult:
+    arch_dir = arch_dir.strip("/") or "architecture"
     result = InitResult(languages=detect_languages(project_root), agents=agents)
 
     # user-owned: config + architecture templates (create once)
-    _write_user(project_root / "archagent.toml", _render_toml(result.languages, project_root), force, result)
+    _write_user(project_root / "archagent.toml", _render_toml(result.languages, project_root, arch_dir), force, result)
     for src_file in sorted(ARCH_TEMPLATES.rglob("*")):
         if src_file.is_file():
-            dest = project_root / "architecture" / src_file.relative_to(ARCH_TEMPLATES)
+            dest = project_root / arch_dir / src_file.relative_to(ARCH_TEMPLATES)
             _write_user(dest, src_file.read_text(), force, result)
 
     # archagent-owned: always refreshed to latest
-    _write_owned_agent_files(project_root, agents, result)
+    _write_owned_agent_files(project_root, agents, result, arch_dir)
 
     if wire:
-        _wire_top_level(project_root, agents, result)
+        _wire_top_level(project_root, agents, result, arch_dir)
     return result
 
 
-def upgrade_project(project_root: Path, agents: list[str] | None = None) -> InitResult:
+def upgrade_project(project_root: Path, agents: list[str] | None = None,
+                    arch_dir: str = "architecture") -> InitResult:
     """Refresh only the archagent-owned files (prompts) to the latest; never touch user content."""
+    arch_dir = arch_dir.strip("/") or "architecture"
     agents = agents if agents is not None else detect_installed_agents(project_root)
     result = InitResult(agents=agents)
-    _write_owned_agent_files(project_root, agents, result)
+    _write_owned_agent_files(project_root, agents, result, arch_dir)
     return result
 
 
-def _write_owned_agent_files(root: Path, agents: list[str], result: InitResult) -> None:
+def _write_owned_agent_files(root: Path, agents: list[str], result: InitResult, arch_dir: str = "architecture") -> None:
     # The full instructions live here (archagent-owned), not at the repo top level.
-    _write_owned(root / "architecture" / "AGENTS.md", (AGENT_TEMPLATES / "AGENTS.md").read_text(), result)
+    agents_md = _apply_arch_dir((AGENT_TEMPLATES / "AGENTS.md").read_text(), arch_dir)
+    _write_owned(root / arch_dir / "AGENTS.md", agents_md, result)
     for agent in agents:
         for phase in PHASES:
             dest, frontmatter = _agent_target(root, agent, phase)
             if dest is None:
                 continue
             body = (AGENT_TEMPLATES / "phases" / f"{phase.name}.md").read_text()
-            _write_owned(dest, frontmatter + body, result)
+            _write_owned(dest, _apply_arch_dir(frontmatter + body, arch_dir), result)
 
 
 def _agent_target(root: Path, agent: str, phase: Phase) -> tuple[Path | None, str]:
@@ -146,17 +163,17 @@ def _agent_target(root: Path, agent: str, phase: Phase) -> tuple[Path | None, st
 
 # --- top-level pointer (opt-in, additive, idempotent) --------------------
 
-def _wire_top_level(root: Path, agents: list[str], result: InitResult) -> None:
+def _wire_top_level(root: Path, agents: list[str], result: InitResult, arch_dir: str = "architecture") -> None:
     targets: set[str] = set()
     if "claude" in agents:
         targets.add("CLAUDE.md")
     if "cursor" in agents or "openhands" in agents:
         targets.add("AGENTS.md")
-    block = f"\n{_POINTER_START}\n{_POINTER_BODY}\n{_POINTER_END}\n"
+    block = f"\n{_POINTER_START}\n{_pointer_body(arch_dir)}\n{_POINTER_END}\n"
     for name in sorted(targets):
         path = root / name
         existing = path.read_text() if path.exists() else ""
-        if _POINTER_START in existing or "architecture/AGENTS.md" in existing:
+        if _POINTER_START in existing or f"{arch_dir}/AGENTS.md" in existing:
             continue  # already wired
         path.write_text((existing.rstrip() + "\n" if existing else "") + block)
         result.wired.append(path)
@@ -192,9 +209,9 @@ def _guess_python_root(root: Path) -> str | None:
     return None
 
 
-def _render_toml(languages: list[str], root: Path) -> str:
+def _render_toml(languages: list[str], root: Path, arch_dir: str = "architecture") -> str:
     lang_list = ", ".join(f'"{lang}"' for lang in languages)
-    lines = ["[project]", f"languages = [{lang_list}]", ""]
+    lines = ["[project]", f"languages = [{lang_list}]", f'architecture_dir = "{arch_dir}"', ""]
     if "python" in languages:
         pkg = _guess_python_root(root)
         pkg_line = f'root_package = "{pkg}"' if pkg else '# root_package = "your_package"  # REQUIRED for BOUNDARY/python'

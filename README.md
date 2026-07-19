@@ -179,9 +179,11 @@ Adding a language is adding a column, not rewriting anything. Generated configs 
 1. **`archagent init .`** — scaffold `archagent.toml`, the `architecture/` templates, and the phase
    skills. It **auto-detects which agents you use** (`.claude/`, `.cursor/`, `.openhands/`) and installs
    skills for those; override with `--agents claude,cursor` / `all` / `none`. It also detects languages
-   and guesses `root_package` / `source_paths` — check those in `archagent.toml`. It **never creates or
-   overwrites your top-level `CLAUDE.md` / `AGENTS.md`**; the full instructions go in
-   `architecture/AGENTS.md`. Add `--wire` to append a small additive pointer to your top-level file(s).
+   and guesses `root_package` / `source_paths` — check those in `archagent.toml`. It asks **where the
+   architecture docs should live** (default `architecture/`, or a combo it finds like `docs/architecture` —
+   set it directly with `--arch-dir`, or `--yes` to take the default), and records it as `architecture_dir`.
+   It **never creates or overwrites your top-level `CLAUDE.md` / `AGENTS.md`**; the full instructions go in
+   `<arch-dir>/AGENTS.md`. Add `--wire` to append a small additive pointer to your top-level file(s).
 2. **`/archagent-describe`** (in your coding agent) — document the *current* architecture: it locates your
    docs (via README/`AGENTS.md`/`CLAUDE.md` and any `designs/`/`spec/` dirs), **verifies them against the
    code**, and writes the constitution, the per-subsystem docs (the six dimensions), and an initial set of
@@ -291,6 +293,7 @@ A small `archagent.toml` at the repo root tells archagent where the code is:
 ```toml
 [project]
 languages = ["python", "ts"]
+architecture_dir = "architecture"   # where the architecture docs live (default; e.g. "docs/architecture")
 
 [python]
 root_package = "app"
@@ -299,6 +302,11 @@ source_paths = ["src"]
 [ts]
 source_paths = ["src"]
 ```
+
+`architecture_dir` is set at `init` time and used everywhere the artifact is read or referenced (drift,
+check, evaluate, and the top-level wiring). Choose it non-interactively with `archagent init --arch-dir
+docs/architecture`; otherwise `init` finds your `docs/`/`design/`/`spec/` dirs and offers them (pass
+`--yes` to skip the prompt and take the default).
 
 ## Try it
 

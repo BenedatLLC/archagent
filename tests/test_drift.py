@@ -40,6 +40,18 @@ def _doc(cfg, name, text):
     (cfg.project_root / "architecture" / "subsystems" / name).write_text(text)
 
 
+def test_drift_honors_custom_arch_dir(tmp_path):
+    (tmp_path / "src" / "pkg").mkdir(parents=True)
+    (tmp_path / "src" / "pkg" / "a.py").write_text("x = 1\n")
+    (tmp_path / "docs" / "architecture" / "subsystems").mkdir(parents=True)
+    cfg = Config(
+        project_root=tmp_path, languages=["python"], arch_dir="docs/architecture",
+        python=PythonConfig(root_package="pkg", source_paths=["src"]), ts=TSConfig(source_paths=["src"]),
+    )
+    (cfg.architecture_dir / "subsystems" / "sa.md").write_text("# SA\n\nUses `src/pkg/gone.py`.\n")
+    assert "src/pkg/gone.py" in [ref for _, ref in find_drift(cfg).dangling]  # found the doc in docs/architecture
+
+
 def test_dangling_reference_flags_missing_only(tmp_path):
     cfg = _repo(tmp_path)
     _doc(cfg, "pkg.md", "# Pkg\n\nUses `src/pkg/a.py` and `src/pkg/gone.py`.\n")
