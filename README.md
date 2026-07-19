@@ -247,6 +247,10 @@ CLI:
   **cross-boundary observability** (no request tracing across services); plus **git co-change** signals
   (**shotgun surgery** / implicit coupling, **unstable interface**). `--json`, `--group A|B|C|D`,
   `--min-severity`, `--no-history`, `--since`, `--exit-code`.
+- `archagent scan-invariants` — scan docs + code for **stated invariants** (explicit `INVARIANT`/
+  `@invariant`/assert/contract markers, plus modal language like MUST/NEVER/"only X may") and emit them as
+  candidates for `/archagent-describe` to classify, verify, and lift into `invariants.md`. `--json`,
+  `--markers-only`.
 - `archagent gen` — regenerate only the checker configs from `architecture/invariants.md` (`check` does
   this for you).
 - `archagent upgrade` — refresh the archagent-owned prompts (skills + `architecture/AGENTS.md`) to the

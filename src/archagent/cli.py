@@ -19,6 +19,7 @@ from .config import load_config
 from .drift import find_drift
 from .evaluate import evaluate as run_evaluate
 from .generate import generate
+from .invscan import scan_invariants
 from .init import KNOWN_AGENTS, detect_agents, init_project, upgrade_project
 from .invariants import parse_invariants
 
@@ -396,6 +397,47 @@ def evaluate(
     console.print("[dim]These are candidates — run /archagent-evaluate to judge, cluster, and prioritize.[/]")
     if exit_code:
         raise typer.Exit(code=1)
+
+
+@app.command(name="scan-invariants")
+def scan_invariants_cmd(
+    project: Path = typer.Option(Path("."), help="Target repo root"),
+    markers_only: bool = typer.Option(False, "--markers-only", help="Only high-confidence markers (skip noisy modal language)"),
+    as_json: bool = typer.Option(False, "--json", help="Emit candidates as JSON (for the describe skill / tooling)"),
+) -> None:
+    """Scan docs + code for stated invariants — candidates for /archagent-describe to lift into invariants.md."""
+    config = load_config(project.resolve())
+    candidates = scan_invariants(config)
+    if markers_only:
+        candidates = [c for c in candidates if c.kind == "marker"]
+
+    if as_json:
+        print(json.dumps({
+            "candidates": [
+                {"source": c.source, "text": c.text, "kind": c.kind, "confidence": c.confidence, "guess": c.guess}
+                for c in candidates
+            ],
+        }, indent=2))
+        return
+
+    console.print("[bold]Stated-invariant candidates[/] — for /archagent-describe to classify, verify, and curate\n")
+    if not candidates:
+        console.print("[green]No invariant statements found in docs or code.[/]")
+        return
+    markers = [c for c in candidates if c.kind == "marker"]
+    modal = [c for c in candidates if c.kind == "modal"]
+    if markers:
+        console.print(f"[bold]Explicit markers ({len(markers)})[/] — high confidence:")
+        for c in markers:
+            console.print(f"  [cyan]{c.guess:10}[/] {c.source}\n       {c.text}")
+        console.print("")
+    if modal:
+        console.print(f"[bold]Modal language ({len(modal)})[/] — candidates, judge each:")
+        for c in modal:
+            console.print(f"  [dim]{c.guess:10}[/] {c.source}\n       {c.text}")
+        console.print("")
+    console.print("[dim]Each is a candidate: classify into the DSL, verify with `check` (+ non-vacuous), and\n"
+                  "capture as a prose row (source cited) — promote to an active rule only on a passing check.[/]")
 
 
 def main() -> None:

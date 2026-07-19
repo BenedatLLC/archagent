@@ -59,10 +59,11 @@ passing, non-vacuous `check` + confirmation; a stated-but-violated invariant is 
   (`INVARIANT`/`@invariant`/asserts/contracts) + modal language (MUST/NEVER/ALWAYS/"only X may"); classify →
   DSL tier; verify (`check` + vacuity guard); risk-tiered curation; provenance; flag design-vs-code
   divergence. *(shipped 2026-07-18)*
-- [ ] **Stage 2 — deterministic candidate scanner.** `archagent scan-invariants --json` greps docs + source
-  for markers + modal language and emits a candidate list (source:line, text, guessed tier) — turns
-  enumeration from *luck into process* (analogous to `evaluate`'s candidates). Agent does classification /
-  verification / curation.
+- [x] **Stage 2 — deterministic candidate scanner.** `archagent scan-invariants` (`invscan.py`) scans docs +
+  source for markers (`INVARIANT`/`@invariant`/asserts/contracts, high confidence) + modal language in docs
+  (MUST/NEVER/"only X may", low confidence) and emits candidates with a coarse tier guess (`--json`,
+  `--markers-only`) — enumeration is now *process, not luck*. Agent classifies / verifies / curates.
+  Validated on mra2 (found all 6 `INVARIANT:` markers the issue flagged as missed). *(shipped 2026-07-18)*
 
 ## Enforcement & CI hardening (Phase 3)
 

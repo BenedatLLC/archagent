@@ -66,13 +66,12 @@ the user first, and never overwrite their existing content.
    the table.** Note: **any row with a real rule and Tier `structural`/`pbt` is enforced** regardless of
    `Status` (except `deprecated`) — `Status: proposed` does *not* stop enforcement; only Tier `prose` does.
 5b. **Mine invariants already stated in the docs and code.** A big part of the value here is enforcing the
-   rules the team *already wrote down* but never checked. Don't rely on noticing them by luck — actively
-   enumerate:
-   - **In code** — grep for explicit markers: `rg -n 'INVARIANT|@invariant|Invariant:' src/`, plus
-     assertion messages (`assert …, "…"`) and contract decorators (`@require`/`@ensure`, icontract/deal).
-   - **In docs** — grep the design/spec docs for **normative/modal language**:
-     `rg -niE 'must not|must |shall|always|never|only .* (may|can)|is guaranteed to|must be sorted'`.
-     (Modal language is noisy — treat these as *candidates*, not facts.)
+   rules the team *already wrote down* but never checked. Don't rely on noticing them by luck — run the
+   deterministic scanner: **`archagent scan-invariants --json`** enumerates the candidates for you across
+   docs + code (explicit markers `INVARIANT`/`@invariant`/`Invariant:`, assertion messages, and contract
+   decorators — high confidence; plus normative/modal language MUST/NEVER/ALWAYS/"only X may" in docs — low
+   confidence, judge each). `--markers-only` drops the noisy modal candidates. (You can also grep directly,
+   e.g. `rg -n 'INVARIANT|@invariant' src/`, but the scanner won't skip a design doc.)
    For each candidate, **classify** it into the DSL: a layering/dependency rule → BOUNDARY `forbid`; a code
    shape → STRUCTURAL `forbid-pattern`; a behavioral/data rule ("the query set is always sorted", "state
    resets each session") → a PBT `property`; otherwise a prose row. Then **curate by risk**:
