@@ -324,7 +324,8 @@ archagent/
 ├── pyproject.toml            package metadata + dependencies (uv)
 ├── docs/
 │   ├── ROADMAP.md            planned future work, grouped by theme (checkable)
-│   └── ADL-SPEC.md           the architecture-artifact format, as a standards-style spec
+│   ├── ADL-SPEC.md           the architecture-artifact format, as a standards-style spec
+│   └── RELEASING.md          how to cut a new release to PyPI
 ├── src/archagent/
 │   ├── cli.py                the `archagent` CLI (init · gen · check · drift · evaluate · upgrade)
 │   ├── config.py             archagent.toml loading (languages, source paths, test commands)
