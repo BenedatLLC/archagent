@@ -23,13 +23,21 @@ enforceable table. Intent that was buried in prose becomes a checked rule — an
 ## Install
 
 archagent installs once (from outside your repos) and scaffolds into each project (like Spec-Kit).
-It isn't on PyPI yet, so install from the repo:
+Install it from PyPI:
 
 ```bash
-uv tool install git+https://github.com/BenedatLLC/archagent   # gives you an `archagent` command
+uv tool install archagent          # gives you an `archagent` command
+# or run without installing:
+uvx archagent init .
 ```
 
-Then run it inside a project (see **Workflow** below). Once published, `uvx archagent init .` will work too.
+Prefer the latest unreleased code? Install from the repo instead:
+
+```bash
+uv tool install git+https://github.com/BenedatLLC/archagent
+```
+
+Then run it inside a project (see **Workflow** below).
 
 ## Upgrading
 
@@ -38,7 +46,7 @@ The prompts (agent skills + `architecture/AGENTS.md`) ship inside the archagent 
 
 1. **Update the archagent tool:**
    ```bash
-   uv tool upgrade archagent                                   # installed from GitHub
+   uv tool upgrade archagent                                   # installed from PyPI or GitHub
    # or, from a local checkout:
    git -C /path/to/archagent pull && uv tool install --force /path/to/archagent
    ```
