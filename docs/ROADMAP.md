@@ -47,6 +47,23 @@ Rationale and design detail for most items live in `~/research/architecture-agen
 - [ ] **Richer connector attributes.** Optional free-form properties on an edge (`{protocol=grpc}`,
   multiplicity, direction) in the ACME open-property style, for finer analysis later.
 
+## Mine stated invariants (issue #3)
+
+Enforce the invariants a team has already written down but never checked — from design/spec docs and
+in-code markers. Design in `~/research/architecture-agent/invariant-extraction-design.md`. Risk-tiered
+curation: auto-capture every stated invariant as a cited prose row; promote to an *active* rule only on a
+passing, non-vacuous `check` + confirmation; a stated-but-violated invariant is drift.
+
+- [x] **Stage 1 — `describe` prompt guidance.** Locate docs via index files (README/AGENTS/CLAUDE) + spec
+  dirs; capture the repo's documentation conventions into the constitution; mine markers
+  (`INVARIANT`/`@invariant`/asserts/contracts) + modal language (MUST/NEVER/ALWAYS/"only X may"); classify →
+  DSL tier; verify (`check` + vacuity guard); risk-tiered curation; provenance; flag design-vs-code
+  divergence. *(shipped 2026-07-18)*
+- [ ] **Stage 2 — deterministic candidate scanner.** `archagent scan-invariants --json` greps docs + source
+  for markers + modal language and emits a candidate list (source:line, text, guessed tier) — turns
+  enumeration from *luck into process* (analogous to `evaluate`'s candidates). Agent does classification /
+  verification / curation.
+
 ## Enforcement & CI hardening (Phase 3)
 
 - [ ] **`check` as a pre-commit hook + GitHub Action.** The per-commit gate (DD-4). Ship a ready-made

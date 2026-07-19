@@ -21,10 +21,13 @@ Add (or modify) a row in `architecture/invariants.md` and confirm it works.
      random sequences, and assert what must always hold after each. The right tool for state/data-layer
      invariants a single property can't catch (e.g. "state resets on error", "writes reflected in reads").
 3. Add the row: ID, Type, Tier, Applies-to (language), Rule, Severity, Why (link an ADR), Status.
-   **Note on enforcement:** a row with a real `forbid` / `forbid-pattern` Rule is generated and checked
-   regardless of Status (except `deprecated`); the only Tier that suppresses generation is `prose`. To park
-   a rule you can't enforce yet, set Tier `prose` (documented, never run) — not Status `proposed`, which is
-   still enforced.
+   **Every invariant is a table row** — including purely descriptive ones and ones the code would fail
+   today. Give those **Tier `prose`**: the row is documented and greppable but never generated or run
+   (put the eventual `forbid`/`forbid-pattern` in the Rule column, or a short description). Don't record an
+   invariant as a loose prose bullet outside the table.
+   **Note on enforcement:** a row with a real Rule and Tier `structural`/`pbt` is generated and checked
+   regardless of `Status` (except `deprecated`) — `Status: proposed` does *not* suppress enforcement; only
+   Tier `prose` does.
 4. Write or extend the ADR in `decisions/` explaining what the invariant prevents and why it matters.
 5. Run `archagent check`. Confirm it PASSES on current clean code, and (sanity-check) that it would FAIL
    on a deliberate violation. Refine the rule until it catches the right thing.

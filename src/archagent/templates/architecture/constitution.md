@@ -12,5 +12,10 @@ in `subsystems/` and `decisions/`, which are read on demand.
 ## Conventions
 - _TODO: build/test commands, naming conventions, directory layout._
 
+## Documentation conventions
+- _TODO: where design/spec docs live (e.g. `designs/`, `rfcs/`), how they're named and organized, and
+  where intended-behavior invariants are stated — so `describe`/`drift` and other agents know where to
+  look for intent, and where new decisions get written down._
+
 ## Architectural patterns
 - _TODO: the handful of patterns this system relies on (and the invariants that protect them)._

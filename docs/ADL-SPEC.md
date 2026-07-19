@@ -255,7 +255,9 @@ Not every `(Type, Tier)` combination is mechanically enforced; a rule a consumer
 reported as unsupported rather than silently ignored. A row with tier **`prose`** is recorded as
 documentation and MUST NOT be generated or enforced; any other tier with a valid Rule is enforced
 regardless of `Status` (except `deprecated`). An invariant that cannot yet be enforced SHOULD therefore be
-recorded with tier `prose` (not status `proposed`, which is still enforced).
+recorded with tier `prose` (not status `proposed`, which is still enforced). **All** invariants — including
+descriptive-only ones — SHOULD be recorded as rows in this table (with tier `prose` where not enforceable)
+rather than as free prose elsewhere, so the table stays the single inventory of the system's rules.
 
 ### 6.3 Rule DSL
 
