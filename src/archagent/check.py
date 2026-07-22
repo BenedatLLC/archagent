@@ -45,6 +45,7 @@ def run_checks(
     dc_ids: list[str],
     sg_ids: list[str],
     pbt_ids: list[str],
+    skip_pbt: bool = False,
 ) -> list[CheckResult]:
     by_id = {inv.id: inv for inv in invariants}
     results: list[CheckResult] = []
@@ -55,7 +56,10 @@ def run_checks(
     if sg_ids:
         results.extend(_run_ast_grep(sg_ids, config, by_id))
     if pbt_ids:
-        results.extend(_run_pbt(pbt_ids, config, by_id))
+        if skip_pbt:  # report the property tests as intentionally skipped, not silently dropped
+            results.extend(CheckResult(i, "pbt", True, by_id[i].severity, skipped_reason="skipped (--skip-pbt)") for i in pbt_ids)
+        else:
+            results.extend(_run_pbt(pbt_ids, config, by_id))
     return results
 
 

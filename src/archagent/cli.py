@@ -20,6 +20,7 @@ from .config import load_config
 from .drift import find_drift
 from .evaluate import evaluate as run_evaluate
 from .generate import generate
+from .hooks import install_hook
 from .invscan import scan_invariants
 from .init import KNOWN_AGENTS, detect_agents, init_project, upgrade_project
 from .invariants import parse_invariants
@@ -185,7 +186,10 @@ def gen(project: Path = typer.Option(Path("."), help="Target repo root")) -> Non
 
 
 @app.command()
-def check(project: Path = typer.Option(Path("."), help="Target repo root")) -> None:
+def check(
+    project: Path = typer.Option(Path("."), help="Target repo root"),
+    skip_pbt: bool = typer.Option(False, "--skip-pbt", help="Skip the property-based-test tier (run the fast static tiers only)"),
+) -> None:
     """Run the checkers and report adherence per invariant (exit 1 on error-severity failure)."""
     config = load_config(project.resolve())
     invariants = parse_invariants(config.invariants_path)
@@ -193,7 +197,7 @@ def check(project: Path = typer.Option(Path("."), help="Target repo root")) -> N
     results = run_checks(
         invariants, config,
         gen_result.importlinter_ids, gen_result.depcruiser_ids, gen_result.astgrep_ids,
-        gen_result.pbt_ids,
+        gen_result.pbt_ids, skip_pbt=skip_pbt,
     )
 
     table = Table(title="archagent check")
@@ -429,6 +433,24 @@ def evaluate(
     console.print("[dim]These are candidates — run /archagent-evaluate to judge, cluster, and prioritize.[/]")
     if exit_code:
         raise typer.Exit(code=1)
+
+
+@app.command(name="install-hook")
+def install_hook_cmd(
+    project: Path = typer.Option(Path("."), help="Target repo root"),
+    skip_pbt: bool = typer.Option(False, "--skip-pbt", help="Hook runs the static tiers only (skip property-based tests, which your test suite already covers)"),
+) -> None:
+    """Install a git pre-commit hook that runs `archagent check` on every commit."""
+    root = project.resolve()
+    try:
+        result = install_hook(root, skip_pbt=skip_pbt)
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/]")
+        raise typer.Exit(code=1)
+    runs = "archagent check --skip-pbt" if result.skip_pbt else "archagent check"
+    console.print(f"[green]{result.action}[/] {result.path.relative_to(root)} — runs [bold]{runs}[/] on commit.")
+    console.print("[dim]Requires `archagent` on PATH (uv tool install archagent). "
+                  "Delete the archagent block in that file to disable.[/]")
 
 
 @app.command(name="scan-invariants")

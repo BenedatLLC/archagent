@@ -67,8 +67,16 @@ passing, non-vacuous `check` + confirmation; a stated-but-violated invariant is 
 
 ## Enforcement & CI hardening (Phase 3)
 
-- [ ] **`check` as a pre-commit hook + GitHub Action.** The per-commit gate (DD-4). Ship a ready-made
-  hook and a workflow template so violations block a PR.
+- [x] **`check` as a native pre-commit hook.** `archagent install-hook` writes a `.git/hooks/pre-commit`
+  block that runs `archagent check` (idempotent; composes with an existing hook). `check --skip-pbt` runs
+  the fast static tiers only (BOUNDARY + STRUCTURAL), so the hook can leave property tests to the test
+  suite. *(shipped 2026-07-21)*
+- [ ] **Team-shared pre-commit (framework) + GitHub Action.** Ship a `.pre-commit-hooks.yaml` in this repo
+  so users reference `archagent-check` from their `.pre-commit-config.yaml` (committed → gates the whole
+  team), and a workflow template `init` can scaffold. The native hook above is local-only.
+- [ ] **`test_architecture.py` generator.** A subcommand that emits a test (pytest / vitest) which runs the
+  static tiers via archagent's API and asserts no violations — so the whole gate runs inside an existing
+  test suite (option 3). Behavioral tiers (PBT, future contract) already run there natively.
 - [ ] **Robustness.** One malformed rule shouldn't blank a whole run — isolate parse/exec failures per
   invariant and surface them as SKIP with a reason.
 - [ ] **More BOUNDARY forms.** `layers` (an ordered stack, each may depend only downward) and interface

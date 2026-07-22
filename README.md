@@ -193,7 +193,9 @@ Adding a language is adding a column, not rewriting anything. Generated configs 
 
 **Keep it honest as you work:**
 
-- **Every commit / PR** — `archagent check` (wire into pre-commit + CI) gates changes against the invariants.
+- **Every commit** — `archagent install-hook` drops a git pre-commit hook that runs `archagent check` on
+  each commit (add `--skip-pbt` to run only the fast static tiers and leave the property tests to your test
+  suite). `check` exits nonzero on an error-severity violation, so it also drops straight into CI.
 - **Add an invariant** — **`/archagent-invariant`**, or edit `architecture/invariants.md` by hand, to
   encode a new rule (from a design decision, or lifted from a subsystem doc); `check` confirms it catches
   the right thing.
@@ -250,7 +252,10 @@ CLI:
   Auto-detects agents (`--agents auto`); override with `--agents claude,cursor` / `all` / `none`.
   `--wire` adds an additive pointer to top-level `CLAUDE.md`/`AGENTS.md`; `--force` re-scaffolds everything.
 - `archagent check` — regenerate configs, run the checkers, report per invariant (exit 1 on an
-  error-severity failure).
+  error-severity failure). `--skip-pbt` runs only the fast static tiers (BOUNDARY + STRUCTURAL).
+- `archagent install-hook` — install a git pre-commit hook that runs `archagent check` on every commit
+  (`--skip-pbt` for the static-only variant). Native `.git/hooks/pre-commit`, idempotent, composes with an
+  existing hook.
 - `archagent drift` — reflexion-diff the `architecture/` docs against the code: dangling references,
   stale docs (git), undocumented modules (via `**Covers:**`), undeclared/stale subsystem dependencies
   (declared `**Connects:**` `import`-kind edges vs the actual import graph — Python `ast` + JS/TS regex), undocumented entry
