@@ -31,6 +31,20 @@ Rationale and design detail for most items live in `~/research/architecture-agen
   observability).
 - **Connector-typed edges** (`**Connects:** … via <kind>`) + inference from code. Python + JS/TS.
 
+## Releases
+
+- **0.2.0** (2026-07-21) — **Configurable architecture-docs location:** `init --arch-dir docs/architecture`
+  (+ interactive discovery of `docs/`/`design/`/`spec/` dirs, `--yes` to skip prompts); recorded as
+  `[project] architecture_dir` and honored by drift/evaluate/check/gen, wiring, and `upgrade`. **Phase 3
+  (initial):** `archagent install-hook` — a native `.git/hooks/pre-commit` gate (idempotent, composes with an
+  existing hook), and `check --skip-pbt` to run the fast static tiers only. Plus `docs/RELEASING.md` and
+  README cleanup.
+- **0.1.0** (2026-07-19) — First PyPI release. The full loop: `init`/`gen`/`check` with the four invariant
+  tiers (BOUNDARY · STRUCTURAL · PBT); the `describe`/`check`/`invariant`/`evaluate` skills; `drift`
+  (reflexion-diff) and `evaluate` (system-level smells) with their complete signal sets; connector-typed
+  edges + inference; stated-invariant mining (`scan-invariants` + describe); per-agent delivery (Claude
+  Code / Cursor / OpenHands); the ADL-SPEC. Python + JS/TS.
+
 ---
 
 ## Connectors & topology (Tier B and beyond)
