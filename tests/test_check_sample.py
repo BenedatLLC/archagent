@@ -7,11 +7,24 @@ without any extra tools). The TS example needs Node, so it isn't covered here.
 from pathlib import Path
 
 from archagent.check import run_checks
-from archagent.config import load_config
+from archagent.config import Config, PythonConfig, TSConfig, load_config
 from archagent.generate import generate
-from archagent.invariants import parse_invariants
+from archagent.invariants import Invariant, parse_invariants
 
 SAMPLE = Path(__file__).resolve().parents[1] / "examples" / "sample_py"
+
+
+def test_run_checks_skip_pbt_reports_skip(tmp_path):
+    # --skip-pbt must report property tests as SKIP (not run, not silently dropped)
+    cfg = Config(project_root=tmp_path, languages=["python"],
+                 python=PythonConfig(root_package="pkg", source_paths=["src"]), ts=TSConfig())
+    inv = Invariant(id="QSET-1", type="DATAFLOW", tier="pbt", applies_to="python",
+                    rule="property tests/test_props.py::test_sorted", severity="error", why="", status="active")
+    results = run_checks([inv], cfg, [], [], [], ["QSET-1"], skip_pbt=True)
+    assert len(results) == 1
+    r = results[0]
+    assert r.invariant_id == "QSET-1" and r.checker == "pbt"
+    assert r.passed is True and r.skipped_reason and "skip-pbt" in r.skipped_reason
 
 
 def test_sample_py_boundary_and_structural_violations():
