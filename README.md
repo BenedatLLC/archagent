@@ -15,11 +15,6 @@ code, and the `describe` skill classifies each, verifies it against the code, an
 enforceable table. Intent that was buried in prose becomes a checked rule — and a stated rule the code
 *violates* is surfaced as drift (a real bug, or a stale design).
 
-> Status: early. v1 covers BOUNDARY invariants (Python via import-linter, JS/TS via dependency-cruiser),
-> STRUCTURAL invariants (any language via ast-grep, path-scopable), and a PBT tier for behavioral/data
-> invariants (Python via Hypothesis) — all driven by `architecture/invariants.md`, plus per-agent
-> delivery for Claude Code, Cursor, and OpenHands.
-
 ## Install
 
 archagent installs once (from outside your repos) and scaffolds into each project (like Spec-Kit).
