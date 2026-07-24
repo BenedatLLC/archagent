@@ -20,8 +20,12 @@ once, then cycle at design-review time and per-commit.
 
 ## Notes
 - **Cadence:** run `check` on every commit; run `describe` + `evaluate` at design-review time and periodically.
+- **Describe helpers:** `archagent status` (per-package coverage — size the work), `archagent graph --write`
+  (regenerate the system map in `index.md`), `archagent lint-docs` (catch Mermaid syntax errors),
+  `archagent modules` (how files resolve to import modules; flags name collisions).
 - `archagent gen` regenerates the checker configs (`check` does this for you). Any command takes `--help`.
-- The artifact format is specified in `docs/ADL-SPEC.md`; planned work is in `docs/ROADMAP.md`.
+- The artifact format (ADL-SPEC) and the roadmap live with the tool itself — see
+  <https://github.com/BenedatLLC/archagent> (or the installed package's `docs/`), not this repo.
 - The same overview is available from the CLI as `archagent help`.
 
 Don't run anything as part of answering — just orient the user and point to the right next step.

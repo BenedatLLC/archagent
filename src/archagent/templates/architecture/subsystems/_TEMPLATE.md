@@ -16,6 +16,9 @@
      cycle = distributed monolith) from loose (an event-coupled cycle is usually fine). Optional —
      OMIT this whole line if the subsystem has no outgoing edges (a leaf/base). Never write a value like
      "none" or a sentence; it gets tokenised into fake edges.
+     DIRECTION self-check: `Connects` is OUTGOING. It must read as an active sentence — "THIS subsystem
+     imports/calls X" — never "X imports this". If you'd say "X depends on me", that edge belongs on X's doc,
+     not here.
      Legacy alias: `**Depends-on:** a, b` == `**Connects:** a via import, b via import`. -->
 
 **Service:** <deployment-service-name>
@@ -49,6 +52,9 @@ stateDiagram-v2
     Active --> [*]
 ```
 _Caption: one plain-language sentence on what this lifecycle shows and the key takeaway._
+<!-- Mermaid gotcha: in a `stateDiagram-v2` transition label (`A --> B : text`), everything after the FIRST
+     colon is the label, and a SECOND colon breaks the parser — write "port 5300", not "on :5300". Run
+     `archagent lint-docs` to catch this and other Mermaid syntax errors before committing. -->
 
 ## Key flows
 ```mermaid

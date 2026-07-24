@@ -1,8 +1,9 @@
 # archagent: describe — build or update the architecture artifact
 
 Produce or update the `architecture/` artifact for THIS repo so it accurately describes the
-system and protects it with checkable invariants. Work incrementally — do not document
-everything at once.
+system and protects it with checkable invariants. Aim to cover the whole system; when a repo is
+too large to finish in one turn, cover as many subsystems as you reasonably can, then **stop and
+ask the user** whether to continue now — don't silently stop and record the rest as "out of scope".
 
 **One-time setup.** If the repo's top-level agent instructions (`CLAUDE.md`, or a root `AGENTS.md`)
 don't yet reference `architecture/AGENTS.md`, offer to add a short **additive** pointer to it — ask
@@ -21,6 +22,12 @@ the user first, and never overwrite their existing content.
   surface.
 - **The deterministic tools are your eyes, not your guess.** Use `ast-grep` and `rg` (ripgrep) to
   find real structure (imports, components, call sites, patterns). Do not infer topology from memory.
+- **Verify claims about archagent's own mechanics before writing them down.** Before asserting in an ADR or
+  doc *why* archagent can't yet enforce something ("import-linter can't scope this because…"), confirm it
+  against the tool — e.g. `archagent modules` shows exactly how each source path resolves to a module and
+  flags name collisions, and `archagent gen` / `check` show what actually parses and runs. A prose guess
+  about the tool's behavior is the same kind of unverified claim as a guess about the code; check it the
+  same way.
 - **Go top-down at scale.** First map packages/modules and their dependencies, carve the system into
   subsystems, *then* write one doc per subsystem. Never write a single flat document.
 - **Write for a junior engineer and an agent.** Purpose before mechanism; define jargon; self-contained
@@ -67,11 +74,13 @@ the user first, and never overwrite their existing content.
    `Status` (except `deprecated`) — `Status: proposed` does *not* stop enforcement; only Tier `prose` does.
 5b. **Mine invariants already stated in the docs and code.** A big part of the value here is enforcing the
    rules the team *already wrote down* but never checked. Don't rely on noticing them by luck — run the
-   deterministic scanner: **`archagent scan-invariants --json`** enumerates the candidates for you across
-   docs + code (explicit markers `INVARIANT`/`@invariant`/`Invariant:`, assertion messages, and contract
-   decorators — high confidence; plus normative/modal language MUST/NEVER/ALWAYS/"only X may" in docs — low
-   confidence, judge each). `--markers-only` drops the noisy modal candidates. (You can also grep directly,
-   e.g. `rg -n 'INVARIANT|@invariant' src/`, but the scanner won't skip a design doc.)
+   deterministic scanner. **Start with `archagent scan-invariants --markers-only --json`** — it returns just
+   the high-confidence markers (`INVARIANT`/`@invariant`/`Invariant:`, assertion messages, contract
+   decorators), a short list you can act on. The full `archagent scan-invariants --json` *also* enumerates
+   normative/modal language (MUST/NEVER/ALWAYS/"only X may" in docs), which is high-recall but noisy — on a
+   large repo it can be hundreds of candidates, so run it **scoped to one subsystem/directory**, not the
+   whole repo cold, and judge each. (You can also grep directly, e.g. `rg -n 'INVARIANT|@invariant' src/`,
+   but the scanner won't skip a design doc.)
    For each candidate, **classify** it into the DSL: a layering/dependency rule → BOUNDARY `forbid`; a code
    shape → STRUCTURAL `forbid-pattern`; a behavioral/data rule ("the query set is always sorted", "state
    resets each session") → a PBT `property`; otherwise a prose row. Then **curate by risk**:
@@ -87,7 +96,9 @@ the user first, and never overwrite their existing content.
    Record provenance: mark each invariant design-sourced vs code-inferred so later runs can re-verify it
    against the original intent.
 6. **Validate.** Run `archagent gen`, then `archagent check`. Confirm each new invariant parses and flags
-   what it should (try a quick local violation if unsure). Fix or refine.
+   what it should (try a quick local violation if unsure). Fix or refine. Also run **`archagent lint-docs`**
+   to catch Mermaid syntax errors in the diagrams you just wrote (e.g. a stray second `:` in a
+   `stateDiagram-v2` label) before they land — a malformed diagram only breaks when a human renders it.
 7. **Evaluate health.** Run `archagent evaluate` (the `evaluate` skill judges the candidates). For each
    confirmed *system-level* smell, decide with the team: change the design, or accept it and record why.
    Turn accepted fixes into an ADR under `decisions/` and — where enforceable — a `check` invariant so it
@@ -96,9 +107,24 @@ the user first, and never overwrite their existing content.
    always show `layer-skip`, and flat peer capabilities under one orchestrator show skips whenever the
    orchestrator calls a capability directly — both are correct. Consider modelling flat peer subsystems as a
    single `domain` tier rather than forcing a strict `ui → app → domain → infra` ladder.
-8. **Index + log.** Update `architecture/index.md` and append a line to `architecture/log.md`.
+8. **Index + log.** Refresh `architecture/index.md` and append a line to `architecture/log.md`:
+   - (a) List each subsystem with a one-line purpose.
+   - (b) **Add or refresh a single Mermaid `flowchart` at the top** — one node per subsystem, one edge per
+     declared `**Connects:**` line labeled by connector kind. This is mechanical given the metadata gathered
+     in step 3; `archagent graph --write` generates it for you from the docs (keep it between the
+     `<!-- archagent:graph -->` markers so re-runs replace it in place).
+   - (c) List the ADRs under `decisions/`.
+   - (d) **State current coverage** (e.g. "N of M packages documented") so partial progress is visible in
+     the artifact itself. Run `archagent status` for the count.
 
-First pass: the top-level map, 1–3 subsystems, and the highest-value invariants. Then iterate.
+**First pass sizing.** Size the work to the repo *before* choosing how many subsystems to write: run
+`archagent status` (packages + coverage) so you know whether this is a 3-package or a 30-package repo — a
+fixed "do 3 and stop" is wrong for anything large. Cover as many as you reasonably can this turn, then stop
+and ask (see the header). **Never** write "out of scope for this pass" / "not yet documented (first pass)"
+into the artifact (`index.md`, `invariants.md`, subsystem docs) — a should-be-durable doc that says what a
+past pass *didn't* do rots the moment the next pass makes progress. Session/progress notes go in
+`architecture/log.md` (append-only, chronological, built for exactly this); the artifact states only what is
+true **now** (coverage as an "N of M" count, per step 8d).
 
 ## Metadata field rules (keep drift quiet)
 
@@ -112,9 +138,11 @@ The `**Field:**` lines are parsed and tokenised, so a few rules avoid phantom dr
 - **No service topology → no `**Services:**`.** For a single-process app (a CLI, a library, one process)
   with no `docker-compose`/`Procfile`/k8s, omit `**Services:**` and describe the process in prose. A
   declared service with no IaC is reported as *dangling* forever.
-- **Incremental first pass vs undocumented-module drift.** As soon as any subsystem declares `**Covers:**`,
-  `drift` reports every *un*-covered source module as "undocumented". That's expected while iterating —
-  treat it as a to-do list, or give every module a (possibly stub) `**Covers:**` so drift stays quiet.
+- **Partial coverage vs undocumented-module drift.** As soon as any subsystem declares `**Covers:**`,
+  `drift` reports every *un*-covered source module as "undocumented". That's the remaining work-list — track
+  it via `archagent status` / `drift`, **not** by writing an "out of scope for this pass" note into the
+  artifact (route those to `log.md`; see First pass sizing above). Give every module a (possibly stub)
+  `**Covers:**` when you want drift quiet on an area you've deliberately deferred.
 - **Declarations must use the bold `**Field:**` form** and live outside fenced code blocks; a plain word at
   a line start, or a Mermaid node, is not parsed as a declaration.
 

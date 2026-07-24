@@ -274,6 +274,19 @@ CLI:
   `@invariant`/assert/contract markers, plus modal language like MUST/NEVER/"only X may") and emit them as
   candidates for `/archagent-describe` to classify, verify, and lift into `invariants.md`. `--json`,
   `--markers-only`.
+- `archagent status` — repo-scale + coverage snapshot: per top-level package, how many source files a
+  subsystem's `**Covers:**` claims. Use it to size a `describe` pass (a fixed "document 3 and stop" is wrong
+  for a large repo) and to state coverage in `index.md` as an "N of M" count.
+- `archagent graph` — generate a Mermaid system map (one node per subsystem, one edge per typed
+  `**Connects:**`) from the metadata the docs already declare. `--write` splices it into `index.md` between
+  the `<!-- archagent:graph -->` markers (idempotent), so the diagram stays in sync instead of being
+  hand-redrawn.
+- `archagent lint-docs` — lint the Mermaid diagrams in the architecture docs for syntax errors (a stray
+  second `:` in a `stateDiagram-v2` label, an unclosed/empty block, an unknown diagram type) — deterministic,
+  no Node required. `--json`, `--exit-code`.
+- `archagent modules` — diagnostic: how each Python source file resolves to an import module, flagging
+  top-level **name collisions** (two packages that install under the same name, which quietly breaks
+  import-linter scoping).
 - `archagent gen` — regenerate only the checker configs from `architecture/invariants.md` (`check` does
   this for you).
 - `archagent upgrade` — refresh the archagent-owned prompts (skills + `architecture/AGENTS.md`) to the
@@ -335,13 +348,16 @@ archagent/
 │   ├── ADL-SPEC.md           the architecture-artifact format, as a standards-style spec
 │   └── RELEASING.md          how to cut a new release to PyPI
 ├── src/archagent/
-│   ├── cli.py                the `archagent` CLI (init · gen · check · drift · evaluate · upgrade)
+│   ├── cli.py                the `archagent` CLI (init · gen · check · drift · evaluate · status · graph …)
 │   ├── config.py             archagent.toml loading (languages, source paths, test commands)
 │   ├── invariants.py         parse the invariants.md table  ·  rules.py — the Rule DSL
 │   ├── generate.py           compile invariants → checker configs  ·  check.py — run them, map results
 │   ├── init.py               scaffold the artifact + per-agent skills; upgrade prompts
-│   ├── drift.py              the reflexion-diff (docs vs code): the `drift` command
+│   ├── drift.py              the reflexion-diff (docs vs code): the `drift` + `modules` commands
 │   ├── evaluate.py           system-level architecture smells: the `evaluate` command
+│   ├── status.py             per-package coverage snapshot: the `status` command
+│   ├── graph.py              Mermaid system map from metadata: the `graph` command
+│   ├── docscan.py            Mermaid diagram linter: the `lint-docs` command
 │   ├── <extraction scanners> configscan · deployscan · webapi · datamap · cochange · connscan · obsscan
 │   │                         (static, no-execution extractors: env keys, IaC, routes, datastores,
 │   │                          git co-change, connector kinds, observability)

@@ -17,13 +17,16 @@ from rich.table import Table
 
 from .check import run_checks
 from .config import load_config
-from .drift import find_drift
+from .docscan import lint_docs
+from .drift import find_drift, module_map
 from .evaluate import evaluate as run_evaluate
 from .generate import generate
+from .graph import collect_subsystems, graph_block, write_to_index
 from .hooks import install_hook
 from .invscan import scan_invariants
 from .init import KNOWN_AGENTS, detect_agents, init_project, upgrade_project
 from .invariants import parse_invariants
+from .status import status as run_status
 
 app = typer.Typer(add_completion=False, help="Keep code adherent to a described architecture.")
 console = Console()
@@ -90,9 +93,10 @@ def help_command() -> None:
     console.print(table)
     console.print(
         "\n[dim]Cadence: check on every commit; describe + evaluate at design-review and periodically.\n"
+        "Describe helpers: status (coverage) · graph --write (system map) · lint-docs (Mermaid) · modules.\n"
         "`archagent gen` regenerates checker configs (check does this for you). Run any command with "
         "[bold]--help[/] for its options.\n"
-        "Format spec: docs/ADL-SPEC.md  ·  planned work: docs/ROADMAP.md[/]\n"
+        "Format spec (ADL-SPEC) + roadmap: https://github.com/BenedatLLC/archagent[/]\n"
     )
 
 
@@ -492,6 +496,112 @@ def scan_invariants_cmd(
         console.print("")
     console.print("[dim]Each is a candidate: classify into the DSL, verify with `check` (+ non-vacuous), and\n"
                   "capture as a prose row (source cited) — promote to an active rule only on a passing check.[/]")
+
+
+@app.command()
+def status(project: Path = typer.Option(Path("."), help="Target repo root")) -> None:
+    """Repo-scale + coverage snapshot: per top-level package, how much a subsystem's Covers claims."""
+    config = load_config(project.resolve())
+    report = run_status(config)
+    if not report.packages:
+        console.print("[yellow]No source files found[/] — check `source_paths` in archagent.toml.")
+        return
+
+    table = Table(title="archagent status — coverage by package")
+    table.add_column("Package")
+    table.add_column("Files", justify="right")
+    table.add_column("Documented", justify="right")
+    table.add_column("Coverage", justify="right")
+    for p in report.packages:
+        style = "green" if p.pct >= 80 else "yellow" if p.pct >= 40 else "red"
+        bar = "█" * (p.pct // 10) + "░" * (10 - p.pct // 10)
+        table.add_row(p.name, str(p.total), f"{p.covered}/{p.total}", f"[{style}]{bar} {p.pct:3}%[/]")
+    console.print(table)
+    console.print(
+        f"\n[bold]{report.documented_packages} of {len(report.packages)} packages[/] have documented code · "
+        f"[bold]{report.pct}%[/] of {report.total} source files covered · "
+        f"[bold]{report.subsystem_docs}[/] subsystem doc(s)."
+    )
+    if not report.covers_declared:
+        console.print("[dim](no **Covers:** declared yet — run /archagent-describe to document subsystems)[/]")
+
+
+@app.command(name="lint-docs")
+def lint_docs_cmd(
+    project: Path = typer.Option(Path("."), help="Target repo root"),
+    as_json: bool = typer.Option(False, "--json", help="Emit issues as JSON (for the describe skill / tooling)"),
+    exit_code: bool = typer.Option(False, "--exit-code", help="Exit 1 if any issue is found (for CI / hooks)"),
+) -> None:
+    """Lint the Mermaid diagrams in the architecture docs for syntax errors (no Node required)."""
+    config = load_config(project.resolve())
+    issues = lint_docs(config)
+    if as_json:
+        print(json.dumps({"issues": [
+            {"doc": i.doc, "line": i.line, "code": i.code, "message": i.message} for i in issues
+        ]}, indent=2))
+        if exit_code and issues:
+            raise typer.Exit(code=1)
+        return
+
+    if not issues:
+        console.print("[green]No Mermaid syntax problems found.[/]")
+        return
+    console.print(f"[bold]Mermaid issues[/] ({len(issues)}) — malformed diagrams in the architecture docs\n")
+    by_doc: dict[str, list] = {}
+    for i in issues:
+        by_doc.setdefault(i.doc, []).append(i)
+    for doc, items in by_doc.items():
+        console.print(f"[bold]{doc}[/]")
+        for i in items:
+            console.print(f"  [red]{i.line}[/]: [yellow]{i.code}[/] — {i.message}")
+        console.print("")
+    if exit_code:
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def graph(
+    project: Path = typer.Option(Path("."), help="Target repo root"),
+    write: bool = typer.Option(False, "--write", help="Splice the diagram into architecture/index.md (between the archagent:graph markers)"),
+) -> None:
+    """Generate a Mermaid system map from the subsystems' Connects/Tier metadata."""
+    config = load_config(project.resolve())
+    subs = collect_subsystems(config)
+    if not subs:
+        console.print("[yellow]No subsystem docs found[/] — run /archagent-describe first.")
+        raise typer.Exit(code=0)
+    if write:
+        action = write_to_index(config, graph_block(config))
+        console.print(f"[green]{action}[/] the system map in "
+                      f"{(config.architecture_dir / 'index.md').relative_to(config.project_root)} "
+                      f"({len(subs)} subsystem(s)).")
+        return
+    print(graph_block(config))
+
+
+@app.command()
+def modules(project: Path = typer.Option(Path("."), help="Target repo root")) -> None:
+    """Diagnostic: how each Python source file resolves to an import module (flags name collisions)."""
+    config = load_config(project.resolve())
+    mapping = module_map(config)
+    if not mapping:
+        console.print("[yellow]No Python modules resolved[/] — check `[python] source_paths` in archagent.toml.")
+        return
+    collisions = {m: files for m, files in mapping.items() if len(files) > 1}
+    if collisions:
+        console.print(f"[red]Module name collisions ({len(collisions)})[/] — these break import-linter scoping:\n")
+        for m, files in sorted(collisions.items()):
+            console.print(f"  [bold]{m}[/] ← {', '.join(files)}")
+        console.print("")
+    table = Table(title="archagent modules — file → import module")
+    table.add_column("Module")
+    table.add_column("File")
+    for m, files in sorted(mapping.items()):
+        for f in files:
+            mark = " [red](collision)[/]" if len(files) > 1 else ""
+            table.add_row(m + mark, f)
+    console.print(table)
+    console.print(f"\n[bold]{len(mapping)}[/] module(s) from {sum(len(f) for f in mapping.values())} file(s).")
 
 
 def main() -> None:

@@ -20,7 +20,9 @@ Rationale and design detail for most items live in `~/research/architecture-agen
 ## Shipped so far (context)
 
 - **Commands:** `init` (per-agent skill delivery, agent auto-detect, `--wire`, `upgrade`), `gen`, `check`
-  (import-linter · dependency-cruiser · ast-grep · property-based-test tiers), `drift`, `evaluate`.
+  (import-linter · dependency-cruiser · ast-grep · property-based-test tiers), `drift`, `evaluate`,
+  `status` (per-package coverage), `graph` (Mermaid system map from metadata, `--write` into index.md),
+  `lint-docs` (Mermaid syntax linter, no Node), `modules` (module-resolution diagnostic + collision check).
 - **Skills:** `describe` (build-or-update), `check`, `invariant`, `evaluate` — wired into one loop.
 - **`drift`** (reflexion-diff): dangling refs · git-stale docs · undocumented modules · subsystem
   dependency edges · entry points · web-route surface (OpenAPI-else-docs) · config keys · deployment

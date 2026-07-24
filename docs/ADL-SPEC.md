@@ -2,7 +2,7 @@
 
 **Status:** Draft
 **Version:** 0.1
-**Date:** 2026-07-18
+**Date:** 2026-07-23
 **Editors:** the archagent project
 
 ## Abstract
@@ -82,6 +82,13 @@ architecture/
 └── decisions/
     └── NNNN-<slug>.md         zero or more Architecture Decision Records (ADRs)
 ```
+
+`index.md`, when present, MAY carry a **system map**: a single fenced Mermaid `flowchart` — one node per
+subsystem, one edge per declared `Connects` relation (§4.3), typed by connector kind — delimited by the
+HTML-comment markers `<!-- archagent:graph -->` and `<!-- /archagent:graph -->`. The map is derived
+entirely from subsystem metadata, so a producer SHOULD regenerate it rather than hand-edit it (`archagent
+graph --write` replaces the content between the markers idempotently). A consumer MUST treat everything
+between the markers as generated and MAY overwrite it.
 
 ### 3.2 File Naming
 
@@ -192,6 +199,14 @@ and `pipe` as **asynchronous/loose**; this distinction drives, e.g., distributed
 Lifecycles and flows MUST be expressed as fenced Mermaid code blocks so they diff as text and are
 agent-editable. A lifecycle SHOULD use `stateDiagram-v2`; a flow SHOULD use `sequenceDiagram`. Each
 diagram SHOULD be immediately followed by a one-line plain-language caption.
+
+Every Mermaid block MUST be syntactically valid — it MUST declare a recognized diagram type on its first
+content line and MUST parse. In particular, a `stateDiagram`/`stateDiagram-v2` transition label (the text
+after the first `:` in `A --> B : label`) MUST NOT contain a further `:`; Mermaid treats everything after
+the first colon as the label, so a second colon (a port `:5300`, a time `10:30`, a ratio) breaks the parser.
+Because these blocks are prose — not part of the invariants table — they are not exercised by `check`; a
+conforming producer SHOULD validate them separately (`archagent lint-docs` does this deterministically,
+without a renderer), since a malformed diagram otherwise surfaces only when a human renders it.
 
 ### 4.5 Tier Vocabulary
 

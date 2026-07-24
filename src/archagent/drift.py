@@ -477,6 +477,23 @@ def _module_index(source_files: set[str], source_paths: list[str]) -> dict[str, 
     return idx
 
 
+def module_map(config: Config) -> dict[str, list[str]]:
+    """How each Python source file resolves to a top-level import module, keyed by module name.
+
+    Collision-aware (unlike `_module_index`, which keeps one file per module): a module mapping to more than
+    one file is a name collision — two packages that install under the same top-level name, which quietly
+    breaks import-linter scoping. Exposed by `archagent modules` so that fact is a one-command check rather
+    than a debugging session. Python only (module resolution is language-specific)."""
+    out: dict[str, list[str]] = {}
+    for f in sorted(_source_files(config)):
+        if not f.endswith(".py"):
+            continue
+        m = _module_of(f, config.python.source_paths)
+        if m:
+            out.setdefault(m, []).append(f)
+    return out
+
+
 def _imports_of(root: Path, rel_file: str, self_mod: str | None) -> list[str]:
     try:
         tree = ast.parse((root / rel_file).read_text())
