@@ -403,6 +403,15 @@ def evaluate(
             "tier_declared": result.tier_declared,
             "git_available": result.git_available,
             "history_analyzed": result.history_analyzed,
+            "inactive": [{"family": fam, "reason": why} for fam, why in result.inactive],
+            "history": {
+                "ran": result.history_ran,
+                "commits_seen": result.commits_seen,
+                "commits_analyzed": result.history_analyzed,
+                "bulk_skipped": result.bulk_skipped,
+                "conventional_pct": result.conventional_pct,
+                "cautions": result.history_cautions,
+            },
         }, indent=2))
         if exit_code and findings:
             raise typer.Exit(code=1)
@@ -425,14 +434,21 @@ def evaluate(
             console.print(f"       [dim]→ {f.recommendation} ({f.confidence} confidence, {f.regime})[/]")
         console.print("")
 
-    if not result.tier_declared:
-        console.print("[dim](no **Tier:** in subsystem docs — leaky-abstraction / layering check skipped)[/]")
-    if no_history:
-        console.print("[dim](--no-history — co-change smells skipped)[/]")
-    elif not result.git_available:
-        console.print("[dim](git not available — co-change smells skipped)[/]")
+    if result.history_ran:
+        console.print(f"[bold]History[/] — {result.history_analyzed} of {result.commits_seen} commit(s) mined "
+                      f"({result.conventional_pct}% conventional, {result.bulk_skipped} bulk skipped)")
+        for c in result.history_cautions:
+            console.print(f"  [yellow]caution:[/] {c}")
+        console.print("")
+    if result.inactive:
+        console.print("[bold]Inactive signals[/] — produced no findings for lack of metadata (not proof of "
+                      "health here):")
+        for fam, why in result.inactive:
+            console.print(f"  [dim]{fam}[/] — {why}")
+        console.print("")
+
     if not findings:
-        console.print("[green]No system-level smells found.[/]")
+        console.print("[green]No system-level smells found in the active signals.[/]")
         return
     console.print("[dim]These are candidates — run /archagent-evaluate to judge, cluster, and prioritize.[/]")
     if exit_code:

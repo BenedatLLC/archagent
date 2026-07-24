@@ -30,7 +30,9 @@ Rationale and design detail for most items live in `~/research/architecture-agen
 - **`evaluate`** (system-level smells): A data/source-of-truth · B boundaries (unstable dependency,
   layering, shotgun surgery, unstable interface, extraneous adjacent connector) · C structural (god
   component, cycles, distributed monolith) · D lifecycle (hard-coded endpoints, cross-boundary
-  observability).
+  observability). Reports its own **coverage** (which families were inactive for missing metadata) and
+  **history hygiene** (commits mined, conventional-commit %, bulk skips) so "zero findings" is never read as
+  "clean."
 - **Connector-typed edges** (`**Connects:** … via <kind>`) + inference from code. Python + JS/TS.
 
 ## Releases
@@ -106,9 +108,21 @@ passing, non-vacuous `check` + confirmation; a stated-but-violated invariant is 
 
 ## Evaluate — more smell signals
 
+- [ ] **Capability fragmentation** (single-owner decision drift). A whole new signal family for the smell
+  no structural check can see: one function is the intended sole authority for a decision/state, but N other
+  files in the *same* subsystem re-implement it. Two parts — zero-config **discovery** (mine `fix(...)`
+  commit-subject vocabulary per subsystem) and declared **enforcement** (a `capabilities.md` table +
+  vocabulary scan). Parked for a dedicated design session — open questions, prior work, and the field
+  evidence are in `research/architecture-agent/feedback/capabilities-design-notes.md`.
+- [ ] **See through one hop of indirection in co-change.** Today shotgun-surgery only sees *direct* import
+  edges, so two subsystems coupled through a shared factory/base look like a missing interface when the
+  interface already exists (that third module). Credit transitive/indirect links (or flag the shared
+  intermediary as the change-magnet) so the finding points at the real cause. Prompt-side mitigation shipped
+  (the skill now tells the reader to check for indirection); this is the tool-side fix.
 - [ ] **Scattered parasitic functionality** (Garcia). One concern smeared across many subsystems, several
   of which also own unrelated work — the dual of god-component. Needs agent judgment over a co-change +
-  concern-mapping candidate, so likely a skill-side signal more than a pure metric.
+  concern-mapping candidate, so likely a skill-side signal more than a pure metric. (Reconcile with
+  capability fragmentation above — that's the *within*-subsystem cousin.)
 - [ ] **Lock-step deployment.** Services that always co-change/co-deploy together (from git history) —
   a distributed-monolith signal complementary to the structural cycle check.
 - [ ] **Deeper CLI-surface extraction.** Subcommands/args as an interface surface (like web routes),

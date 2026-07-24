@@ -12,22 +12,40 @@ vendoring, reformats) are excluded by a file-count cap so they don't manufacture
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from .drift import _git
 
 _BOUNDARY = "@@@commit@@@"
+_SUBJ_SEP = "\x1f"  # unit separator between %H and %s, so subjects can't collide with the boundary
+# Conventional Commits: type(optional-scope)!: subject
+_CONVENTIONAL = re.compile(
+    r"^(?:feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(?:\([^)]*\))?!?:\s",
+    re.IGNORECASE,
+)
 
 
 @dataclass
 class CoChange:
     sub_commits: dict[str, int] = field(default_factory=dict)              # subsystem -> commits touching it
     pair: dict[frozenset[str], int] = field(default_factory=dict)         # {a, b} -> commits touching both
-    commits_analyzed: int = 0
+    commits_analyzed: int = 0     # commits that mapped to >=1 subsystem and drove co-change counts
+    commits_seen: int = 0         # non-merge commits in the window (before any filtering)
+    bulk_skipped: int = 0         # commits skipped for exceeding max_commit_files (mass renames/reformats)
+    conventional: int = 0         # commits_seen whose subject follows Conventional Commits
 
     def between(self, a: str, b: str) -> int:
         return self.pair.get(frozenset((a, b)), 0)
+
+    @property
+    def conventional_pct(self) -> int:
+        return round(100 * self.conventional / self.commits_seen) if self.commits_seen else 0
+
+    @property
+    def bulk_pct(self) -> int:
+        return round(100 * self.bulk_skipped / self.commits_seen) if self.commits_seen else 0
 
 
 def mine_cochange(
@@ -39,16 +57,22 @@ def mine_cochange(
 ) -> CoChange:
     """Co-change counts at the subsystem level. `file_subs` maps a repo-relative file to its subsystems."""
     result = CoChange()
-    args = ["log", "--no-merges", "--name-only", f"--pretty=format:{_BOUNDARY}%H", "-n", str(cap)]
+    args = ["log", "--no-merges", "--name-only", f"--pretty=format:{_BOUNDARY}%H{_SUBJ_SEP}%s", "-n", str(cap)]
     if since:
         args.append(f"--since={since}")
     out = _git(root, *args)
     if out is None:
         return result
 
-    for files in _commits(out):
-        if not files or len(files) > max_commit_files:
+    for subject, files in _commits(out):
+        result.commits_seen += 1
+        if _CONVENTIONAL.match(subject):
+            result.conventional += 1
+        if len(files) > max_commit_files:
+            result.bulk_skipped += 1
             continue  # skip bulk commits — they fabricate coupling
+        if not files:
+            continue
         subs: set[str] = set()
         for f in files:
             subs |= file_subs.get(f, set())
@@ -66,14 +90,16 @@ def mine_cochange(
 
 
 def _commits(log: str):
-    """Yield each commit's set of changed files from the `@@@commit@@@<hash>` + name-only stream."""
+    """Yield `(subject, files)` per commit from the `@@@commit@@@<hash>\\x1f<subject>` + name-only stream."""
     cur: set[str] | None = None
+    subject = ""
     for line in log.splitlines():
         if line.startswith(_BOUNDARY):
             if cur is not None:
-                yield cur
+                yield subject, cur
             cur = set()
+            subject = line[len(_BOUNDARY):].split(_SUBJ_SEP, 1)[1] if _SUBJ_SEP in line else ""
         elif line.strip() and cur is not None:
             cur.add(line.strip())
     if cur is not None:
-        yield cur
+        yield subject, cur

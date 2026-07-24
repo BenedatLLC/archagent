@@ -118,3 +118,26 @@ def test_no_history_flag_skips_regime_b(tmp_path):
     r = evaluate(cfg, history=False)
     assert r.history_analyzed == 0
     assert "implicit-coupling" not in {f.sign for f in r.findings}
+
+
+def test_hygiene_counts_conventional_and_bulk(tmp_path):
+    cfg = _cfg(tmp_path)
+    file_subs = {f"src/pkg/f{i}.py": {"x" if i == 0 else "y"} for i in range(60)}
+    _commit(cfg, "feat(x): add x", {"src/pkg/f0.py": "v\n"})           # conventional
+    _commit(cfg, "fix: correct y", {"src/pkg/f1.py": "v\n"})           # conventional
+    _commit(cfg, "misc tweak", {"src/pkg/f2.py": "v\n"})               # not conventional
+    _commit(cfg, "bulk reformat", {f"src/pkg/f{i}.py": "w\n" for i in range(60)})  # bulk -> skipped
+    cc = mine_cochange(tmp_path, file_subs, max_commit_files=50)
+    assert cc.commits_seen == 4
+    assert cc.conventional == 2 and cc.conventional_pct == 50
+    assert cc.bulk_skipped == 1
+
+
+def test_history_cautions_surface_thin_and_bulk(tmp_path):
+    cfg = _cfg(tmp_path)
+    _sub(cfg, "x", "src/pkg/x.py")
+    _sub(cfg, "y", "src/pkg/y.py")
+    _cochange_n(cfg, ["src/pkg/x.py", "src/pkg/y.py"], 3)   # only 3 commits -> thin
+    r = evaluate(cfg)
+    assert r.history_ran is True
+    assert any("thin history" in c for c in r.history_cautions)

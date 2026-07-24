@@ -31,6 +31,41 @@ def _of(result, sign):
     return [f for f in result.findings if f.sign == sign]
 
 
+# --- Coverage of the evaluation itself (inactive families) --------------------------------
+
+def _has_inactive(result, needle):
+    return any(needle in fam for fam, _ in result.inactive)
+
+
+def test_missing_metadata_reported_as_inactive(tmp_path):
+    cfg = _cfg(tmp_path)
+    # two subsystems, but no **Service:**, **Tier:**, or **Connects:** anywhere
+    _src(cfg, "pkg/a.py", "x = 1\n")
+    _src(cfg, "pkg/b.py", "y = 1\n")
+    _sub(cfg, "a", "# a\n\n**Covers:** `src/pkg/a.py`\n")
+    _sub(cfg, "b", "# b\n\n**Covers:** `src/pkg/b.py`\n")
+    r = evaluate(cfg, history=False)
+    assert _has_inactive(r, "data & source-of-truth")   # needs >=2 Service:
+    assert _has_inactive(r, "layering")                 # needs >=2 Tier:
+    assert _has_inactive(r, "connector topology")       # needs Connects:
+    assert any("Service" in why for _, why in r.inactive)
+
+
+def test_full_metadata_activates_families(tmp_path):
+    cfg = _cfg(tmp_path)
+    _src(cfg, "pkg/a.py", "x = 1\n")
+    _src(cfg, "pkg/b.py", "y = 1\n")
+    _sub(cfg, "a", "# a\n\n**Covers:** `src/pkg/a.py`\n**Service:** svc-a\n**Tier:** ui\n"
+                   "**Connects:** b via sync-call\n")
+    _sub(cfg, "b", "# b\n\n**Covers:** `src/pkg/b.py`\n**Service:** svc-b\n**Tier:** domain\n")
+    r = evaluate(cfg, history=False)
+    assert not _has_inactive(r, "data & source-of-truth")
+    assert not _has_inactive(r, "layering")
+    assert not _has_inactive(r, "connector topology")
+    # history still inactive because we passed history=False
+    assert _has_inactive(r, "co-change")
+
+
 # --- God Component ------------------------------------------------------------------------
 
 def test_god_component_flags_a_hub(tmp_path):

@@ -80,6 +80,15 @@ class EvaluationResult:
     tier_declared: bool = False
     git_available: bool = False
     history_analyzed: int = 0  # commits mined for co-change (0 = regime B not run)
+    # Coverage of the evaluation itself: which signal families were INACTIVE and why (a group that emits
+    # zero findings for lack of metadata is indistinguishable, from the count alone, from a clean one).
+    inactive: list[tuple[str, str]] = field(default_factory=list)  # (family label, reason)
+    # History hygiene (regime B): so a reader knows whether to trust the co-change signals.
+    history_ran: bool = False
+    commits_seen: int = 0          # non-merge commits in the window
+    bulk_skipped: int = 0          # commits skipped as bulk (mass rename/reformat)
+    conventional_pct: int = 0      # share of subjects following Conventional Commits
+    history_cautions: list[str] = field(default_factory=list)
 
     @property
     def any(self) -> bool:
@@ -190,9 +199,15 @@ def evaluate(config: Config, history: bool = True, since: str | None = None) -> 
     result.findings += _shared_libraries(model)
 
     # regime B — git co-change history (shotgun surgery, unstable interface)
+    cc = None
     if history and result.git_available and model.subs:
         cc = mine_cochange(root, model.file_subs, since=since)
+        result.history_ran = True
         result.history_analyzed = cc.commits_analyzed
+        result.commits_seen = cc.commits_seen
+        result.bulk_skipped = cc.bulk_skipped
+        result.conventional_pct = cc.conventional_pct
+        result.history_cautions = _history_cautions(cc)
         result.findings += _cochange_smells(model, cc)
 
     # service-level (deployment) static signals
@@ -206,7 +221,58 @@ def evaluate(config: Config, history: bool = True, since: str | None = None) -> 
 
     result.findings += _hardcoded_endpoints(config)
     result.findings += _observability(root, model)
+
+    result.inactive = _coverage(model, result, history_requested=history)
     return result
+
+
+# --- coverage of the evaluation itself (which families were inactive, and why) -------------
+
+_HISTORY_MIN = 20   # below this many analyzed commits, co-change signals are thin
+_BULK_PCT_WARN = 25  # skipping this share of commits as bulk means the history dilutes the signal
+_CONVENTIONAL_WARN = 50  # below this share of conventional subjects, history discipline is mixed
+
+
+def _coverage(model: _Model, result: "EvaluationResult", history_requested: bool) -> list[tuple[str, str]]:
+    """Which signal families produced no findings because their required metadata is absent — reported so
+    'zero findings' is never silently read as 'clean here'. Only inactive families are returned."""
+    inactive: list[tuple[str, str]] = []
+    services = {s for s in model.service.values() if s}
+    tiers = {t for t in model.tier.values() if t}
+
+    if len(services) < 2:
+        reason = (f"needs **Service:** on ≥2 subsystems ({len(services)} declared) — data ownership, "
+                  "distributed-monolith, and cross-service tracing are all skipped")
+        inactive.append(("A — data & source-of-truth / cross-service", reason))
+    if len(tiers) < 2:
+        inactive.append(("B — layering (leaky abstraction)",
+                         f"needs **Tier:** on ≥2 subsystems ({len(tiers)} declared)"))
+    if not model.connectors:
+        inactive.append(("B/C — connector topology",
+                         "no **Connects:** declared (some service edges are still inferred from code)"))
+    if not history_requested:
+        inactive.append(("B — co-change history", "skipped (--no-history)"))
+    elif not result.git_available:
+        inactive.append(("B — co-change history", "git not available"))
+    elif result.history_analyzed == 0:
+        inactive.append(("B — co-change history",
+                         "no commits mapped to subsystems (declare **Covers:** so files map to subsystems)"))
+    return inactive
+
+
+def _history_cautions(cc: "CoChange") -> list[str]:
+    """Reasons the co-change signal may be weak, surfaced so a reader doesn't over-trust regime B."""
+    out: list[str] = []
+    if cc.commits_analyzed < _HISTORY_MIN:
+        out.append(f"thin history — only {cc.commits_analyzed} commit(s) mapped to subsystems; "
+                   "co-change smells are low-confidence")
+    if cc.bulk_pct >= _BULK_PCT_WARN:
+        out.append(f"{cc.bulk_pct}% of commits skipped as bulk ({cc.bulk_skipped}/{cc.commits_seen}) — "
+                   "a mass reformat/regen can dilute the signal")
+    if cc.commits_seen and cc.conventional_pct < _CONVENTIONAL_WARN:
+        out.append(f"only {cc.conventional_pct}% of commit subjects follow Conventional Commits — "
+                   "mixed history discipline")
+    return out
 
 
 # --- Group C: God Component --------------------------------------------------------------
