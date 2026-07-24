@@ -110,10 +110,17 @@ passing, non-vacuous `check` + confirmation; a stated-but-violated invariant is 
 
 - [ ] **Capability fragmentation** (single-owner decision drift). A whole new signal family for the smell
   no structural check can see: one function is the intended sole authority for a decision/state, but N other
-  files in the *same* subsystem re-implement it. Two parts — zero-config **discovery** (mine `fix(...)`
-  commit-subject vocabulary per subsystem) and declared **enforcement** (a `capabilities.md` table +
-  vocabulary scan). Parked for a dedicated design session — open questions, prior work, and the field
-  evidence are in `research/architecture-agent/feedback/capabilities-design-notes.md`.
+  files in the *same* subsystem re-implement it — or a config value threaded by hand that isn't propagated to
+  every code path that needs it. Two parts — zero-config **discovery** (mine `fix(...)` commit-subject
+  vocabulary per subsystem) and declared **enforcement** (a `capabilities.md` table + a scan). Parked for a
+  dedicated design session — open questions, prior work, and the field evidence are in
+  `research/architecture-agent/feedback/capabilities-design-notes.md`.
+- [ ] **Churn × complexity hotspots.** A *single-file* signal (distinct from pairwise co-change): a file with
+  both heavy git churn (many commits, especially bug fixes) **and** high complexity is a classic
+  bad-architecture / too-many-edge-cases smell (cf. Feathers / CodeScene hotspots). Open: a language-light
+  complexity proxy (LOC, indentation depth, ast-node count), churn normalization (raw vs. fix-only vs.
+  recency-weighted), ranked-list vs. gated. Reconcile with god-component and the co-change work; may lean on
+  a git-mining lib (PyDriller). Sibling to capability fragmentation — same design session, same notes file.
 - [ ] **See through one hop of indirection in co-change.** Today shotgun-surgery only sees *direct* import
   edges, so two subsystems coupled through a shared factory/base look like a missing interface when the
   interface already exists (that third module). Credit transitive/indirect links (or flag the shared
