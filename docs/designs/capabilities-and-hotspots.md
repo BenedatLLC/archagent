@@ -7,6 +7,9 @@ history**, which today feeds only one existing check.
 
 Status: Draft — design phase (pre-implementation)
 Date: 2026-07-25
+Revised: 2026-07-26 — validation experiments changed how Check B finds candidates (from mining commit
+messages to scanning the code for duplicated decisions) and confirmed the rest. See §7 for results;
+full log in `research/architecture-agent/feedback/probe-results.md`.
 Relates to: ROADMAP items *Capability fragmentation* and *Churn × complexity hotspots*; the `evaluate`
 command (`src/archagent/evaluate.py`) and the git-history miner (`src/archagent/cochange.py`)
 
@@ -75,8 +78,9 @@ adds the missing pieces.
   *before* any lasting file format or command is added (§7).
 - **Code finds the facts; the model only judges them.** An AI model is never used to *gather* data (that
   would make results non-reproducible). It is used only to *judge* the facts the code has already gathered —
-  for example, to decide whether a recurring word really names a shared decision or is just common English.
-  This split mirrors current best practice for using language models to mine software repositories.
+  for example, to decide whether a set of values duplicated across files is really one decision
+  re-implemented, or an intended family of implementations. This split mirrors current best practice for
+  using language models to mine software repositories.
 
 ---
 
@@ -92,44 +96,43 @@ adds the missing pieces.
           ┌─────────────────────▼──┐      ┌────────▼──────────────────────────────┐
           │ Check A                 │      │ Check B                                │
           │ Change-prone complex    │      │ Scattered single-source-of-truth       │
-          │ files (per file: how    │      │  • find candidates from history        │
-          │ often it changes × how  │      │  • check declared owners against the   │
-          │ complex it is)          │      │    current code                        │
+          │ files (per file: how    │      │  • find duplicated decisions in the    │
+          │ often it changes × how  │      │    code (ranked by change history)     │
+          │ complex it is)          │      │  • check declared owners against code  │
           └─────────────────────────┘      └────────────────────────────────────────┘
 
    Related, separate idea (NOT part of the declared-owner list): a "config value threaded
    inconsistently" check built on the scanner archagent already has for config keys (§6.4).
 ```
 
-Both checks depend on Step 1. Check A is simple and ships first; Check B is the harder, novel piece.
+Both checks use Step 1 to recognize this project's bug-fix commits (Check A's fix-weighted variant, Check B's
+ranking). Check A is simple and ships first; Check B is the harder, novel piece.
 
 ---
 
 ## 4. Step 1 — Learn this project's commit wording
 
-**Why.** Both checks need to know *which commits are bug fixes in this project*, and which words in commit
-messages are meaningful versus generic. There is no universal rule: some projects write `fix(auth): …`, some
-write `Fixed #123 -- …`, some write free-form prose, some write in another language. Hard-coding one style
-fails on the others (an early experiment confirmed this — see §7). So the first step *learns* the project's
-wording from evidence.
+**Why.** Both checks lean on *which commits are bug fixes in this project* — Check A can weight bug-fix
+changes, and Check B ranks duplicated decisions by them. There is no universal rule for recognizing a bug-fix
+commit: some projects write `fix(auth): …`, some write `Fixed #123 -- …`, some write free-form prose, some
+write in another language. Hard-coding one style fails on the others (an early experiment confirmed this —
+see §7). So the first step *learns* the project's wording from evidence.
 
 **What the code gathers (plain, reproducible):**
 - **Commit guidelines from docs** — `CONTRIBUTING`, a commit-message config if present, pull-request
   templates, the README's commit section, and any agent-instruction files.
 - **A sample of real commit subjects** — the most common leading words and patterns (e.g. `type(scope):`,
   an issue number like `#123`, a tracker id like `PROJ-456`, or a leading verb like "Fixed").
-- **The project's own domain terms** — from the architecture docs and glossary, if any. Used later to tell a
-  real shared-decision word apart from ordinary English.
+- **The project's own domain terms** — from the architecture docs and glossary, if any. A light aid when the
+  model later judges whether a duplicated value set names a real decision.
 
 **What the model then decides (judging the gathered facts):**
 - Which commit style this project uses, and a small **bug-fix recognizer** for *this* repo — a few patterns
   that identify its bug-fix (or, more precisely, its *fix-labeled maintenance*) commits.
-- A short list of the project's meaningful terms, and a list of generic words to ignore, beyond ordinary
-  English stop-words.
 
-**Output.** A small cached file, `.archagent/history-profile.json`, holding the bug-fix recognizer, the term
-lists, and a note on how trustworthy the history is. Computed once, refreshed when the history window or the
-docs change. Both checks read it.
+**Output.** A small cached file, `.archagent/history-profile.json`, holding the bug-fix recognizer, any
+domain terms, and a note on how trustworthy the history is. Computed once, refreshed when the history window
+or the docs change. Both checks read it.
 
 > This is the concrete home for the requirement "sample the git history and read the documentation to learn
 > the project's terminology." It is: code gathers evidence → model classifies → cache the result. No human
@@ -186,34 +189,50 @@ deterministically, so a fuzzier approach would be more work and less reliable. W
 merge is decided by the experiment (§7).
 
 The check has two halves that work independently:
-- **Find candidates** from git history (needs a trustworthy history; runs only when the history is good
-  enough).
+- **Find candidates** by scanning the current code for a decision that is duplicated across files, ranked by
+  how often those files change (§6.2).
 - **Check declared owners** against the current code (runs every time, on whatever has been declared).
 
-### 6.2 Finding candidates from history
+### 6.2 Finding candidates — duplicated decisions in the code
 
-Surfaces *possible* single-owner decisions, with nothing declared up front.
+> *Revised after experiments (§7).* The original plan mined recurring words from bug-fix commit *messages*.
+> On real repositories that mostly rediscovered each subsystem's subject matter (commits about forms mention
+> "form") — low precision. The reliable signal is in the **code**: a decision that is already duplicated
+> across files. Commit history is kept, but only to *rank* the results.
 
-1. Using Step 1's recognizer, collect the subjects of each subsystem's bug-fix commits.
-2. Break each subject into words, after removing: the commit-style prefix (`fix(auth):` → drop `auth`), issue
-   and pull-request numbers, ordinary English stop-words, and Step 1's project-specific generic words. Keep
-   the project's domain terms.
-3. Count how often each word recurs across that subsystem's bug-fix commits. Flag a word as a candidate when
-   it clears **both** a minimum count and a minimum *share* of the subsystem's bug-fix commits — and only for
-   subsystems with enough bug-fix commits to be meaningful. *(All three thresholds are placeholders to be
-   set by experiment — §7.)* The intuition: a decision with no single owner gets patched one call-site at a
-   time, so the same word keeps recurring across otherwise-unrelated fix commits over months.
-4. Emit each candidate as `{subsystem, word/phrase, count, share, the commit hashes and subjects that back
-   it up}`.
-5. **The model then judges** whether the recurring word really names a shared decision (versus an accident
-   of common English), by reading the cited commits and the code. For a confirmed one, it works out the
-   **owner** (§6.3) and *proposes* an entry for the declared list (marked "proposed," not yet confirmed).
-6. Candidates that match something already declared are skipped, so the check doesn't re-surface known ones.
+Surfaces *possible* single-owner decisions with nothing declared up front, by finding a decision that is
+already duplicated across files and then using change history to rank which duplications actually hurt.
 
-**When it runs.** Only when Step 1 / the history-trust check clears a bar (enough consistent bug-fix
-history). Otherwise it reports itself as "not run, because the history isn't clean enough" — visibly, never
-silently (`evaluate` already reports which checks were inactive and why). While the check is still
-experimental it may be opt-in only; the target is to turn it on automatically when the history is good.
+1. **In each file, find the domain values that are branched on** — string literals compared with `==`/`!=`,
+   used in a `case`/`match`, or tested for membership. These are the concrete values a decision turns on
+   (a set of statuses, kinds, provider names, and so on).
+2. **Within a subsystem, group values that co-occur across files.** Keep values branched on in *several*
+   files, and group together the values that keep appearing in the same files. Each group is a candidate
+   decision — a *set of related values* (for example `{cancelled, completed, failed, running, succeeded}`).
+3. **Keep only tight groups.** Some file must branch on *most* of the group's values — that file is the
+   likely **owner** — while other files branch on only a subset (the re-implementations). This "one file has
+   the whole set, others have pieces" shape is what separates a real duplicated decision from an incidental
+   pile-up of common strings. Skip vendored, minified, and generated files, which otherwise dominate.
+4. **Rank the candidates by the change history of the files involved** (reusing Check A's per-file
+   change-counts): a duplicated decision whose files change often — especially in bug-fix commits — is far
+   more likely to be a real, costly problem than one whose files barely change. This is the only place commit
+   history is used, and only to *rank*, never to *find*.
+5. **The model then judges** each candidate by reading the files: is this genuinely one decision
+   re-implemented, or an intended family of implementations behind a shared interface (see the note below)?
+   For a real one, the owner from step 3 becomes the declared **Authority** and the value set becomes the
+   detector's key words, and it *proposes* an entry for the declared list (marked "proposed").
+6. Candidates that match something already declared are skipped.
+
+**A false alarm to expect: intended families of implementations.** Adapters, database backends, or plugins
+that all implement one interface legitimately branch on the same values in parallel — the scan will surface
+them, and the reviewer (person or model) dismisses them. That is fine: these are *suggestions* to confirm,
+not automatic failures. (In testing, this correctly surfaced Django's per-database-backend operations and a
+project's per-provider request transformers — real duplication, but by design.)
+
+**When it runs.** The code scan works on *any* repo, whatever the commit-message quality — the duplication is
+in the code, not the messages. Commit history is used only to *rank*, so on a repo with thin or messy history
+the candidates are still found, just ranked less confidently and marked as such. This is a real improvement
+over the message-mining plan, which needed clean history even to get started.
 
 ### 6.3 Checking declared owners against the current code
 
@@ -228,10 +247,10 @@ Runs every time, over whatever owners have been declared (including the ones the
     the decision's key words yet never import or call the owner. This removes the biggest source of false
     alarms — files that merely *display* a value the owner already decided.
   - later: a regular-expression detector, and possibly a config-threading detector (or keep that in §6.4).
-- **Working out the owner automatically.** The owner is *inferred*, not required from a human: prefer an
-  explicit claim in the code or docs ("the single source of truth", "the only place", "canonical"),
-  otherwise the definition most-called by the files that use the decision's words. The model decides; a
-  person can correct it later.
+- **Working out the owner automatically.** The owner is *inferred*, not required from a human. The
+  duplication scan (§6.2) already points at it — the file that branches on the *whole* value set — and an
+  explicit claim in the code or docs ("the single source of truth", "the only place", "canonical") confirms
+  it. The model decides; a person can correct it later.
 
 ### 6.4 Related idea: a config value threaded inconsistently (kept separate)
 
@@ -263,36 +282,45 @@ Example:
 
 | ID | Name | Authority | Detector | Exclude | Severity | Why | Status |
 |----|------|-----------|----------|---------|----------|-----|--------|
-| CAP-ORDER-STATE | Order state | `src/orders/state.py::resolve` | key-words: pending, paid, shipped, refunded [min 2] | `tests/**` | warn | one resolver is the source of truth (see state.py docstring); recurred in 9 fix commits | proposed |
+| CAP-ORDER-STATE | Order state | `src/orders/state.py::resolve` | key-words: pending, paid, shipped, refunded [min 2] | `tests/**` | warn | one resolver is the source of truth (see state.py docstring); the same values are branched on in 4 other files | proposed |
 
 ### 6.6 Running on its own, with an optional human step
 
-A full pass runs end to end with no human input: Step 1 → find candidates → the model proposes entries
-(marked "proposed") → check those entries against the code → report the findings. Afterward, a person may
-*optionally* promote a "proposed" entry to "active," adjust its key words or owner, or add exemptions —
-nothing waits on them. Findings here are always low-to-medium confidence and never fail a build on their own.
+A full pass runs end to end with no human input: find duplicated decisions in the code → rank them by change
+history → the model judges each and proposes entries (marked "proposed") → check those entries against the
+code → report the findings. Afterward, a person may *optionally* promote a "proposed" entry to "active,"
+adjust its key words or owner, or add exemptions — nothing waits on them. Findings here are always
+low-to-medium confidence and never fail a build on their own.
 
 ---
 
-## 7. Proving each check is worth building (experiments come first)
+## 7. Proving each check is worth building — experiment results
 
-No new file format, no new command, and no documentation-format change is added until cheap throwaway
-experiments show the checks produce real signal on real repositories. Each experiment is a small script over
-the existing miner plus a search — no new file format needed.
+No new file format, command, or documentation-format change is added until cheap throwaway experiments show
+the checks produce real signal on real repositories. These were run on six open-source repos (Django,
+LiteLLM, Datasette, and others) spanning three commit styles. Full log:
+`research/architecture-agent/feedback/probe-results.md`. Outcomes:
 
-- **Experiment 1 — commit-wording learning.** On each repo, gather the commit guidelines and a sample of
-  subjects, have the model produce the bug-fix recognizer, and compare it against a hand-labeled sample.
-  *Decides:* does learning beat the hard-coded pattern, and on which commit styles. **(Already run — it does;
-  results in `research/architecture-agent/feedback/probe-results.md`.)**
-- **Experiment 2 — candidate quality (Check B).** Mine the recurring bug-fix words per subsystem and read
-  the top candidates by hand. *Decides:* are the recurring words real shared decisions or common-English
-  noise? Sets the three thresholds and the generic-word list.
-- **Experiment 3 — false-alarm rate (Check B).** Pick one owner and its key words by hand, run the simple
-  key-words detector, and count the false alarms (tests, files that only display a value, the owner's own
-  inputs). *Decides:* is the simple detector usable, or is the "uses-the-words-but-never-calls-the-owner"
-  detector needed from the start.
-- **Experiment 4 — change-prone files (Check A).** Compute the change × complexity ranking and read the top
-  files. *Decides:* does the ranking surface genuinely problematic files; sets the bar and the change measure.
+- **Experiment 1 — commit-wording learning: PASS, and shown necessary.** The hard-coded pattern found *zero*
+  of Django's ~16,000 fix commits (Django uses `Fixed #NNN`, not `fix:`) and missed ~40% of LiteLLM's even
+  though LiteLLM declares Conventional Commits. Learning the project's own wording is required, not optional.
+- **Experiment 2 — candidate quality from commit messages: WEAK → led to the pivot.** Mining recurring
+  bug-fix *words* mostly rediscovered each subsystem's subject (`form` in forms, `router` in the router).
+  Low precision. This is why §6.2 now finds duplicated decisions in the *code* instead.
+- **Experiment 2b — duplicated decisions in the code: STRONG PASS.** The §6.2 scan surfaced real,
+  coherent duplicated-decision clusters that message-mining missed — e.g. a provider list re-branched across
+  five high-change LiteLLM core files (one file holding 20 of 21 values, the clear owner), and a status set
+  across many files. Two deterministic filters control false alarms: excluding vendored/generated files, and
+  keeping only *tight* groups (some file owns most of the value set). Change history ranked the real clusters
+  far above incidental ones — confirming history-as-ranker.
+- **Experiment 3 — false alarms (Check B):** the classes to design against were identified by 2b —
+  vendored/generated files, loose "grab-bag" groups, and intended families of implementations (handled by
+  the filters in §6.2 and by reviewer judgment). The "uses-the-words-but-never-calls-the-owner" detector
+  remains the next precision improvement.
+- **Experiment 4 — change-prone files (Check A): PASS.** The change × complexity ranking surfaced exactly
+  the files a maintainer would name (Django's ORM query/compiler/base and ModelAdmin; LiteLLM's router,
+  logging, and streaming). Defensible top lists, essentially no noise. Notably, several files flagged here
+  also appeared as duplicated-decision clusters in 2b — the two checks corroborate.
 
 **Repositories wanted** (larger than earlier test repos; ~3–4 covering these):
 1. Large and long-lived (thousands of commits, hundreds of files).
@@ -305,10 +333,10 @@ the existing miner plus a search — no new file format needed.
 6. At least one project mixing two languages (e.g. Python and TypeScript).
 7. Open-source, so candidates can be confirmed by reading the code.
 
-**Bar to clear:** on at least two repos, the Check-B candidates are mostly real after judging, the recognizer
-agrees with hand labels on the non-`fix(scope):` repos, and Check A's top handful of files are defensible. If
-it falls short, narrow the scope (e.g. ship Check A only) or change the detector before adding the declared
-list.
+**Bar to clear — met.** On multiple repos the code-first Check-B candidates were mostly real after judging,
+the recognizer agreed with hand labels across all three commit styles, and Check A's top files were
+defensible. The bar is cleared for building, with the candidate-finding method changed as above. Remaining
+calibration (thresholds, the tightness bar, the ranking) is noted inline and left to implementation.
 
 ---
 
@@ -330,14 +358,16 @@ list.
 
 ## 9. Build order
 
-0. **Experiments (§7)** — the gate. Set the thresholds; confirm each check is worth building.
+0. **Experiments (§7)** — the gate. **Done** — checks confirmed worth building; Check B's candidate-finding
+   changed to the code-first method above.
 1. **Miner additions** — per-file change-count and bug-fix change-count; the indentation-complexity function;
    Step 1's cached commit-wording profile.
 2. **Check A (change-prone files)** — small, needs no new file format; ships first.
 3. **Check B, the "check declared owners" half** — the declared-owner list file, the key-words detector, and
    the matching documentation-format section.
-4. **Check B, the "find candidates" half** — history mining, automatic owner inference, and tool-proposed
-   entries.
+4. **Check B, the "find candidates" half** — the code-first duplication scan (branch-value sets,
+   vendored/generated excluded, tightness-filtered), change-history ranking, automatic owner inference, and
+   tool-proposed entries.
 5. **The better detector** ("uses the words but never calls the owner") and the separate config-threading
    check (§6.4), guided by what the experiments show.
 6. **Command/skill updates** — teach the `evaluate` guidance to explain the two new kinds of finding and to
