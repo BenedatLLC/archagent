@@ -30,7 +30,7 @@ command (`src/archagent/evaluate.py`) and the git-history miner (`src/archagent/
 - **Subsystem** — a named part of the system. archagent's architecture docs define these; when a project
   has none, we fall back to grouping files by their top-level directory.
 - **Owner** — the one file or function that is *supposed* to make a given decision or hold a given value.
-  In the declared-list file (below) this column is literally called **Authority**.
+  (In the deferred declared-owner list of Appendix A this is called the **Authority**.)
 
 ---
 
@@ -59,10 +59,10 @@ adds the missing pieces.
 
 ## 2. Ground rules
 
-- **Runs on its own, no human required.** A full pass produces its findings — and, for the first check,
-  *proposes* the entries it would add to the declared list — with no human input. People review or adjust
-  the results *afterward*, if they want to. This matches the rest of `evaluate`: the code gathers facts, and
-  an AI agent (or a person) judges them. There is never a step that *blocks* waiting for a human.
+- **Runs on its own, no human required.** A full pass produces its findings with no human input. People
+  review or act on the results *afterward*, if they want to. This matches the rest of `evaluate`: the code
+  gathers facts, and an AI agent (or a person) judges them. There is never a step that *blocks* waiting for a
+  human.
 - **Adapts to each project; nothing hard-coded.** Do not bake in `fix(...)` or any fixed set of words —
   commit wording differs by project. Learn each project's wording from its own docs and history (Step 1).
   archagent's miner has a built-in pattern for one common style; that becomes a *fallback*, not the source
@@ -96,13 +96,15 @@ adds the missing pieces.
           ┌─────────────────────▼──┐      ┌────────▼──────────────────────────────┐
           │ Check A                 │      │ Check B                                │
           │ Change-prone complex    │      │ Scattered single-source-of-truth       │
-          │ files (per file: how    │      │  • find duplicated decisions in the    │
-          │ often it changes × how  │      │    code (ranked by change history)     │
-          │ complex it is)          │      │  • check declared owners against code  │
+          │ files (per file: how    │      │  scan the code for a decision          │
+          │ often it changes × how  │      │  duplicated across files, ranked by    │
+          │ complex it is)          │      │  change history — reported as findings │
           └─────────────────────────┘      └────────────────────────────────────────┘
 
-   Related, separate idea (NOT part of the declared-owner list): a "config value threaded
-   inconsistently" check built on the scanner archagent already has for config keys (§6.4).
+   Both checks report findings the agent judges — no file to declare or maintain.
+   Related, separate check: a "config value threaded inconsistently" check built on the
+   scanner archagent already has for config keys (§6.4). A deferred, optional durable
+   overlay for Check B (a declared-owner list) is in Appendix A.
 ```
 
 Both checks use Step 1 to recognize this project's bug-fix commits (Check A's fix-weighted variant, Check B's
@@ -184,14 +186,13 @@ change-count or bug-fix change-count is the better signal.
 
 The thing being protected is a **single decision or piece of state that should have one owner**. This check
 targets the "decision copied into several files" shape. The "config value threaded inconsistently" shape is
-handled separately (§6.4), because the raw fact it needs is something archagent *already* extracts
-deterministically, so a fuzzier approach would be more work and less reliable. Whether the two eventually
-merge is decided by the experiment (§7).
+handled by a separate check (§6.4).
 
-The check has two halves that work independently:
-- **Find candidates** by scanning the current code for a decision that is duplicated across files, ranked by
-  how often those files change (§6.2).
-- **Check declared owners** against the current code (runs every time, on whatever has been declared).
+The check is a single autonomous flow: **scan the current code for a decision duplicated across files, rank
+it by how often those files change, and report the survivors as candidates for review** (§6.2). It declares
+nothing and stores nothing — like Check A, it re-computes from the code every run. A deferred, optional
+extension would let a person record durable confirmations and dismissals in a declared-owner list; that is
+out of the main flow and lives in **Appendix A**.
 
 ### 6.2 Finding candidates — duplicated decisions in the code
 
@@ -219,9 +220,8 @@ already duplicated across files and then using change history to rank which dupl
    history is used, and only to *rank*, never to *find*.
 5. **The model then judges** each candidate by reading the files: is this genuinely one decision
    re-implemented, or an intended family of implementations behind a shared interface (see the note below)?
-   For a real one, the owner from step 3 becomes the declared **Authority** and the value set becomes the
-   detector's key words, and it *proposes* an entry for the declared list (marked "proposed").
-6. Candidates that match something already declared are skipped.
+   A confirmed one is **reported as a finding** — the decision (its value set), the owner from step 3, the
+   re-implementing files, and the change history that ranked it. Nothing is written to a file.
 
 **A false alarm to expect: intended families of implementations.** Adapters, database backends, or plugins
 that all implement one interface legitimately branch on the same values in parallel — the scan will surface
@@ -234,63 +234,30 @@ in the code, not the messages. Commit history is used only to *rank*, so on a re
 the candidates are still found, just ranked less confidently and marked as such. This is a real improvement
 over the message-mining plan, which needed clean history even to get started.
 
-### 6.3 Checking declared owners against the current code
+### 6.3 What a finding looks like, and running on its own
 
-Runs every time, over whatever owners have been declared (including the ones the model proposed above).
+A full pass runs end to end with no human input: find duplicated decisions in the code (§6.2) → rank them by
+change history → the model judges each → report the survivors. Each finding is a new *single-source-of-truth*
+group finding that names the decision (its value set), the likely owner, the re-implementing files, and the
+change history that ranked it, with the suggestion: *"this decision looks re-implemented across N files —
+check whether they should call the owner instead, or whether it's an intended family of implementations."*
+Findings are low-to-medium confidence and never fail a build.
 
-- Read the declared list (§6.5), stripping Markdown formatting (like backticks) from **every** column.
-- Each declared entry carries a **detector** — how to spot a file that is re-making the decision. Detectors
-  are written with a leading keyword so more kinds can be added later without changing the file format:
-  - **the simple detector (built first): "key words."** Flag any source file — other than the owner itself,
-    and other than files the entry marks as exempt — that contains several of the decision's key words.
-  - **the better detector (built next): "uses the words but never calls the owner."** Flag files that use
-    the decision's key words yet never import or call the owner. This removes the biggest source of false
-    alarms — files that merely *display* a value the owner already decided.
-  - later: a regular-expression detector, and possibly a config-threading detector (or keep that in §6.4).
-- **Working out the owner automatically.** The owner is *inferred*, not required from a human. The
-  duplication scan (§6.2) already points at it — the file that branches on the *whole* value set — and an
-  explicit claim in the code or docs ("the single source of truth", "the only place", "canonical") confirms
-  it. The model decides; a person can correct it later.
+There is **no file to declare or maintain**: the scan re-derives the candidates, their values, and their
+owner every run, exactly like Check A. A person may act on a finding (refactor it, or record it as
+reviewed/dismissed the way any `evaluate` finding is accepted today), but nothing waits on them. An optional
+*durable overlay* — a declared-owner list that persists confirmations and dismissals so intended families
+stop re-appearing — is deferred; see **Appendix A**.
 
-### 6.4 Related idea: a config value threaded inconsistently (kept separate)
+### 6.4 Related idea: a config value threaded inconsistently (separate check)
 
-The "config value that's right in one place and stale in another" shape is *not* handled by the key-words
-detector. archagent already has a scanner (used by its drift check) that lists, for each file, which
+The "config value that's right in one place and stale in another" shape is *not* handled by the duplication
+scan. archagent already has a scanner (used by its drift check) that lists, for each file, which
 configuration or environment keys it reads — a plain, reliable fact. A config-threading check is then:
 *"key X is read in files A, B, and C; is one owner passing it through, or does each read it independently and
 risk a stale default?"* Because the raw fact is already extracted deterministically, this belongs on its own
-as a higher-precision check rather than as a fuzzy key-words detector. Whether it stands alone (expected) or
-merges into Check B is decided after the experiment.
-
-### 6.5 The declared-owner list — a new file in the architecture docs
-
-A new file alongside the existing invariants list, read with the same table parser. **It is only added once
-the experiment (§7) shows the check is worth it.** Columns:
-
-| Column | Meaning |
-|---|---|
-| ID | a stable identifier, e.g. `CAP-ORDER-STATE` |
-| Name | a human name for the decision |
-| Authority | the file (or file + symbol) that is the one legitimate owner |
-| Detector | how to spot a re-implementation; the simple form is `key-words: A, B, C [min 2]` |
-| Exclude | files exempt from the check (tests; the owner's own inputs) |
-| Severity | `warn` by default (these are suggestions) |
-| Why | the reason, plus where it came from (proposed by the tool, or written by a person; the cited commits) |
-| Status | `proposed` (tool-proposed) \| `active` (a person confirmed it) \| `deprecated` |
-
-Example:
-
-| ID | Name | Authority | Detector | Exclude | Severity | Why | Status |
-|----|------|-----------|----------|---------|----------|-----|--------|
-| CAP-ORDER-STATE | Order state | `src/orders/state.py::resolve` | key-words: pending, paid, shipped, refunded [min 2] | `tests/**` | warn | one resolver is the source of truth (see state.py docstring); the same values are branched on in 4 other files | proposed |
-
-### 6.6 Running on its own, with an optional human step
-
-A full pass runs end to end with no human input: find duplicated decisions in the code → rank them by change
-history → the model judges each and proposes entries (marked "proposed") → check those entries against the
-code → report the findings. Afterward, a person may *optionally* promote a "proposed" entry to "active,"
-adjust its key words or owner, or add exemptions — nothing waits on them. Findings here are always
-low-to-medium confidence and never fail a build on their own.
+as a separate, higher-precision check — not part of the main Check B flow. Its fate is decided after the
+experiment.
 
 ---
 
@@ -363,25 +330,75 @@ calibration (thresholds, the tightness bar, the ranking) is noted inline and lef
 1. **Miner additions** — per-file change-count and bug-fix change-count; the indentation-complexity function;
    Step 1's cached commit-wording profile.
 2. **Check A (change-prone files)** — small, needs no new file format; ships first.
-3. **Check B, the "check declared owners" half** — the declared-owner list file, the key-words detector, and
-   the matching documentation-format section.
-4. **Check B, the "find candidates" half** — the code-first duplication scan (branch-value sets,
-   vendored/generated excluded, tightness-filtered), change-history ranking, automatic owner inference, and
-   tool-proposed entries.
-5. **The better detector** ("uses the words but never calls the owner") and the separate config-threading
-   check (§6.4), guided by what the experiments show.
-6. **Command/skill updates** — teach the `evaluate` guidance to explain the two new kinds of finding and to
-   drive the optional human review.
+3. **Check B (scattered single-source-of-truth)** — the code-first duplication scan (branch-value sets,
+   vendored/generated excluded, tightness-filtered), change-history ranking, and automatic owner inference,
+   reported as findings. No new file format.
+4. **Command/skill updates** — teach the `evaluate` guidance to explain the two new kinds of finding.
+5. **Later, if warranted:** the separate config-threading check (§6.4), and the deferred declared-owner
+   overlay with its "never calls the owner" detector (Appendix A).
 
 ---
 
 ## 10. Out of scope
 
-- **No required human step** — the tool proposes; people adjust only if they want to (§6.6).
+- **No required human step** — the tool reports findings; people act only if they want to (§6.3).
+- **No new declared file in the first version** — Check B reports findings like Check A; the declared-owner
+  list is deferred (Appendix A).
 - **No hard-coded commit wording** — learned per project (§4).
 - **Never fails a build on its own** — these are suggestions, not pass/fail gates.
 - **No heavyweight git-mining dependency** (§8).
-- **Not full clone-detection or data-flow analysis** in the first version — key-word overlap first, the
-  "never calls the owner" detector next; true data-flow tracing is a later, separate step.
+- **Not full clone-detection or data-flow analysis** — the first version finds duplicated *value sets*; the
+  key-word and "never calls the owner" detectors (Appendix A) and true data-flow tracing are later, separate
+  steps.
 - **No author/team analysis** — a possible future idea (it would need commit-author data), not part of this
   design.
+
+---
+
+## Appendix A — Deferred: a declared-owner list (`capabilities.md`)
+
+**Status: deferred, potential future work.** Not part of the main design above.
+
+**Why deferred.** In the original design this file was the source of truth that enforcement read: because
+candidate-finding was weak, a person or model had to *declare* each capability, and enforcement re-checked
+the declarations. After the Check B pivot (§6.2), the code-first scan re-derives the candidates, their value
+sets, and their owners on every run, autonomously — so "enforce the declared entries" largely collapses into
+"run the scan again." The file's role shrinks from a source of truth to an optional *durable-curation
+overlay*.
+
+**What it would still add** (things the scan cannot do on its own):
+- **Durable dismissals** — the scan re-surfaces intended families (database backends, provider adapters) on
+  every run; a place to record "reviewed — intended, dismissed" stops the repeated triage.
+- **Durable confirmations + tightening** — a human-confirmed, narrowed entry (the right key words, the right
+  exclusions, the stricter "never calls the owner" detector) is higher-precision than the raw scan, and
+  should persist.
+- **Proactive declarations** — a decision you want to *keep* single-owner but that isn't duplicated yet; the
+  scan can't propose these, because there is nothing duplicated to find.
+
+**When to build it.** Only if real use shows the overlay needs a structured format. In the interim, record
+accept/dismiss the way `evaluate` findings are already handled (an ADR, or a lightweight suppressions note).
+
+**Sketch, if built.** A file alongside the invariants list, read with the same table parser (strip Markdown
+formatting from **every** column). Enforcement would check each declared entry against the current code via a
+**detector**, written with a leading keyword so kinds can be added without changing the format:
+- **key words** — flag any source file (other than the owner or an excluded file) that contains several of
+  the decision's key words.
+- **never calls the owner** — flag files that use the key words yet never import or call the owner; removes
+  the biggest false-alarm class (files that merely *display* an already-decided value).
+
+| Column | Meaning |
+|---|---|
+| ID | a stable identifier, e.g. `CAP-ORDER-STATE` |
+| Name | a human name for the decision |
+| Authority | the file (or file + symbol) that is the one legitimate owner |
+| Detector | how to spot a re-implementation; the simple form is `key-words: A, B, C [min 2]` |
+| Exclude | files exempt from the check (tests; the owner's own inputs) |
+| Severity | `warn` by default (these are suggestions) |
+| Why | the reason, plus where it came from (the cited duplication / commits) |
+| Status | `proposed` \| `active` \| `deprecated` |
+
+Example:
+
+| ID | Name | Authority | Detector | Exclude | Severity | Why | Status |
+|----|------|-----------|----------|---------|----------|-----|--------|
+| CAP-ORDER-STATE | Order state | `src/orders/state.py::resolve` | key-words: pending, paid, shipped, refunded [min 2] | `tests/**` | warn | one resolver is the source of truth; the same values are branched on in 4 other files | active |
