@@ -106,8 +106,17 @@ A fourth enforcement tier alongside BOUNDARY / STRUCTURAL / PBT: pre/postconditi
 executed in the target env like the PBT tier. Fills the gap between a structural rule ("A may not import B")
 and a full property test ("for all inputs, this holds") — the middle ground of "this function guarantees X on
 return," "this class always satisfies Y." Same principles as everything else here: *candidates the agent
-judges, not verdicts*; **intended-model-if-present, else inferred**; compose existing tools
-(icontract/deal for Python, zod/`tsc` for TS), no bespoke formalism.
+judges, not verdicts*; **intended-model-if-present, else inferred**; compose existing tools, no bespoke
+formalism.
+
+**Proposed Python tool: `icontract`** — chosen because `icontract-hypothesis` folds straight into the
+Hypothesis-based PBT tier we already run: it derives strategies from a function's preconditions and checks
+its postconditions, so a mined `@require`/`@ensure` becomes a property test in the *existing* runner rather
+than a new one. It also has first-class class invariants with Liskov-style inheritance checking (covering the
+behavioral item below), a clean decorator model with no import hooks, and violation messages that report the
+failing sub-expression's values. Runner-up `deal` stays in view for one thing — its flake8 linter can catch
+some violations *statically*, attractive if we later want a contract check that runs without executing the
+target. TS side is still `zod` / `tsc`.
 
 Two open design decisions scope this whole section:
 
@@ -121,19 +130,21 @@ Two open design decisions scope this whole section:
    the STRUCTURAL tier.
 
 - [ ] **Derived contract tier (function-level).** Take a pre/postcondition already in the invariants table
-  (from stated-invariant mining or `describe`) and emit an executable check — icontract `@require`/`@ensure`
-  (Python), deal, or a `zod` schema / `tsc` assertion (TS) — run in the target env, reported like PBT. No new
-  authoring syntax; the invariants table is the source. This is the original "contract tier" item, unchanged
-  in intent.
+  (from stated-invariant mining or `describe`) and emit an executable check — an `icontract`
+  `@require`/`@ensure` (Python) or a `zod` schema / `tsc` assertion (TS) — run in the target env, reported
+  like PBT. On Python, `icontract-hypothesis` turns the emitted contract into a property test executed by the
+  existing PBT runner (no second execution path). No new authoring syntax; the invariants table is the
+  source. This is the original "contract tier" item, unchanged in intent.
 - [ ] **Contract authoring surface.** Let a team *declare* a contract in the ADL (a `@requires`/`@ensures`
   row against a named function/module, or a `**Contract:**` marker in a component doc) and have archagent
   wire it into the tier — the DbC analogue of how BOUNDARY rules are authored today. Turns contracts from a
   derived by-product into first-class, human-owned metadata. Depends on the derived tier existing first.
 - [ ] **Class / interface behavioral contracts.** Class invariants (a condition true after every public
   method) and behavioral-subtyping checks (Liskov): flag a subclass that strengthens a precondition or
-  weakens a postcondition/invariant relative to its base. icontract and deal both model class invariants and
-  inheritance; the subtyping check is partly static (compare declared contracts up the hierarchy) and partly
-  runtime. This is the OO-DbC (Eiffel) tradition and the part the current framing omits entirely.
+  weakens a postcondition/invariant relative to its base. `icontract` models class invariants and enforces
+  this inheritance discipline directly; the subtyping check is partly static (compare declared contracts up
+  the hierarchy) and partly runtime. This is the OO-DbC (Eiffel) tradition and the part the current framing
+  omits entirely.
 - [ ] **Verification-only vs. shipped instrumentation.** Decide (and probably offer both) whether archagent
   *checks* contracts in a throwaway run (like the PBT tier — nothing lands in the user's code) or can
   *generate* the contract decorators into the target as durable runtime guards. Default to verification-only,
