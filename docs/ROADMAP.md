@@ -100,11 +100,47 @@ passing, non-vacuous `check` + confirmation; a stated-but-violated invariant is 
 - [ ] **More BOUNDARY forms.** `layers` (an ordered stack, each may depend only downward) and interface
   rules ("only X may import Y"), beyond today's pairwise `forbid a -> b`.
 
-## New invariant tiers
+## Contract tier (design by contract)
 
-- [ ] **Contract tier.** Pre/postcondition checks — icontract/deal (Python), zod/`tsc` (TS) — generated
-  from the invariants table, executed in the target env like the PBT tier. Fills the gap between
-  structural rules and full property tests.
+A fourth enforcement tier alongside BOUNDARY / STRUCTURAL / PBT: pre/postconditions and class invariants,
+executed in the target env like the PBT tier. Fills the gap between a structural rule ("A may not import B")
+and a full property test ("for all inputs, this holds") — the middle ground of "this function guarantees X on
+return," "this class always satisfies Y." Same principles as everything else here: *candidates the agent
+judges, not verdicts*; **intended-model-if-present, else inferred**; compose existing tools
+(icontract/deal for Python, zod/`tsc` for TS), no bespoke formalism.
+
+Two open design decisions scope this whole section:
+
+1. **Derived vs. authored.** Do contracts *fall out of* the invariants table (archagent generates the
+   `@requires`/`@ensures` from a mined/classified invariant), or is there an *authoring surface* where a
+   contract is declared metadata a person writes directly? Likely both, staged: derived first (reuses the
+   stated-invariant pipeline, no new syntax), authoring later.
+2. **Function-level vs. behavioral (class/interface).** Function pre/postconditions are the easy half.
+   Class invariants and Liskov-style behavioral subtyping (a subclass may weaken preconditions / strengthen
+   postconditions, never the reverse; invariants are inherited) are the harder, higher-value half and touch
+   the STRUCTURAL tier.
+
+- [ ] **Derived contract tier (function-level).** Take a pre/postcondition already in the invariants table
+  (from stated-invariant mining or `describe`) and emit an executable check — icontract `@require`/`@ensure`
+  (Python), deal, or a `zod` schema / `tsc` assertion (TS) — run in the target env, reported like PBT. No new
+  authoring syntax; the invariants table is the source. This is the original "contract tier" item, unchanged
+  in intent.
+- [ ] **Contract authoring surface.** Let a team *declare* a contract in the ADL (a `@requires`/`@ensures`
+  row against a named function/module, or a `**Contract:**` marker in a component doc) and have archagent
+  wire it into the tier — the DbC analogue of how BOUNDARY rules are authored today. Turns contracts from a
+  derived by-product into first-class, human-owned metadata. Depends on the derived tier existing first.
+- [ ] **Class / interface behavioral contracts.** Class invariants (a condition true after every public
+  method) and behavioral-subtyping checks (Liskov): flag a subclass that strengthens a precondition or
+  weakens a postcondition/invariant relative to its base. icontract and deal both model class invariants and
+  inheritance; the subtyping check is partly static (compare declared contracts up the hierarchy) and partly
+  runtime. This is the OO-DbC (Eiffel) tradition and the part the current framing omits entirely.
+- [ ] **Verification-only vs. shipped instrumentation.** Decide (and probably offer both) whether archagent
+  *checks* contracts in a throwaway run (like the PBT tier — nothing lands in the user's code) or can
+  *generate* the contract decorators into the target as durable runtime guards. Default to verification-only,
+  matching the "additive metadata, no execution surprises" principle; instrumentation is opt-in.
+- [ ] **Vacuity / triviality guard.** Reuse the stated-invariant vacuity check so a generated contract that
+  can never fail (e.g. `ensure result is not None` on a function that structurally cannot return `None`) is
+  surfaced as noise, not a passing rule — the same non-vacuous-`check` gate that curates mined invariants.
 
 ## Evaluate — more smell signals
 
@@ -142,6 +178,20 @@ passing, non-vacuous `check` + confirmation; a stated-but-violated invariant is 
 - [ ] **Behavioral-drift candidates.** State/lifecycle/flow signals (from the Mermaid state/sequence
   diagrams vs the code) for the agent to reason about — the dimension static structural tools can't reach
   and the survey's identified white space.
+- [ ] **Formal-spec drift (TLA+ as behavioral source of truth).** For teams that write a formal spec at
+  design time, treat a `.tla` module the way we treat OpenAPI for routes: an authoritative *intended* model
+  archagent reads (state constants, next-state actions, declared invariants) and diffs against the code —
+  the formal upgrade of behavioral-drift above (Mermaid → TLA+). archagent does **not** model-check
+  (interleavings/liveness stay TLA+'s job at design time — see the heavy-formalism exclusion below); its job
+  is the maintenance-time tether the spec never had, catching where agent-written code has quietly diverged
+  from the validated model. Two mechanisms: **(a) state-space diff** — the states the code actually branches
+  on vs. the states the spec models (a state in code but not the spec, or a spec-forbidden transition);
+  **(b) safety invariants → invariants table** — import a proven state-safety invariant as a stated
+  invariant and generate a contract-/PBT-tier check where runtime-checkable (liveness/temporal doesn't map).
+  **First probe:** reuse Check B's branch-literal extraction (the code's realized state space) and diff it
+  against the spec's declared states — a mostly-deterministic check on machinery already being built for
+  hotspots/single-source-of-truth. The ADL would name the `.tla` module as the behavioral source for the
+  subsystem ("intended-model-if-present, else inferred").
 
 ## The update loop
 
