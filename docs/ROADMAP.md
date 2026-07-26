@@ -110,7 +110,7 @@ passing, non-vacuous `check` + confirmation; a stated-but-violated invariant is 
 
 - [ ] **Scattered single-source-of-truth** (single-owner decision drift). A decision/state that should have
   one owner but is re-implemented across several files. **Designed + validated on real repos** —
-  `docs/designs/capabilities-and-hotspots.md`. The check is an autonomous code-first scan: find a set of
+  `docs/designs/hotspots-and-single-source-of-truth.md`. The check is an autonomous code-first scan: find a set of
   domain values branched on across multiple files (tightness-filtered, vendored/generated excluded), rank by
   change history, report as findings the agent judges — **no new file format**. A durable *declared-owner
   list* (`capabilities.md`) that persists confirmations/dismissals is **deferred future work** — see
@@ -118,7 +118,7 @@ passing, non-vacuous `check` + confirmation; a stated-but-violated invariant is 
 - [ ] **Churn × complexity hotspots.** A *single-file* signal (distinct from pairwise co-change): a file with
   both heavy git churn (many commits, especially bug fixes) **and** high complexity is a classic
   bad-architecture / too-many-edge-cases smell (cf. Feathers / CodeScene hotspots). **Designed + validated**
-  — `docs/designs/capabilities-and-hotspots.md` (Check A); ships first, no new file format. Complexity via a
+  — `docs/designs/hotspots-and-single-source-of-truth.md` (Check A); ships first, no new file format. Complexity via a
   language-light indentation proxy; extend `cochange.py` (no PyDriller). Remaining calibration: percentile
   bar, raw- vs. fix-churn axis.
 - [ ] **See through one hop of indirection in co-change.** Today shotgun-surgery only sees *direct* import

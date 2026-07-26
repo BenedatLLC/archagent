@@ -1,19 +1,14 @@
 # Design: Two history-based architecture checks
 
-Two new checks for archagent's `evaluate` command: **"scattered single-source-of-truth"** (one decision or
+Status: Draft — design phase (pre-implementation)
+Date: 2026-07-25
+Revised: 2026-07-26
+
+---
+This design proposed two new checks for archagent's `evaluate` command: **"scattered single-source-of-truth"** (one decision or
 value that should have a single owner but has been re-implemented in several places) and **"change-prone
 complex files"** (files that change very often and are also hard to read). Both read the project's **git
 history**, which today feeds only one existing check.
-
-Status: Draft — design phase (pre-implementation)
-Date: 2026-07-25
-Revised: 2026-07-26 — validation experiments changed how Check B finds candidates (from mining commit
-messages to scanning the code for duplicated decisions) and confirmed the rest. See §7 for results;
-full log in `research/architecture-agent/feedback/probe-results.md`.
-Relates to: ROADMAP items *Capability fragmentation* and *Churn × complexity hotspots*; the `evaluate`
-command (`src/archagent/evaluate.py`) and the git-history miner (`src/archagent/cochange.py`)
-
----
 
 ## Terms used in this document
 
