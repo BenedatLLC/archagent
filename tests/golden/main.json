@@ -1,0 +1,174 @@
+{
+  "findings": [
+    {
+      "sign": "change-prone-file",
+      "group": "E",
+      "severity": "med",
+      "confidence": "med",
+      "regime": "history",
+      "subjects": [
+        "src/perf/hot.py"
+      ],
+      "values": null
+    },
+    {
+      "sign": "scattered-source-of-truth",
+      "group": "F",
+      "severity": "low",
+      "confidence": "low",
+      "regime": "history",
+      "subjects": [
+        "src/orders/state.py",
+        "src/orders/api.py",
+        "src/orders/email.py",
+        "src/orders/report.py"
+      ],
+      "values": [
+        "cancelled",
+        "initial",
+        "paid",
+        "refunded",
+        "shipped"
+      ]
+    },
+    {
+      "sign": "scattered-source-of-truth",
+      "group": "F",
+      "severity": "low",
+      "confidence": "low",
+      "regime": "history",
+      "subjects": [
+        "src/mixed/auth0.py",
+        "src/mixed/auth1.py",
+        "src/mixed/auth2.py",
+        "src/mixed/auth3.py"
+      ],
+      "values": [
+        "authorization_code",
+        "client_credentials",
+        "refresh_token"
+      ]
+    },
+    {
+      "sign": "scattered-source-of-truth",
+      "group": "F",
+      "severity": "low",
+      "confidence": "low",
+      "regime": "history",
+      "subjects": [
+        "src/mixed/theme0.py",
+        "src/mixed/theme1.py",
+        "src/mixed/theme2.py",
+        "src/mixed/theme3.py"
+      ],
+      "values": [
+        "cerulean",
+        "chartreuse",
+        "crimson"
+      ]
+    },
+    {
+      "sign": "scattered-source-of-truth",
+      "group": "F",
+      "severity": "low",
+      "confidence": "low",
+      "regime": "history",
+      "subjects": [
+        "src/dispatch/router.py",
+        "src/dispatch/auth.py",
+        "src/dispatch/sync.py",
+        "src/dispatch/webhook.py"
+      ],
+      "values": [
+        "ProviderKind.AZURE",
+        "ProviderKind.BITBUCKET",
+        "ProviderKind.GITEA",
+        "ProviderKind.GITHUB",
+        "ProviderKind.GITLAB"
+      ]
+    },
+    {
+      "sign": "scattered-source-of-truth",
+      "group": "F",
+      "severity": "low",
+      "confidence": "low",
+      "regime": "history",
+      "subjects": [
+        "src/backends/base.py",
+        "src/backends/mysql.py",
+        "src/backends/postgres.py",
+        "src/backends/sqlite.py"
+      ],
+      "values": [
+        "autoincrement",
+        "returning",
+        "upsert",
+        "window_functions"
+      ]
+    },
+    {
+      "sign": "enum-value-escape",
+      "group": "F",
+      "severity": "low",
+      "confidence": "med",
+      "regime": "static",
+      "subjects": [
+        "src/enums/mode.py",
+        "src/web/deploy.tsx"
+      ],
+      "values": [
+        "bluegreen",
+        "canary",
+        "rolling"
+      ]
+    },
+    {
+      "sign": "enum-value-escape",
+      "group": "F",
+      "severity": "med",
+      "confidence": "med",
+      "regime": "static",
+      "subjects": [
+        "src/enums/workflow.py",
+        "src/enums/consumer.py"
+      ],
+      "values": [
+        "queued",
+        "running",
+        "succeeded"
+      ]
+    },
+    {
+      "sign": "enum-value-escape",
+      "group": "F",
+      "severity": "low",
+      "confidence": "low",
+      "regime": "static",
+      "subjects": [
+        "src/web/kinds.ts",
+        "src/web/view.tsx"
+      ],
+      "values": [
+        "kind0",
+        "kind1",
+        "kind2",
+        "kind3"
+      ]
+    }
+  ],
+  "inactive": [
+    "A \u2014 data & source-of-truth / cross-service",
+    "B \u2014 layering (leaky abstraction)",
+    "B/C \u2014 connector topology",
+    "B \u2014 subsystem co-change",
+    "E \u2014 bug-fix weighting"
+  ],
+  "truncated": [],
+  "history": {
+    "commits_seen": 28,
+    "commits_analyzed": 0,
+    "profile_style": "conventional",
+    "fix_matched": 17,
+    "subjects_sampled": 28
+  }
+}

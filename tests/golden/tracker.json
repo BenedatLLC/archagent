@@ -1,0 +1,18 @@
+{
+  "findings": [],
+  "inactive": [
+    "A \u2014 data & source-of-truth / cross-service",
+    "B \u2014 layering (leaky abstraction)",
+    "B/C \u2014 connector topology",
+    "B \u2014 subsystem co-change",
+    "E \u2014 bug-fix weighting"
+  ],
+  "truncated": [],
+  "history": {
+    "commits_seen": 15,
+    "commits_analyzed": 0,
+    "profile_style": "leading-verb",
+    "fix_matched": 5,
+    "subjects_sampled": 15
+  }
+}
