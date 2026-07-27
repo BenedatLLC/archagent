@@ -162,10 +162,15 @@ def test_reads_string_valued_enum_members(tmp_path):
     assert len(defs[0].members) == 5
 
 
-def test_skips_enums_with_no_string_values(tmp_path):
+def test_value_less_enums_are_indexed_but_cannot_be_escaped(tmp_path):
+    """`RED = auto()` has no string value, so no string comparison can escape it — but the *name* is
+    still needed, because other files may branch on `Color.RED` itself."""
     _write(tmp_path, "src/app/e.py",
            "from enum import Enum, auto\n\n\nclass Color(Enum):\n    RED = auto()\n    BLUE = 2\n")
-    assert enum_defs(tmp_path, {"src/app/e.py"}) == []
+    _write(tmp_path, "src/app/use.py", 'if c == Color.RED:\n    pass\n')
+    defs = enum_defs(tmp_path, {"src/app/e.py"})
+    assert [(d.name, d.members) for d in defs] == [("Color", {})]
+    assert find_enum_escapes(tmp_path, {"src/app/e.py", "src/app/use.py"}) == []
 
 
 def test_reads_typescript_enums(tmp_path):
@@ -364,4 +369,71 @@ def test_enum_declarations_are_python_and_ts_only(tmp_path):
     Those files can still *escape* an enum — they just can't declare one."""
     _write(tmp_path, "src/app/status.go", 'type Status string\nconst (\n\tShipped Status = "shipped"\n)\n')
     _write(tmp_path, "src/app/Status.java", 'enum Status { SHIPPED("shipped"), PAID("paid"); }')
-    assert enum_defs(tmp_path, {"src/app/status.go", "src/app/Status.java"}) == []
+    defs = enum_defs(tmp_path, {"src/app/status.go", "src/app/Status.java"})
+    assert all(d.members == {} for d in defs)   # no string values parsed, so nothing to escape
+    assert find_enum_escapes(tmp_path, {"src/app/status.go", "src/app/Status.java"}) == []
+
+
+# --- branching on enum members, not just their values ---------------------------------------
+
+def test_branch_values_reads_enum_members_when_the_enum_is_known():
+    text = ('if state == WorkflowState.SUMMARIZED:\n    pass\n'
+            'if state is WorkflowState.RESEARCH:\n    pass\n'
+            'case WorkflowState.INITIAL:\n'
+            'if state in (WorkflowState.PAID, WorkflowState.SHIPPED):\n    pass\n')
+    got = branch_values(text, {"WorkflowState"})
+    assert got == {f"enum:WorkflowState.{m}" for m in
+                   ("SUMMARIZED", "RESEARCH", "INITIAL", "PAID", "SHIPPED")}
+
+
+def test_dotted_names_that_are_not_declared_enums_are_ignored():
+    """The qualifier is checked against enums the project actually declares — otherwise every
+    `self.config.DEBUG` and `os.path.sep` in the repo would become a 'decision'."""
+    text = ('if x == self.config.DEBUG:\n    pass\n'
+            'if y == os.sep:\n    pass\n'
+            'if state == WorkflowState.DONE:\n    pass\n')
+    assert branch_values(text, {"WorkflowState"}) == {"enum:WorkflowState.DONE"}
+    assert branch_values(text) == set()          # without the index, none of them count
+
+
+def test_enum_members_are_only_read_in_branch_positions():
+    """Assigning or returning a member is not deciding on it."""
+    text = ('state = WorkflowState.INITIAL\n'
+            'return WorkflowState.DONE\n'
+            'self.x = WorkflowState.PAID\n')
+    assert branch_values(text, {"WorkflowState"}) == set()
+
+
+def test_a_decision_dispatched_through_enum_members_is_found(tmp_path):
+    """The well-behaved form of the shape: no raw strings anywhere, so the string scan sees nothing."""
+    members = [f"WorkflowState.{m}" for m in ("INITIAL", "PAID", "SHIPPED", "REFUNDED", "CANCELLED")]
+    _write(tmp_path, "src/app/state.py",
+           "from enum import Enum\n\n\nclass WorkflowState(Enum):\n"
+           + "".join(f"    {m.split('.')[1]} = {i}\n" for i, m in enumerate(members)))
+    _write(tmp_path, "src/app/owner.py", "".join(f"if s == {m}:\n    pass\n" for m in members))
+    for i, piece in enumerate(_pieces(members)):
+        _write(tmp_path, f"src/app/p{i}.py", "".join(f"if s == {m}:\n    pass\n" for m in piece))
+    files = {"src/app/state.py", "src/app/owner.py", *(f"src/app/p{i}.py" for i in range(3))}
+    found = find_decisions(tmp_path, {"app": files})
+    assert len(found) == 1
+    assert found[0].values == sorted(members)
+    assert found[0].owner == "src/app/owner.py"
+
+
+def test_enum_members_do_not_bridge_unrelated_string_clusters(tmp_path):
+    """A member used across many files is a high-degree node. Clustered together with strings it acts as
+    a bridge, merging unrelated clusters into one incoherent blob that then fails the cohesion bar —
+    which is how enabling member extraction first *destroyed* a real, confirmed litellm cluster."""
+    oauth = ["authorization_code", "refresh_token", "client_credentials"]
+    per_file = {}
+    for i in range(4):  # a tight, real cluster of its own
+        per_file[f"oauth{i}.py"] = set(oauth if i == 0 else oauth[: 2 + (i % 2)])
+    colors = ["crimson", "cerulean", "chartreuse"]
+    for i in range(4):  # a second, unrelated tight cluster
+        per_file[f"theme{i}.py"] = set(colors if i == 0 else colors[: 2 + (i % 2)])
+    for rel in per_file:  # a member touching *everything* — the bridge
+        per_file[rel].add("enum:Mode.ACTIVE")
+    owners = {d.owner for d in cluster(per_file)}
+    values = {tuple(d.values) for d in cluster(per_file)}
+    assert values == {tuple(sorted(oauth)), tuple(sorted(colors))}
+    assert owners == {"oauth0.py", "theme0.py"}

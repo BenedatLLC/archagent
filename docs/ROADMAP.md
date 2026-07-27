@@ -202,9 +202,19 @@ the evidence argues for:
   recommendation asks the reader to make, so the wording holds. A blanket suppression of TS-only escapes
   would have discarded a real finding.
 
-- [ ] **Branch on enum *members*, not just their values.** `state == WorkflowState.SUMMARIZED` is currently
-  invisible to the clustering scan, so a decision dispatched through enum members — the well-behaved
-  version of the same shape — cannot be seen at all. The enum index needed for it already exists.
+- [x] **Branch on enum *members*, not just their values — shipped.** `state == WorkflowState.DONE`,
+  `state is WorkflowState.DONE`, `case Kind.ALPHA:` and arm forms now count as branch values when the
+  qualifier is an enum this repo declares (which is what keeps every `self.config.DEBUG` out). Added 3
+  findings on OpenHands with no losses elsewhere: `ProviderType` dispatched across 5 `app_server` files
+  and 3 `enterprise/server` files (`if provider == ProviderType.GITHUB / elif … GITLAB / elif …
+  BITBUCKET`, the same ladder re-written in each), and `AgentState` across 8 frontend files.
+
+  The implementation lesson is worth keeping: enriching the value set *broke* clustering at first.
+  Member tokens appear in many files, so union-find used them as bridges between unrelated string
+  clusters — on `litellm/proxy` everything merged into one 61-value blob at cohesion 0.09, which then
+  failed the cohesion bar and took a real, confirmed cluster down with it. The two vocabularies are now
+  clustered separately (members are tagged internally, since a dot cannot tell them apart — litellm
+  branches on the string `"response.created"`). Regression test included.
 - [ ] **The last grab-bag class: mixed-concept clusters that are dense enough to pass.** The cohesion bar
   (0.6) removed the chain-shaped grab-bags, but litellm's `integrations` cluster survives at 0.60 by mixing
   call types, kwarg names and metadata keys. Distinguishing it likely needs the values' *shape* (are they

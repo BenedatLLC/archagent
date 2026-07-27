@@ -62,6 +62,27 @@ _WHEN = re.compile(r"""\bwhen\s+(?P<q>['"])(?P<v>[^'"\n]{2,40})(?P=q)""")
 _ARM = re.compile(r"""^\s*(?P<q>['"])(?P<v>[^'"\n]{2,40})(?P=q)\s*(?:=>|->)""")
 # Java/Kotlin compare strings with `.equals(...)`, not `==`
 _EQUALS = re.compile(r"""\.equals\(\s*(?P<q>['"])(?P<v>[^'"\n]{2,40})(?P=q)""")
+
+# The same branch positions, but with an enum member as the operand: `state == WorkflowState.DONE`,
+# `state is WorkflowState.DONE` (the idiomatic Python form), `case Kind.ALPHA:`, `Kind.ALPHA -> …`.
+# A qualified name is self-namespacing — `WorkflowState.DONE` cannot collide with an unrelated
+# `Status.DONE` the way the bare string "done" collides with everything — so these need none of the
+# stop-value defences the string path does. The qualifier is checked against enums actually declared
+# in this repo, which is what keeps `self.config.DEBUG` and every other dotted name out.
+_QUAL = r"(?P<qual>[A-Za-z_]\w*)\.(?P<member>[A-Za-z_]\w*)"
+_MEMBER_PATTERNS = (
+    re.compile(r"(?:[=!]=|\bis\s+not\b|\bis\b)\s*" + _QUAL),
+    re.compile(_QUAL + r"\s*(?:[=!]=)"),
+    re.compile(r"\bcase\s+" + _QUAL),
+    re.compile(r"^\s*" + _QUAL + r"\s*(?:=>|->)"),
+)
+_QUAL_IN_SET = re.compile(r"\b([A-Za-z_]\w*)\.([A-Za-z_]\w*)\b")
+# Member tokens are tagged so they can be clustered apart from bare strings. They must be, and not
+# merely told apart by the dot: string literals contain dots too (litellm branches on
+# "response.created"). Mixing the two vocabularies in one union-find lets a widely-used member bridge
+# unrelated string clusters — on litellm/proxy that merged everything into one 61-value blob at
+# cohesion 0.09, which then failed the cohesion bar and took a real, confirmed cluster down with it.
+_ENUM_PREFIX = "enum:"
 # membership: `in ("a", "b")` / `in ['a', 'b']` / `in {'a', 'b'}` — the literals are pulled out separately
 _IN_SET = re.compile(r"""\bin\s*[\(\[\{]([^)\]\}\n]{4,300})[\)\]\}]""")
 _LITERAL = re.compile(r"""(?P<q>['"])(?P<v>[^'"\n]{2,40})(?P=q)""")
@@ -103,7 +124,7 @@ class Decision:
         return sorted(f for f in self.files if f != self.owner)
 
 
-def _line_branch_values(line: str) -> set[str]:
+def _line_branch_values(line: str, enums: set[str] | None = None) -> set[str]:
     values: set[str] = set()
     for rx in (_EQ, _EQ_REV, _CASE, _WHEN, _ARM, _EQUALS):
         for m in rx.finditer(line):
@@ -111,25 +132,42 @@ def _line_branch_values(line: str) -> set[str]:
     for m in _IN_SET.finditer(line):
         for lit in _LITERAL.finditer(m.group(1)):
             values.add(lit.group("v"))
+    if enums:
+        for rx in _MEMBER_PATTERNS:
+            for m in rx.finditer(line):
+                if m.group("qual") in enums:
+                    values.add(f"{_ENUM_PREFIX}{m.group('qual')}.{m.group('member')}")
+        for m in _IN_SET.finditer(line):
+            for q in _QUAL_IN_SET.finditer(m.group(1)):
+                if q.group(1) in enums:
+                    values.add(f"{_ENUM_PREFIX}{q.group(1)}.{q.group(2)}")
     return values
 
 
-def branch_values(text: str) -> set[str]:
-    """The domain literals a file branches on — equality tests, `case` arms, membership sets."""
+def branch_values(text: str, enums: set[str] | None = None) -> set[str]:
+    """The domain values a file branches on — equality tests, `case` arms, membership sets.
+
+    Bare string literals always; members of `enums` (the enum names this project declares) when that set
+    is supplied — without it, a decision dispatched through enum members, the well-behaved form of the
+    same shape, is invisible to the scan. Member tokens come back tagged `enum:Enum.MEMBER`, which is how
+    the two vocabularies stay in separate clusters; `Decision.values` strips the tag for display.
+    """
     values: set[str] = set()
     for line in text.splitlines():
         if _COMMENT.match(line):
             continue
-        values |= _line_branch_values(line)
+        values |= _line_branch_values(line, enums)
     return {v for v in values if _keep(v)}
 
 
 def _keep(v: str) -> bool:
     v = v.strip()
+    if v.startswith(_ENUM_PREFIX):
+        return True  # a qualified member is self-namespacing; none of the string defences apply
     return bool(v) and v.lower() not in _STOPVALUES and bool(_VALUE_OK.match(v)) and not v.isdigit()
 
 
-def scan_files(root, files: set[str]) -> dict[str, set[str]]:
+def scan_files(root, files: set[str], enums: set[str] | None = None) -> dict[str, set[str]]:
     """`file -> branched-on values`, skipping vendored, generated, and non-code files."""
     out: dict[str, set[str]] = {}
     for rel in sorted(files):
@@ -141,7 +179,7 @@ def scan_files(root, files: set[str]) -> dict[str, set[str]]:
             continue
         if looks_generated(text):
             continue
-        vals = branch_values(text)
+        vals = branch_values(text, enums)
         if vals:
             out[rel] = vals
     return out
@@ -166,7 +204,24 @@ class _Union:
             self.parent[rb] = ra
 
 
-def cluster(
+def cluster(per_file: dict[str, set[str]], subsystem: str = "", **kw) -> list[Decision]:
+    """Candidate decisions in this group — string literals and enum members clustered separately.
+
+    Keeping the two vocabularies apart is not tidiness: a member that appears in many files is a
+    high-degree node, and union-find will happily use it as a bridge between string clusters that have
+    nothing to do with each other.
+    """
+    out: list[Decision] = []
+    for member_pass in (False, True):
+        subset = {
+            rel: {v for v in vals if v.startswith(_ENUM_PREFIX) is member_pass}
+            for rel, vals in per_file.items()
+        }
+        out += _cluster_one({r: v for r, v in subset.items() if v}, subsystem, **kw)
+    return out
+
+
+def _cluster_one(
     per_file: dict[str, set[str]],
     subsystem: str = "",
     min_files: int = MIN_FILES_PER_VALUE,
@@ -227,7 +282,8 @@ def cluster(
         if dense < cohesion:
             continue  # a chain of coincidences that union-find strung together, not one decision
         out.append(Decision(
-            subsystem=subsystem, values=sorted(values), owner=owner,
+            subsystem=subsystem,
+            values=sorted(v.removeprefix(_ENUM_PREFIX) for v in values), owner=owner,
             owner_coverage=round(owner_cov, 2), cohesion=round(dense, 2),
             files={rel: coverage[rel] for rel in [owner, *sorted(pieces)]},
         ))
@@ -262,9 +318,12 @@ def find_decisions(
     """
     churn = churn or {}
     fix_churn = fix_churn or {}
+    # Built once across the whole repo, not per group: an enum is routinely declared in one subsystem
+    # (a types module) and branched on in another, and the name is what identifies it either way.
+    enums = {d.name for d in enum_defs(root, {f for fs in file_groups.values() for f in fs})}
     out: list[Decision] = []
     for group in sorted(file_groups):
-        per_file = scan_files(root, file_groups[group])
+        per_file = scan_files(root, file_groups[group], enums)
         for d in cluster(per_file, subsystem=group):
             d.churn = sum(churn.get(f, 0) for f in d.files)
             d.fix_churn = sum(fix_churn.get(f, 0) for f in d.files)
@@ -397,7 +456,7 @@ def enum_defs(root, files: set[str]) -> list[EnumDef]:
         except OSError:
             continue
         out += _py_enums(rel, text) if rel.endswith(".py") else _ts_enums(rel, text)
-    return [d for d in out if d.members]
+    return out
 
 
 def _py_enums(rel: str, text: str) -> list[EnumDef]:
@@ -440,7 +499,7 @@ def find_enum_escapes(
     when it uses the `.value` idiom, which says outright that the enum object was in hand.
     """
     churn, fix_churn = churn or {}, fix_churn or {}
-    defs = enum_defs(root, files)
+    defs = [d for d in enum_defs(root, files) if d.members]  # a value-less enum can't be escaped
     owner: dict[str, EnumDef | None] = {}
     for d in defs:
         for v in d.members.values():
