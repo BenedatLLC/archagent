@@ -104,6 +104,35 @@ Mined from `git log`; require a git repo (skip with `--no-history`, window with 
   module is a change-magnet," not "these two need a new interface."
 - **Unstable interface** (B) — a widely-depended-on subsystem that keeps changing with its dependents,
   spreading churn. Freeze its contract, or split the volatile part from the stable one.
+- **Change-prone complex file** (group E) — a single *file* that changes constantly **and** is deeply
+  nested: the classic sign of an abstraction absorbing special cases it should be delegating. Both axes are
+  percentiles within this repo, so it reads "unusually churny and unusually complex *here*". Distinct from
+  the God Component signal, which is about a whole subsystem's structure — a change-prone file often sits
+  inside one, but need not. When judging: open the file and ask what the special cases have in common; the
+  useful recommendation names the seam (a strategy per provider, a state machine, a parser split), not
+  "this file is too long".
+- **Scattered single source of truth** (group F) — one decision (a set of domain values like
+  `{pending, paid, shipped, refunded}`) branched on in several files instead of resolved in one. Found in
+  the *code* — the tool reports the likely owner (the file branching on most of the set) and the files
+  holding pieces — and ranked by how much those files churn. **Expect a specific false alarm here:**
+  adapters, database backends, and plugin families legitimately branch on the same values in parallel
+  behind one interface. That is not a defect; dismiss it with that reason in one line. Confirm it only when
+  the pieces are genuinely partial copies of one rule that can drift — then the recommendation is "these
+  N files should call the owner", naming the owner.
+
+**Both new signals are low-to-medium confidence by construction and never fail a build.** They are also
+worth cross-reading: a file that appears in *both* — churny and complex, and holding a duplicated decision —
+is usually the strongest root in the whole report, because two independent signals agree on it.
+
+### The learned commit-wording profile
+Recognizing a bug-fix commit is per-project, not universal (`Fixed #123` vs `fix(scope):` vs free-form), so
+archagent learns each repo's wording rather than hard-coding one. The JSON's `history.profile` reports what
+it learned: the `style`, the patterns, and how many sampled subjects they labelled. Check it before leaning
+on a fix-count: if `cautions` says the recognizer is over-matching or that no convention was found, read the
+fix counts as noise and use total churn instead. `archagent history-profile --evidence` dumps the raw
+facts — commit guidelines, leading-word frequencies, per-pattern match rates — if you want to judge them
+yourself and write a sharper recognizer to `.archagent/history-profile.json`; a cached profile always wins
+over the inferred one.
 
 To enable the layering checks, give each subsystem doc a `**Tier:**` line (e.g. `ui` / `domain` / `infra`);
 for the data + connector signals, give the subsystems a `**Service:**` line and a `**Connects:** … via

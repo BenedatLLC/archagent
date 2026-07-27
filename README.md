@@ -167,6 +167,13 @@ Adding a language is adding a column, not rewriting anything. Generated configs 
 `.archagent/generated/` and are gitignored — they're derived from the table and regenerated on every
 `check`.
 
+The one other file archagent writes is `.archagent/history-profile.json`: how *this* repo words its bug-fix
+commits, learned from your commit guidelines and a sample of real subjects (`archagent history-profile
+--write`). Unlike the generated configs, **commit it** — it's small, it makes the history-based `evaluate`
+signals reproducible across machines and CI, and it's the file to hand-edit (or let an agent rewrite from
+`--evidence`) when the inferred recognizer misreads your convention. `evaluate` reads it if present and
+otherwise infers one in memory; it never writes it.
+
 ## Workflow
 
 **Set up the architecture (once per repo):**
@@ -210,7 +217,9 @@ Adding a language is adding a column, not rewriting anything. Generated configs 
 - **Evaluate the architecture** — `archagent evaluate` (or **`/archagent-evaluate`**) judges the *model
   itself* for **system-level** smells and recommends fixes: **data & source-of-truth** (shared persistency,
   duplicated ownership, cross-service data intimacy, shared libraries — via `**Service:**` maps),
-  **shotgun surgery** and **unstable interfaces** (from git **co-change** history), **God Components**,
+  **shotgun surgery** and **unstable interfaces** (from git **co-change** history), **change-prone complex
+  files** and a **scattered single source of truth** (one decision re-implemented across files, ranked by
+  the churn of the files involved), **God Components**,
   **circular subsystem/service dependencies** (with shape + severity), **unstable dependencies** (Martin's
   `I = Ce/(Ca+Ce)`), **leaky abstractions** (layer inversion/skip, via `**Tier:**`), **distributed monolith**
   (a synchronous service cycle — from typed `**Connects:**` edges *and* sync-call edges inferred from the
@@ -267,9 +276,16 @@ CLI:
   circular subsystem/service dependencies (shape + severity), unstable dependencies (`I = Ce/(Ca+Ce)`,
   `DoUD ≥ 0.30`), leaky abstractions (layer inversion/skip via `**Tier:**`), **distributed monolith** +
   **extraneous adjacent connectors** (from typed `**Connects:**` edges), hard-coded service endpoints, and
-  **cross-boundary observability** (no request tracing across services); plus **git co-change** signals
-  (**shotgun surgery** / implicit coupling, **unstable interface**). `--json`, `--group A|B|C|D`,
-  `--min-severity`, `--no-history`, `--since`, `--exit-code`.
+  **cross-boundary observability** (no request tracing across services); plus **git-history** signals —
+  **shotgun surgery** / implicit coupling and **unstable interface** (subsystem co-change),
+  **change-prone complex files** (per-file churn × indentation complexity, both as within-repo
+  percentiles), and **scattered single source of truth** (one decision's value set branched on across
+  several files, with the likely owner inferred and the candidates ranked by churn).
+  `--json`, `--group A|B|C|D|E|F`, `--min-severity`, `--no-history`, `--since`, `--exit-code`.
+- `archagent history-profile` — learn how *this* repo words its bug-fix commits (`Fixed #123` vs
+  `fix(scope):` vs free-form), which the history signals above rely on. Prints what it inferred; `--write`
+  caches it to `.archagent/history-profile.json`, `--evidence` dumps the raw facts (commit guidelines,
+  leading-word frequencies, per-pattern match rates) for an agent to judge. A cached profile always wins.
 - `archagent scan-invariants` — scan docs + code for **stated invariants** (explicit `INVARIANT`/
   `@invariant`/assert/contract markers, plus modal language like MUST/NEVER/"only X may") and emit them as
   candidates for `/archagent-describe` to classify, verify, and lift into `invariants.md`. `--json`,
@@ -355,12 +371,15 @@ archagent/
 │   ├── init.py               scaffold the artifact + per-agent skills; upgrade prompts
 │   ├── drift.py              the reflexion-diff (docs vs code): the `drift` + `modules` commands
 │   ├── evaluate.py           system-level architecture smells: the `evaluate` command
+│   ├── history.py            learn this repo's bug-fix commit wording: the `history-profile` command
+│   ├── hotspots.py           churn × indentation-complexity: the change-prone-file check
+│   ├── dupdecide.py          duplicated branch-value sets: the scattered-source-of-truth check
 │   ├── status.py             per-package coverage snapshot: the `status` command
 │   ├── graph.py              Mermaid system map from metadata: the `graph` command
 │   ├── docscan.py            Mermaid diagram linter: the `lint-docs` command
 │   ├── <extraction scanners> configscan · deployscan · webapi · datamap · cochange · connscan · obsscan
 │   │                         (static, no-execution extractors: env keys, IaC, routes, datastores,
-│   │                          git co-change, connector kinds, observability)
+│   │                          git co-change + per-file churn, connector kinds, observability)
 │   └── templates/
 │       ├── architecture/     the artifact scaffold (constitution, invariants, subsystems, deployment…)
 │       └── agent/phases/     the neutral skill prompts (describe · check · invariant · evaluate)

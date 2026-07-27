@@ -6,6 +6,10 @@ Fowler's "shotgun surgery"), and an interface that keeps changing with its depen
 mine `git log --name-only`, map each commit's files to subsystems, and count how often subsystem pairs
 co-change and how often each subsystem changes.
 
+The same single pass also yields **per-file churn** — total and bug-fix-labeled — which is the change axis
+of the change-prone-file check and the ranking signal for duplicated decisions. Recognizing a bug-fix
+commit is per-project and learned, not hard-coded; see `history.py`.
+
 Static only in the sense of "no build/run" — it reads git, nothing else. Bulk commits (mass renames,
 vendoring, reformats) are excluded by a file-count cap so they don't manufacture coupling.
 """
@@ -35,6 +39,12 @@ class CoChange:
     commits_seen: int = 0         # non-merge commits in the window (before any filtering)
     bulk_skipped: int = 0         # commits skipped for exceeding max_commit_files (mass renames/reformats)
     conventional: int = 0         # commits_seen whose subject follows Conventional Commits
+    # Per-file change counts — the churn axis of the change-prone-file check and the ranking signal for
+    # duplicated decisions. Counted for every non-bulk commit, whether or not it maps to a subsystem
+    # (a file's churn is a fact about the file; subsystem coverage is a separate concern).
+    file_commits: dict[str, int] = field(default_factory=dict)      # file -> commits touching it
+    file_fix_commits: dict[str, int] = field(default_factory=dict)  # file -> fix-labeled commits touching it
+    fix_commits: int = 0          # non-bulk commits the learned recognizer labels as fixes
 
     def between(self, a: str, b: str) -> int:
         return self.pair.get(frozenset((a, b)), 0)
@@ -54,8 +64,13 @@ def mine_cochange(
     since: str | None = None,
     cap: int = 3000,
     max_commit_files: int = 50,
+    fix_re: re.Pattern | None = None,
 ) -> CoChange:
-    """Co-change counts at the subsystem level. `file_subs` maps a repo-relative file to its subsystems."""
+    """Co-change counts at the subsystem level, plus per-file churn.
+
+    `file_subs` maps a repo-relative file to its subsystems. `fix_re` is the project's learned bug-fix
+    recognizer (see `history.py`); pass None to skip the fix-weighted counts rather than guessing.
+    """
     result = CoChange()
     args = ["log", "--no-merges", "--name-only", f"--pretty=format:{_BOUNDARY}%H{_SUBJ_SEP}%s", "-n", str(cap)]
     if since:
@@ -70,9 +85,18 @@ def mine_cochange(
             result.conventional += 1
         if len(files) > max_commit_files:
             result.bulk_skipped += 1
-            continue  # skip bulk commits — they fabricate coupling
+            continue  # skip bulk commits — they fabricate coupling and inflate churn
         if not files:
             continue
+
+        is_fix = bool(fix_re and fix_re.search(subject))
+        if is_fix:
+            result.fix_commits += 1
+        for f in files:
+            result.file_commits[f] = result.file_commits.get(f, 0) + 1
+            if is_fix:
+                result.file_fix_commits[f] = result.file_fix_commits.get(f, 0) + 1
+
         subs: set[str] = set()
         for f in files:
             subs |= file_subs.get(f, set())

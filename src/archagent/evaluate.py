@@ -23,6 +23,9 @@ from .config import Config
 from .connscan import sync_call_targets
 from .datamap import store_touches, table_defs
 from .deployscan import extract_service_edges
+from .dupdecide import find_decisions
+from .history import HistoryProfile, history_profile
+from .hotspots import MAX_REPORTED, find_hotspots
 from .mdutil import strip_code_fences
 from .obsscan import scan as _obs_scan
 from .drift import (
@@ -44,6 +47,8 @@ DOUD_THRESHOLD = 0.30   # Arcan: flag Unstable Dependency when bad/total depende
 COCHANGE_THR = 4        # subsystems co-changing >= this many times are coupled (Mo/Cai/Kazman default)
 IMPACT_MIN = 3          # an interface depended on by >= this many subsystems has real impact scope
 UNSTABLE_DEPENDENTS_MIN = 2  # ... and co-changing with >= this many of them => unstable interface
+DECISION_MIN_CHURN = 2  # mean commits per involved file; below this the duplication isn't costing anything
+MAX_DECISIONS = 10      # candidates are for a person to triage, not an inventory to work through
 _EPS = 1e-9
 
 _TIER = re.compile(r"^\s*\*\*\s*Tier\s*:?\s*\*\*\s*[:：]?\s*(.+)$", re.IGNORECASE | re.MULTILINE)
@@ -89,6 +94,8 @@ class EvaluationResult:
     bulk_skipped: int = 0          # commits skipped as bulk (mass rename/reformat)
     conventional_pct: int = 0      # share of subjects following Conventional Commits
     history_cautions: list[str] = field(default_factory=list)
+    # The learned per-project bug-fix recognizer the history checks ran with (see history.py).
+    history_profile: "HistoryProfile | None" = None
 
     @property
     def any(self) -> bool:
@@ -198,17 +205,23 @@ def evaluate(config: Config, history: bool = True, since: str | None = None) -> 
     result.findings += _group_a(root, model)  # data & source-of-truth (needs >= 2 services)
     result.findings += _shared_libraries(model)
 
-    # regime B — git co-change history (shotgun surgery, unstable interface)
+    # regime B — git history. Subsystem co-change (shotgun surgery, unstable interface) needs subsystems;
+    # the per-file signals below do not, so the miner runs whenever there's a git repo.
     cc = None
-    if history and result.git_available and model.subs:
-        cc = mine_cochange(root, model.file_subs, since=since)
+    if history and result.git_available:
+        profile = history_profile(root, config.architecture_dir)
+        result.history_profile = profile
+        cc = mine_cochange(root, model.file_subs, since=since, fix_re=profile.matcher())
         result.history_ran = True
         result.history_analyzed = cc.commits_analyzed
         result.commits_seen = cc.commits_seen
         result.bulk_skipped = cc.bulk_skipped
         result.conventional_pct = cc.conventional_pct
-        result.history_cautions = _history_cautions(cc)
-        result.findings += _cochange_smells(model, cc)
+        result.history_cautions = _history_cautions(cc) + list(profile.cautions)
+        if model.subs:
+            result.findings += _cochange_smells(model, cc)
+        result.findings += _change_prone_files(config, cc, profile)
+        result.findings += _scattered_truth(config, model, cc)
 
     # service-level (deployment) static signals
     svc_edges = extract_service_edges(root)
@@ -251,12 +264,19 @@ def _coverage(model: _Model, result: "EvaluationResult", history_requested: bool
         inactive.append(("B/C — connector topology",
                          "no **Connects:** declared (some service edges are still inferred from code)"))
     if not history_requested:
-        inactive.append(("B — co-change history", "skipped (--no-history)"))
+        inactive.append(("B/E/F — git history", "skipped (--no-history)"))
     elif not result.git_available:
-        inactive.append(("B — co-change history", "git not available"))
-    elif result.history_analyzed == 0:
-        inactive.append(("B — co-change history",
-                         "no commits mapped to subsystems (declare **Covers:** so files map to subsystems)"))
+        inactive.append(("B/E/F — git history", "git not available"))
+    else:
+        if result.history_analyzed == 0:
+            inactive.append(("B — subsystem co-change",
+                             "no commits mapped to subsystems (declare **Covers:** so files map to "
+                             "subsystems); the per-file history checks still ran"))
+        prof = result.history_profile
+        if prof is not None and not prof.usable:
+            inactive.append(("E — bug-fix weighting",
+                             "no usable bug-fix commit convention was learned for this repo — "
+                             "change-prone files are ranked on total churn only"))
     return inactive
 
 
@@ -714,6 +734,83 @@ def _cochange_smells(model, cc) -> list[Finding]:
                 regime="history", confidence="med",
             ))
     return out
+
+
+# --- Group E (history): change-prone complex files ----------------------------------------
+
+def _change_prone_files(config: Config, cc, profile: "HistoryProfile") -> list[Finding]:
+    """Check A — a file that changes constantly *and* is complex, the sign of an abstraction absorbing
+    special cases. Per-file, unlike the oversized-subsystem check, and from history rather than structure."""
+    root = config.project_root
+    spots = find_hotspots(root, _source_files(config), cc.file_commits, cc.file_fix_commits)
+    if not spots:
+        return []
+    thin = cc.commits_analyzed < _HISTORY_MIN and cc.commits_seen < _HISTORY_MIN
+    out: list[Finding] = []
+    for h in spots[:MAX_REPORTED]:
+        # shown whenever a recognizer was learned at all; how much to trust it is the profile's cautions
+        fix_note = f", {h.fix_churn} fix-labeled" if profile.fix_patterns else ""
+        sev = "high" if h.score >= 0.9 else "med"
+        out.append(Finding(
+            sign="change-prone-file", group="E", severity=sev,
+            title="Change-prone complex file",
+            subjects=[h.path],
+            detail=(f"{h.churn} commit(s){fix_note}; mean indent {h.complexity} over {h.loc} lines "
+                    f"(churn p{h.churn_pct:.0%} × complexity p{h.complexity_pct:.0%})"),
+            recommendation=("Changes often and is hard to read — a candidate to refactor or split. Check "
+                            "whether it is absorbing special cases that belong behind their own abstraction."),
+            regime="history", confidence="low" if thin else "med",
+        ))
+    return out
+
+
+# --- Group F (history-ranked): scattered single source of truth ---------------------------
+
+def _scattered_truth(config: Config, model: _Model, cc) -> list[Finding]:
+    """Check B — one decision (a set of domain values) branched on in several files instead of resolved
+    once. Found in the code; git history only ranks which duplications actually cost anything."""
+    root = config.project_root
+    groups = _decision_groups(config, model)
+    if not groups:
+        return []
+    decisions = find_decisions(root, groups, cc.file_commits, cc.file_fix_commits)
+    out: list[Finding] = []
+    for d in decisions:
+        per_file = d.churn / len(d.files)
+        if per_file < DECISION_MIN_CHURN:
+            continue  # duplicated, but the files sit still — nobody is paying for it yet
+        if len(out) >= MAX_DECISIONS:
+            break
+        shown = ", ".join(d.values[:6]) + (f", +{len(d.values) - 6} more" if len(d.values) > 6 else "")
+        others = d.reimplementors
+        out.append(Finding(
+            sign="scattered-source-of-truth", group="F",
+            severity="med" if per_file >= 4 * DECISION_MIN_CHURN else "low",
+            title="Scattered single source of truth",
+            subjects=[d.owner, *others],
+            detail=(f"in {d.subsystem}: {{{shown}}} branched on in {len(d.files)} files; "
+                    f"{d.owner} holds {d.owner_coverage:.0%} of the set (likely owner), the rest hold pieces; "
+                    f"{d.churn} commit(s) across them, {d.fix_churn} fix-labeled"),
+            recommendation=(f"This decision looks re-implemented across {len(others)} file(s) beyond "
+                            f"{d.owner}. Check whether they should call the owner instead — or whether this "
+                            "is an intended family of implementations behind a shared interface, in which "
+                            "case dismiss it."),
+            regime="history", confidence="low",
+        ))
+    return out
+
+
+def _decision_groups(config: Config, model: _Model) -> dict[str, set[str]]:
+    """Where to look for a duplicated decision: the declared subsystems, or — when none are declared —
+    top-level source directories, so the check still works on a repo with no architecture docs yet."""
+    if model.files:
+        return {name: fs for name, fs in model.files.items() if fs}
+    groups: dict[str, set[str]] = {}
+    for rel in _source_files(config):
+        parts = rel.split("/")
+        key = "/".join(parts[:2]) if len(parts) > 2 else (parts[0] if len(parts) > 1 else ".")
+        groups.setdefault(key, set()).add(rel)
+    return groups
 
 
 # --- Group D: hard-coded endpoints -------------------------------------------------------

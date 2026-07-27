@@ -1,7 +1,8 @@
 ---
-status: reviewed - ready for implementation
+status: implemented (steps 1-4; step 5 deferred)
 date: 2026-07-25
 revised: 2026-07-26
+implemented: 2026-07-26
 ---
 
 # Design: Two history-based architecture checks
@@ -323,15 +324,26 @@ calibration (thresholds, the tightness bar, the ranking) is noted inline and lef
 
 0. **Experiments (§7)** — the gate. **Done** — checks confirmed worth building; Check B's candidate-finding
    changed to the code-first method above.
-1. **Miner additions** — per-file change-count and bug-fix change-count; the indentation-complexity function;
-   Step 1's cached commit-wording profile.
-2. **Check A (change-prone files)** — small, needs no new file format; ships first.
-3. **Check B (scattered single-source-of-truth)** — the code-first duplication scan (branch-value sets,
-   vendored/generated excluded, tightness-filtered), change-history ranking, and automatic owner inference,
-   reported as findings. No new file format.
-4. **Command/skill updates** — teach the `evaluate` guidance to explain the two new kinds of finding.
+1. **Miner additions** — **done**. `cochange.py` now yields per-file change-count and bug-fix change-count
+   from the same single pass; `hotspots.py` holds the indentation-complexity function; `history.py` holds
+   Step 1's commit-wording profile, cached at `.archagent/history-profile.json` and surfaced by the new
+   `archagent history-profile` command (`--evidence` dumps the raw facts for an agent to judge).
+2. **Check A (change-prone files)** — **done**. `hotspots.py` → the group-E `change-prone-file` finding.
+3. **Check B (scattered single-source-of-truth)** — **done**. `dupdecide.py` → the group-F
+   `scattered-source-of-truth` finding: branch-value sets, vendored/generated excluded, tightness-filtered,
+   owner inferred, ranked by the churn of the files involved. No new file format.
+4. **Command/skill updates** — **done**. New `E` and `F` groups in the `evaluate` output and JSON
+   (`--group A|B|C|D|E|F`), the learned profile reported under `history.profile`, and the `evaluate` skill
+   guidance extended with both signals and how to judge them (including the intended-family false alarm).
 5. **Later, if warranted:** the separate config-threading check (§6.4), and the deferred declared-owner
-   overlay with its "never calls the owner" detector (Appendix A).
+   overlay with its "never calls the owner" detector (Appendix A). Both still open.
+
+**Calibration as shipped** (the values §5 and §6 left to implementation): top-quartile bar on both hotspot
+axes (`PCTILE_BAR = 0.75`) with tied files sharing an average rank; `MIN_LOC = 30`; a value must be branched
+on in ≥3 files, a cluster needs ≥3 values, the owner must hold ≥60% of the set, and ≥2 other files must hold
+≥2 values each; a duplicated decision is only reported once its files average ≥2 commits in the window. Both
+total and fix-labeled churn are reported; total churn drives the ranking, since the learned recognizer's
+reliability varies by repo (it is reported alongside, with its cautions, so a reader can weigh it).
 
 ---
 

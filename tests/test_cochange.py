@@ -141,3 +141,40 @@ def test_history_cautions_surface_thin_and_bulk(tmp_path):
     r = evaluate(cfg)
     assert r.history_ran is True
     assert any("thin history" in c for c in r.history_cautions)
+
+
+def test_per_file_churn_counted_without_subsystems(tmp_path):
+    """Per-file churn is a fact about the file — it must not depend on the file mapping to a subsystem."""
+    cfg = _cfg(tmp_path)
+    _cochange_n(cfg, ["src/pkg/x.py", "src/pkg/y.py"], 3)
+    _commit(cfg, "solo", {"src/pkg/z.py": "only-z\n"})
+    cc = mine_cochange(tmp_path, {})   # no subsystems declared at all
+    assert cc.file_commits["src/pkg/x.py"] == 3
+    assert cc.file_commits["src/pkg/z.py"] == 1
+    assert cc.commits_analyzed == 0
+
+
+def test_fix_churn_uses_the_learned_recognizer(tmp_path):
+    import re
+    cfg = _cfg(tmp_path)
+    _commit(cfg, "Fixed #12 -- the retry loop", {"src/pkg/x.py": "a\n"})
+    _commit(cfg, "Added a widget", {"src/pkg/x.py": "b\n"})
+    _commit(cfg, "Fixed #13 -- the other loop", {"src/pkg/x.py": "c\n"})
+    cc = mine_cochange(tmp_path, {}, fix_re=re.compile(r"^Fixed #\d+"))
+    assert cc.file_commits["src/pkg/x.py"] == 3
+    assert cc.file_fix_commits["src/pkg/x.py"] == 2
+    assert cc.fix_commits == 2
+
+
+def test_no_recognizer_means_no_fix_counts(tmp_path):
+    cfg = _cfg(tmp_path)
+    _commit(cfg, "fix: something", {"src/pkg/x.py": "a\n"})
+    cc = mine_cochange(tmp_path, {})
+    assert cc.file_fix_commits == {} and cc.fix_commits == 0
+
+
+def test_bulk_commits_do_not_inflate_per_file_churn(tmp_path):
+    cfg = _cfg(tmp_path)
+    _commit(cfg, "bulk reformat", {f"src/pkg/f{i}.py": "v\n" for i in range(60)})
+    cc = mine_cochange(tmp_path, {}, max_commit_files=50)
+    assert cc.file_commits == {}

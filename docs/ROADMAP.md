@@ -155,19 +155,22 @@ Two open design decisions scope this whole section:
 
 ## Evaluate — more smell signals
 
-- [ ] **Scattered single-source-of-truth** (single-owner decision drift). A decision/state that should have
-  one owner but is re-implemented across several files. **Designed + validated on real repos** —
-  `docs/designs/hotspots-and-single-source-of-truth.md`. The check is an autonomous code-first scan: find a set of
-  domain values branched on across multiple files (tightness-filtered, vendored/generated excluded), rank by
-  change history, report as findings the agent judges — **no new file format**. A durable *declared-owner
-  list* (`capabilities.md`) that persists confirmations/dismissals is **deferred future work** — see
-  Appendix A of the design.
-- [ ] **Churn × complexity hotspots.** A *single-file* signal (distinct from pairwise co-change): a file with
+- [x] **Scattered single-source-of-truth** (single-owner decision drift). A decision/state that should have
+  one owner but is re-implemented across several files. **Shipped** as `dupdecide.py` → the group-F
+  `scattered-source-of-truth` finding: an autonomous code-first scan (domain values branched on across
+  multiple files, tightness-filtered, vendored/generated excluded), ranked by change history, reported as
+  findings the agent judges — no new file format. Design:
+  `docs/designs/hotspots-and-single-source-of-truth.md`. A durable *declared-owner list* (`capabilities.md`)
+  that persists confirmations/dismissals remains **deferred** — see Appendix A of the design. Still open:
+  the "uses the words but never calls the owner" detector, and the separate config-threading check (§6.4).
+- [x] **Churn × complexity hotspots.** A *single-file* signal (distinct from pairwise co-change): a file with
   both heavy git churn (many commits, especially bug fixes) **and** high complexity is a classic
-  bad-architecture / too-many-edge-cases smell (cf. Feathers / CodeScene hotspots). **Designed + validated**
-  — `docs/designs/hotspots-and-single-source-of-truth.md` (Check A); ships first, no new file format. Complexity via a
-  language-light indentation proxy; extend `cochange.py` (no PyDriller). Remaining calibration: percentile
-  bar, raw- vs. fix-churn axis.
+  bad-architecture / too-many-edge-cases smell (cf. Feathers / CodeScene hotspots). **Shipped** as
+  `hotspots.py` → the group-E `change-prone-file` finding: per-file churn from `cochange.py` (no PyDriller)
+  crossed with an indentation complexity proxy, both as within-repo percentiles, top quartile on both.
+  Its prerequisite — a *learned* per-repo bug-fix commit recognizer (`history.py`, the `history-profile`
+  command) — shipped with it. Remaining calibration: the percentile bar, and whether raw or fix churn is
+  the better axis.
 - [ ] **See through one hop of indirection in co-change.** Today shotgun-surgery only sees *direct* import
   edges, so two subsystems coupled through a shared factory/base look like a missing interface when the
   interface already exists (that third module). Credit transitive/indirect links (or flag the shared

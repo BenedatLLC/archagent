@@ -22,6 +22,7 @@ from .drift import find_drift, module_map
 from .evaluate import evaluate as run_evaluate
 from .generate import generate
 from .graph import collect_subsystems, graph_block, write_to_index
+from .history import PROFILE_PATH, gather_evidence, history_profile, save_profile
 from .hooks import install_hook
 from .invscan import scan_invariants
 from .init import KNOWN_AGENTS, detect_agents, init_project, upgrade_project
@@ -94,6 +95,7 @@ def help_command() -> None:
     console.print(
         "\n[dim]Cadence: check on every commit; describe + evaluate at design-review and periodically.\n"
         "Describe helpers: status (coverage) · graph --write (system map) · lint-docs (Mermaid) · modules.\n"
+        "Evaluate helper: history-profile (how this repo words its bug-fix commits, learned not hard-coded).\n"
         "`archagent gen` regenerates checker configs (check does this for you). Run any command with "
         "[bold]--help[/] for its options.\n"
         "Format spec (ADL-SPEC) + roadmap: https://github.com/BenedatLLC/archagent[/]\n"
@@ -367,14 +369,17 @@ _GROUP_TITLES = {
     "B": "Wrong boundaries / abstractions",
     "C": "Static structural",
     "D": "Lifecycle support",
+    "E": "Maintainability (change history)",
+    "F": "Single source of truth (code duplication)",
 }
+_GROUPS = tuple(_GROUP_TITLES)
 _SEV_STYLE = {"high": "red", "med": "yellow", "low": "cyan"}
 
 
 @app.command()
 def evaluate(
     project: Path = typer.Option(Path("."), help="Target repo root"),
-    group: str = typer.Option("", help="Limit to one group: A, B, C, or D"),
+    group: str = typer.Option("", help="Limit to one group: A, B, C, D, E, or F"),
     min_severity: str = typer.Option("low", help="Only show findings at/above this severity: low|med|high"),
     no_history: bool = typer.Option(False, "--no-history", help="Skip git co-change mining (regime A only, offline)"),
     since: str = typer.Option("", help="Co-change window as a git date, e.g. '12.months' or '2025-01-01'"),
@@ -411,6 +416,7 @@ def evaluate(
                 "bulk_skipped": result.bulk_skipped,
                 "conventional_pct": result.conventional_pct,
                 "cautions": result.history_cautions,
+                "profile": result.history_profile.to_dict() if result.history_profile else None,
             },
         }, indent=2))
         if exit_code and findings:
@@ -421,7 +427,7 @@ def evaluate(
     grouped: dict[str, list] = {}
     for f in sorted(findings, key=lambda x: order[x.severity], reverse=True):
         grouped.setdefault(f.group, []).append(f)
-    for g in ("A", "B", "C", "D"):
+    for g in _GROUPS:
         items = grouped.get(g)
         if not items:
             continue
@@ -437,6 +443,10 @@ def evaluate(
     if result.history_ran:
         console.print(f"[bold]History[/] — {result.history_analyzed} of {result.commits_seen} commit(s) mined "
                       f"({result.conventional_pct}% conventional, {result.bulk_skipped} bulk skipped)")
+        prof = result.history_profile
+        if prof:
+            console.print(f"  [dim]bug-fix wording learned for this repo: {prof.style} "
+                          f"({prof.fix_matched}/{prof.subjects_sampled} subjects, {prof.source})[/]")
         for c in result.history_cautions:
             console.print(f"  [yellow]caution:[/] {c}")
         console.print("")
@@ -512,6 +522,49 @@ def scan_invariants_cmd(
         console.print("")
     console.print("[dim]Each is a candidate: classify into the DSL, verify with `check` (+ non-vacuous), and\n"
                   "capture as a prose row (source cited) — promote to an active rule only on a passing check.[/]")
+
+
+@app.command(name="history-profile")
+def history_profile_cmd(
+    project: Path = typer.Option(Path("."), help="Target repo root"),
+    write: bool = typer.Option(False, "--write", help=f"Cache the inferred profile to {PROFILE_PATH}"),
+    evidence: bool = typer.Option(False, "--evidence",
+                                  help="Emit the gathered evidence as JSON for an agent to judge"),
+) -> None:
+    """Learn how *this* project words its bug-fix commits (the recognizer the history checks use).
+
+    With no options it prints what it inferred. `--evidence` dumps the raw facts — commit guidelines,
+    leading-word frequencies, how well each candidate pattern matches — so an agent can judge them and
+    write a sharper recognizer to the cache file itself. A cached profile always wins over inference.
+    """
+    root = project.resolve()
+    config = load_config(root)
+    if evidence:
+        ev = gather_evidence(root, config.architecture_dir)
+        ev.pop("_subjects", None)  # the full sample would swamp the useful part
+        print(json.dumps(ev, indent=2))
+        return
+
+    profile = history_profile(root, config.architecture_dir, use_cache=not write)
+    console.print(f"[bold]Commit-wording profile[/] — style [bold]{profile.style}[/] ({profile.source})")
+    console.print(f"  {profile.fix_matched} of {profile.subjects_sampled} sampled subject(s) read as "
+                  f"fix-labeled ({profile.fix_share:.0%})")
+    for p in profile.fix_patterns:
+        console.print(f"  [dim]pattern:[/] {p}")
+    if profile.guideline_sources:
+        console.print(f"  [dim]convention documented in: {', '.join(profile.guideline_sources)}[/]")
+    if profile.domain_terms:
+        shown = ", ".join(profile.domain_terms[:12])
+        more = f" (+{len(profile.domain_terms) - 12} more)" if len(profile.domain_terms) > 12 else ""
+        console.print(f"  [dim]domain terms: {shown}{more}[/]")
+    for c in profile.cautions:
+        console.print(f"  [yellow]caution:[/] {c}")
+    if write:
+        path = save_profile(root, profile)
+        console.print(f"\n[green]Wrote[/] {path.relative_to(root)}")
+    else:
+        console.print("\n[dim]Inferred, not cached — pass --write to persist it, or --evidence to let an "
+                      "agent judge the raw facts.[/]")
 
 
 @app.command()

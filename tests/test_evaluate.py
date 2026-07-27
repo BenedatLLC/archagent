@@ -63,7 +63,7 @@ def test_full_metadata_activates_families(tmp_path):
     assert not _has_inactive(r, "layering")
     assert not _has_inactive(r, "connector topology")
     # history still inactive because we passed history=False
-    assert _has_inactive(r, "co-change")
+    assert _has_inactive(r, "git history")
 
 
 # --- God Component ------------------------------------------------------------------------
