@@ -143,6 +143,9 @@ Mined from `git log`; require a git repo (skip with `--no-history`, window with 
   recommendation there is to generate one side from the other (or both from a shared schema); the title
   says "across a language boundary" and the detail names both languages. Cross-language cases are the more
   reliable half of the signal — nothing links the two sides, so the match can't be explained away.
+  **A purely-TypeScript escape is the weakest variant and says so**: `tsc` already rejects a stale literal
+  compared against a typed value (TS2367), for string enums, union types and `as const` unions alike, so
+  the only real risk there is a value that arrives untyped. Check that before writing it up.
 
 **Both new signals are low-to-medium confidence by construction and never fail a build.** They are also
 worth cross-reading: a file that appears in *both* — churny and complex, and holding a duplicated decision —

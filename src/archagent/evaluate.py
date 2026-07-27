@@ -23,7 +23,7 @@ from .config import Config
 from .connscan import sync_call_targets
 from .datamap import store_touches, table_defs
 from .deployscan import extract_service_edges
-from .dupdecide import find_decisions, find_enum_escapes, language_of
+from .dupdecide import find_decisions, find_enum_escapes, language_of, type_checked
 from .history import HistoryProfile, history_profile
 from .hotspots import MAX_REPORTED, find_hotspots
 from .mdutil import strip_code_fences
@@ -861,6 +861,15 @@ def _escape_advice(e, cross: list[str], same: list[str]) -> str:
     dismissal = ("Dismiss any file reading a value that genuinely arrived serialized (from JSON, a "
                  "database column, a request, a third-party webhook) — comparing that as a string is "
                  "correct.")
+    if same and all(type_checked(f) for f in same) and not cross:
+        # tsc rejects a comparison between a typed value and a literal outside its type (TS2367), so a
+        # stale string here cannot survive a build. What is left is the untyped case, which is worth
+        # checking but is a much weaker claim than the same finding in Python.
+        return ("TypeScript already rejects a stale literal compared against a typed value (TS2367), so "
+                f"this only bites where the compared value arrives untyped — a `string`/`any` field off "
+                f"an API response, or an event typed with literal unions rather than {e.enum} itself. "
+                f"Confirm that is the case before acting; otherwise the compiler is already the guard. "
+                + dismissal)
     in_language = (f"Compare against the {e.enum} member itself, or call the owner's own predicate, so "
                    "adding or renaming a member can't silently leave a stale string behind.")
     across = (f"{e.enum} is {e.definer_lang} and these files are {_langs(cross)}, so they cannot import "

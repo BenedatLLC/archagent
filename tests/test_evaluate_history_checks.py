@@ -247,3 +247,42 @@ def test_thin_subsystem_mapping_caution_does_not_disown_per_file_churn(tmp_path)
     caution = next(c for c in result.history_cautions if "mapped to subsystems" in c)
     assert "*subsystem* co-change" in caution
     assert "Per-file churn is unaffected" in caution
+
+
+def test_typescript_only_escape_defers_to_the_compiler(tmp_path):
+    """tsc rejects a comparison between a typed value and a literal outside its type (TS2367) — verified
+    for string enums, union types, `as const` unions and switch arms alike. So a stale string cannot
+    survive a TS build, and the finding is only real where the compared value arrives untyped."""
+    cfg = _cfg(tmp_path)
+    cfg.languages = ["ts"]
+    found = _escape_finding(cfg, {
+        "src/web/kinds.ts": "export enum Kind {\n  A = 'alpha',\n  B = 'bravo',\n  C = 'charlie',\n}\n",
+        "src/web/panel.tsx": 'if (k === "alpha") {}\nif (k === "bravo") {}\nif (k === "charlie") {}\n',
+    })
+    assert len(found) == 1
+    assert "TS2367" in found[0].recommendation
+    assert "arrives untyped" in found[0].recommendation
+    assert found[0].confidence == "low"
+
+
+def test_python_escape_keeps_the_stronger_claim(tmp_path):
+    """Python has no equivalent check, so the same shape there is a real defect, not a compiler note."""
+    cfg = _cfg(tmp_path)
+    found = _escape_finding(cfg, {
+        "src/pkg/state.py": STATE_ENUM,
+        "src/pkg/service.py": _escaper(["summarized", "sem-search", "research"]),
+    })
+    assert "TS2367" not in found[0].recommendation
+    assert "Compare against the WorkflowState member itself" in found[0].recommendation
+
+
+def test_cross_language_escape_is_not_softened_by_the_compiler_note(tmp_path):
+    """Neither compiler sees the other side, so nothing guards a cross-language escape."""
+    cfg = _cfg(tmp_path)
+    cfg.languages = ["python", "ts"]
+    found = _escape_finding(cfg, {
+        "src/api/state.py": STATE_ENUM,
+        "src/web/panel.tsx": _escaper(["summarized", "sem-search", "research"]),
+    })
+    assert "TS2367" not in found[0].recommendation
+    assert found[0].confidence == "med"

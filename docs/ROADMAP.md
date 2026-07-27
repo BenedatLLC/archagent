@@ -181,11 +181,18 @@ Measured over six repos with every group-F finding labelled by reading the cited
 error), enum escape 84%, Check A defensible with no labelling surprises. What is left, roughly in the order
 the evidence argues for:
 
-- [ ] **TypeScript union-of-string-literal types as declared owners.** `type Status = "a" | "b" | "c"` is
-  the idiomatic TS equivalent of an enum and is invisible to `enum_defs`, which only reads `enum X { … }`.
-  This is why opencode produced **zero** enum escapes across 3121 TS files, and why every TS escaper found
-  on OpenHands pointed at a *Python* enum: the TS half of the detector has had almost no real exercise.
-  Reading union types is the single biggest recall gap in the signal.
+- [x] **TypeScript union-of-string-literal types as declared owners — investigated, and deliberately not
+  built.** The premise was wrong. Running `tsc --strict` on the four shapes shows it already rejects a
+  comparison between a typed value and a literal outside its type (TS2367) for string enums, union types,
+  `as const` unions and `switch` arms alike. A stale string cannot survive a TypeScript build when the
+  compared value is typed, so treating unions as owners would have flagged idiomatic, compiler-checked
+  code. opencode's zero TS escapes is therefore *correct behaviour*, not a recall gap. The narrowing
+  shipped instead: a purely-TypeScript escape now says so and defers to the compiler, since it only bites
+  where the value arrives untyped (a `string`/`any` field off an API response, or — as with OpenHands'
+  `ActionType` — an event typed with literal unions rather than the enum). Python keeps the stronger claim,
+  having no such checker, and cross-language escapes are unaffected because neither compiler sees the other
+  side. **Open:** confirm with a real `tsc` run whether the two surviving TS-only findings
+  (`ActionType`, `I18nKey`) are guarded in practice; reading suggests they are.
 - [ ] **Branch on enum *members*, not just their values.** `state == WorkflowState.SUMMARIZED` is currently
   invisible to the clustering scan, so a decision dispatched through enum members — the well-behaved
   version of the same shape — cannot be seen at all. The enum index needed for it already exists.

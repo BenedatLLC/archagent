@@ -367,6 +367,19 @@ def language_of(rel: str) -> str:
     return _LANG_BY_EXT.get(rel[dot:], "") if dot != -1 else ""
 
 
+def type_checked(rel: str) -> bool:
+    """Whether a compiler already guards this file's literal comparisons.
+
+    `tsc` reports TS2367 on a comparison between a typed value and a literal that is not one of its
+    members — verified for string enums, union types, `as const` unions, and `switch` arms alike. So a
+    stale string in TypeScript cannot survive a build *when the compared value is typed*, and an escape
+    there is only a real risk where the value arrives untyped (a `string`/`any` field off an API
+    response, or an event declared with literal unions rather than the enum). Python has no equivalent
+    check, and plain JavaScript has no checker at all — hence `.ts`/`.tsx` only.
+    """
+    return rel.endswith((".ts", ".tsx"))
+
+
 def enum_defs(root, files: set[str]) -> list[EnumDef]:
     """Every string-valued enum the project declares. Auto-numbered and `auto()` members are skipped:
     only a member with a string value can be escaped by a string comparison.
