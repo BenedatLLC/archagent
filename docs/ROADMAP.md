@@ -160,9 +160,11 @@ Two open design decisions scope this whole section:
   `scattered-source-of-truth` finding: an autonomous code-first scan (domain values branched on across
   multiple files, tightness-filtered, vendored/generated excluded), ranked by change history, reported as
   findings the agent judges — no new file format. Design:
-  `docs/designs/hotspots-and-single-source-of-truth.md`. A durable *declared-owner list* (`capabilities.md`)
-  that persists confirmations/dismissals remains **deferred** — see Appendix A of the design. Still open:
-  the "uses the words but never calls the owner" detector, and the separate config-threading check (§6.4).
+  `docs/designs/hotspots-and-single-source-of-truth.md`. The Appendix-A **"never calls the owner"** detector
+  also shipped, by a different route: where the project already *declares* an owner as an enum, no
+  `capabilities.md` entry is needed to know the authority, so `find_enum_escapes` flags files that re-decide
+  it by comparing against its raw member strings. A durable *declared-owner list* that persists
+  confirmations/dismissals remains **deferred** — see the follow-ups below for what it would buy.
 - [x] **Churn × complexity hotspots.** A *single-file* signal (distinct from pairwise co-change): a file with
   both heavy git churn (many commits, especially bug fixes) **and** high complexity is a classic
   bad-architecture / too-many-edge-cases smell (cf. Feathers / CodeScene hotspots). **Shipped** as
@@ -171,6 +173,50 @@ Two open design decisions scope this whole section:
   Its prerequisite — a *learned* per-repo bug-fix commit recognizer (`history.py`, the `history-profile`
   command) — shipped with it. Remaining calibration: the percentile bar, and whether raw or fix churn is
   the better axis.
+
+### Follow-ups from the evaluation pass
+
+Measured over six repos with every group-F finding labelled by reading the cited code; full record in
+`research/architecture-agent/feedback/probe-results.md`. Current state: Check B 71% confirmed (7% detector
+error), enum escape 84%, Check A defensible with no labelling surprises. What is left, roughly in the order
+the evidence argues for:
+
+- [ ] **TypeScript union-of-string-literal types as declared owners.** `type Status = "a" | "b" | "c"` is
+  the idiomatic TS equivalent of an enum and is invisible to `enum_defs`, which only reads `enum X { … }`.
+  This is why opencode produced **zero** enum escapes across 3121 TS files, and why every TS escaper found
+  on OpenHands pointed at a *Python* enum: the TS half of the detector has had almost no real exercise.
+  Reading union types is the single biggest recall gap in the signal.
+- [ ] **Branch on enum *members*, not just their values.** `state == WorkflowState.SUMMARIZED` is currently
+  invisible to the clustering scan, so a decision dispatched through enum members — the well-behaved
+  version of the same shape — cannot be seen at all. The enum index needed for it already exists.
+- [ ] **The last grab-bag class: mixed-concept clusters that are dense enough to pass.** The cohesion bar
+  (0.6) removed the chain-shaped grab-bags, but litellm's `integrations` cluster survives at 0.60 by mixing
+  call types, kwarg names and metadata keys. Distinguishing it likely needs the values' *shape* (are they
+  drawn from one naming family?) rather than more graph statistics.
+- [ ] **Durable dismissals.** Three of fourteen surviving group-F findings are intended families — database
+  backends, per-protocol adapters — that are correct to surface once and re-surface on every run forever.
+  This is the concrete case for the deferred declared-owner overlay, and the clearest thing it would buy.
+- [ ] **Threshold sensitivity sweep.** Eight knobs (`PCTILE_BAR`, `MIN_LOC`, `MIN_FILES_PER_VALUE`,
+  `TIGHTNESS`, `COHESION`, `MIN_ESCAPED_VALUES`, `MIN_PAIR_COVERAGE`, `DECISION_MIN_CHURN`), each set from
+  one repo's false alarms. Nobody knows which are load-bearing and which are decoration.
+- [ ] **Golden-output fixture.** Unit tests cover mechanics; nothing catches an aggregate behaviour change.
+  A small committed repo with asserted findings would make regressions show up as a diff — the four fixes
+  in the evaluation pass were all found by hand, and would not have been caught by CI.
+- [ ] **Validate the dismissal guidance with an unprimed reader.** Whether the skill text *leads* someone
+  to dismiss an intended family correctly is still untested — the one run of it was by a session that had
+  already labelled the findings.
+- [ ] **Smaller known gaps.** Aliased imports (`import WorkflowState as WS`) are missed; `_IN_SET` reads a
+  `for x in ("a", "b"):` loop header as a membership test; `enum_defs` skips Java/Kotlin enums (their
+  bodies carry constructor arguments the parser doesn't read) and Go, which has no enum construct.
+- [ ] **A repo where subsystems cut across directories.** Declaring `**Covers:**` for datasette proved the
+  subsystem-grouped path of Check B *runs* (and activated 8 co-change findings the directory fallback could
+  not produce), but its subsystems track its directories too closely to show whether the grouping choice
+  changes what is found.
+- [ ] **Separate config-threading check** (design §6.4) — "key X is read in files A, B and C; is one owner
+  passing it through, or does each read it independently and risk a stale default?" Built on the config
+  scanner `drift` already has, so the raw fact is already extracted deterministically. Untouched.
+### More signals
+
 - [ ] **See through one hop of indirection in co-change.** Today shotgun-surgery only sees *direct* import
   edges, so two subsystems coupled through a shared factory/base look like a missing interface when the
   interface already exists (that third module). Credit transitive/indirect links (or flag the shared
