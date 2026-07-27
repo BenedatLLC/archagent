@@ -185,3 +185,24 @@ def test_command_reports_cautions_when_nothing_is_learned(tmp_path):
     result = _run("--project", str(tmp_path))
     assert result.exit_code == 0
     assert "caution" in result.stdout
+
+
+def test_issue_closing_trailers_are_not_fix_labels(tmp_path):
+    """Datasette trails `closes #N` on features and docs alike. Because that out-counted its real
+    `Fix ...` vocabulary 582 to 353, a widest-first learner picked issue-closing as the repo's notion
+    of a fix and reported a 17% fix rate against an actual 10%. Ticket-lifecycle words are not fix
+    words — only the fix verbs are."""
+    subjects = [f"Add feature {i}, closes #{i}" for i in range(12)]
+    subjects += [f"Document thing {i}, resolves #{i}" for i in range(6)]
+    subjects += [f"Fix the {i} bug" for i in range(9)]
+    p = _profile(tmp_path, subjects)
+    labelled = _labels(p, subjects)
+    assert all(s.startswith("Fix the") for s in labelled)
+    assert len(labelled) == 9
+
+
+def test_a_genuine_fix_trailer_still_counts(tmp_path):
+    subjects = [f"Correct the {i} rounding error (fixes #{i})" for i in range(8)]
+    subjects += [f"Add feature {i}" for i in range(8)]
+    p = _profile(tmp_path, subjects)
+    assert len(_labels(p, subjects)) == 8

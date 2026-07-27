@@ -43,13 +43,16 @@ _CANDIDATES: list[tuple[str, str]] = [
     ("scoped-verb", r"^\s*[\w./-]+\s*:\s*(?:bug|hot)?fix(?:es|ed)?\b"),
     # bracketed tag: `[Fix]`, `[bugfix]`, `[hotfix] …`
     ("bracket-tag", r"^\s*\[\s*(?:bug|hot)?fix(?:es|ed)?\s*\]"),
-    # tracker reference: `Fixed #12345`, `Closes PROJ-456`. Deliberately not `Refs #99` — a commit that
-    # *references* a ticket is as often a feature as a fix, and including it inflates the fix rate badly.
-    ("tracker-ref", r"^\s*(?:fixed|fixes|fix|closes|closed|resolves|resolved)\b[\s:]*#?(?:[A-Z]+-)?\d+"),
+    # tracker reference: `Fixed #12345`, `Fixes PROJ-456`. Deliberately *only* the fix verbs. `Refs`,
+    # `Closes` and `Resolves` are ticket-lifecycle words that say nothing about the kind of work: on
+    # Datasette `closes #N` trails feature and docs commits alike (582 of them, against 353 that the
+    # project itself labels `Fix ...`), and including it made the learner pick issue-closing as the
+    # repo's "fix" vocabulary. See probe-results.md, evaluation pass.
+    ("tracker-ref", r"^\s*(?:fixed|fixes|fix)\b[\s:]*#?(?:[A-Z]+-)?\d+"),
     # leading fix verb with no punctuation convention: `Fix the retry loop`
     ("leading-verb", r"^\s*(?:bug|hot)?fix(?:es|ed)?\b"),
-    # trailer anywhere in the subject: `… (fixes #123)`
-    ("trailer-ref", r"\b(?:fixes|fixed|closes|resolves)\s+#\d+"),
+    # trailer anywhere in the subject: `… (fixes #123)` — again fix verbs only, not `closes`/`resolves`
+    ("trailer-ref", r"\b(?:fixes|fixed)\s+#\d+"),
     # last resort for free-form histories — noisy, so only used when nothing above matches
     ("free-form", r"\b(?:bug|regression|crash|broken|incorrect|traceback|hotfix)\b"),
 ]
