@@ -41,6 +41,12 @@ MIN_CLUSTER_VALUES = 3      # below this, a "decision" is just a pair like {crea
 TIGHTNESS = 0.6             # some file must branch on this share of the cluster's values (the owner)
 MIN_REIMPLEMENTORS = 2      # ... and this many other files must hold a piece of it
 MIN_PIECE = 2               # a file counts as a re-implementor at this many of the cluster's values
+# Union-find only needs a *chain* to merge values into one "decision": a co-occurs with b, b with c, and
+# a and c are joined although they never appear together. A real decision is denser than a chain — most
+# pairs of its values genuinely co-occur. Measured over the labelled clusters of the evaluation pass:
+# every confirmed finding scored >= 0.67, while the two grab-bags scored 0.26 and 0.57 (a 23-value
+# opencode cluster mixing message roles, session status, error names and the JS `typeof` results).
+COHESION = 0.6
 _MAX_VALUES_PER_FILE = 200  # a file this broad is a table or a test fixture, not one decision
 
 _CODE_EXTS = (".py", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".go", ".rb", ".java", ".kt", ".rs")
@@ -49,6 +55,13 @@ _CODE_EXTS = (".py", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".go", ".rb",
 _EQ = re.compile(r"""[=!]=\s*(?P<q>['"])(?P<v>[^'"\n]{2,40})(?P=q)""")
 _EQ_REV = re.compile(r"""(?P<q>['"])(?P<v>[^'"\n]{2,40})(?P=q)\s*[=!]=""")
 _CASE = re.compile(r"""\bcase\s+(?P<q>['"])(?P<v>[^'"\n]{2,40})(?P=q)""")
+# Ruby's `when "x"`, and the arm form Rust (`match`) and Kotlin (`when`) share: a literal opening the
+# line, then `=>` or `->`. Anchoring at the line start keeps it away from JS arrow functions and object
+# literals, which never lead with a bare quoted string followed by an arrow.
+_WHEN = re.compile(r"""\bwhen\s+(?P<q>['"])(?P<v>[^'"\n]{2,40})(?P=q)""")
+_ARM = re.compile(r"""^\s*(?P<q>['"])(?P<v>[^'"\n]{2,40})(?P=q)\s*(?:=>|->)""")
+# Java/Kotlin compare strings with `.equals(...)`, not `==`
+_EQUALS = re.compile(r"""\.equals\(\s*(?P<q>['"])(?P<v>[^'"\n]{2,40})(?P=q)""")
 # membership: `in ("a", "b")` / `in ['a', 'b']` / `in {'a', 'b'}` — the literals are pulled out separately
 _IN_SET = re.compile(r"""\bin\s*[\(\[\{]([^)\]\}\n]{4,300})[\)\]\}]""")
 _LITERAL = re.compile(r"""(?P<q>['"])(?P<v>[^'"\n]{2,40})(?P=q)""")
@@ -62,6 +75,12 @@ _STOPVALUES = {
     "http", "https", "get", "post", "put", "patch", "delete", "head", "options",
     "win32", "darwin", "linux", "posix", "nt", "utf-16", "ignore", "strict", "replace",
     "__main__", "__init__", "self", "cls", "args", "kwargs",
+    # DOM `KeyboardEvent.key` names. Several UI components each handling their own keys is ordinary
+    # event handling, not one decision torn apart — and the vocabulary belongs to the platform, not to
+    # this system, so no file here could be its owner. (Deliberately not `home`, `end`, `delete` or
+    # `space`, which are as often domain words as key names.)
+    "arrowup", "arrowdown", "arrowleft", "arrowright", "escape", "enter", "tab", "backspace",
+    "capslock", "pageup", "pagedown", "shift", "control", "alt", "meta",
 }
 _COMMENT = re.compile(r"^\s*(#|//|\*|/\*)")
 
@@ -75,6 +94,7 @@ class Decision:
     owner: str                              # the file branching on most of the value set
     owner_coverage: float                   # share of the set the owner branches on
     files: dict[str, int] = field(default_factory=dict)   # file -> how many of the values it branches on
+    cohesion: float = 1.0                   # share of the value pairs that actually co-occur
     churn: int = 0                          # total commits across the involved files
     fix_churn: int = 0                      # of those, fix-labeled
 
@@ -85,7 +105,7 @@ class Decision:
 
 def _line_branch_values(line: str) -> set[str]:
     values: set[str] = set()
-    for rx in (_EQ, _EQ_REV, _CASE):
+    for rx in (_EQ, _EQ_REV, _CASE, _WHEN, _ARM, _EQUALS):
         for m in rx.finditer(line):
             values.add(m.group("v"))
     for m in _IN_SET.finditer(line):
@@ -153,6 +173,7 @@ def cluster(
     min_shared: int = MIN_SHARED_FILES,
     min_values: int = MIN_CLUSTER_VALUES,
     tightness: float = TIGHTNESS,
+    cohesion: float = COHESION,
 ) -> list[Decision]:
     """Group co-occurring duplicated values into candidate decisions, keeping only the tight ones."""
     value_files: dict[str, set[str]] = {}
@@ -202,12 +223,29 @@ def cluster(
         pieces = [rel for rel, n in coverage.items() if rel != owner and n >= MIN_PIECE]
         if len(pieces) < MIN_REIMPLEMENTORS:
             continue
+        dense = _cohesion(values, co, min_shared)
+        if dense < cohesion:
+            continue  # a chain of coincidences that union-find strung together, not one decision
         out.append(Decision(
             subsystem=subsystem, values=sorted(values), owner=owner,
-            owner_coverage=round(owner_cov, 2),
+            owner_coverage=round(owner_cov, 2), cohesion=round(dense, 2),
             files={rel: coverage[rel] for rel in [owner, *sorted(pieces)]},
         ))
     return out
+
+
+def _cohesion(values: list[str], co: dict[tuple[str, str], int], min_shared: int) -> float:
+    """Share of the cluster's value pairs that actually co-occur — 1.0 for a clique, low for a chain."""
+    pairs = len(values) * (len(values) - 1) // 2
+    if pairs == 0:
+        return 1.0
+    linked = sum(
+        1
+        for i, a in enumerate(values)
+        for b in values[i + 1:]
+        if max(co.get((a, b), 0), co.get((b, a), 0)) >= min_shared
+    )
+    return linked / pairs
 
 
 def find_decisions(
@@ -331,7 +369,12 @@ def language_of(rel: str) -> str:
 
 def enum_defs(root, files: set[str]) -> list[EnumDef]:
     """Every string-valued enum the project declares. Auto-numbered and `auto()` members are skipped:
-    only a member with a string value can be escaped by a string comparison."""
+    only a member with a string value can be escaped by a string comparison.
+
+    **Python and TypeScript/JavaScript only.** Go has no enum construct at all (its `const` blocks are
+    a different shape), and Java/Kotlin enum bodies carry constructor arguments this parser does not
+    read. Files in other languages are still scanned for *escapes* — they just cannot declare an owner.
+    """
     out: list[EnumDef] = []
     for rel in sorted(files):
         if not rel.endswith(_CODE_EXTS) or is_excluded(rel):

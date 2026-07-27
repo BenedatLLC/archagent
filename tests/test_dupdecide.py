@@ -285,3 +285,83 @@ def test_related_extensions_count_as_one_language(tmp_path):
     _write(tmp_path, "web/panel.tsx", _escaper(["alpha", "bravo", "charlie"]))
     e = find_enum_escapes(tmp_path, {"web/kinds.ts", "web/panel.tsx"})[0]
     assert e.cross_language == []
+
+
+# --- cohesion: a decision is a dense cluster, not a chain ----------------------------------
+
+def test_a_chain_of_coincidences_is_not_one_decision(tmp_path):
+    """Union-find merges a-b, b-c, c-d into one cluster although a and d never co-occur. A large enough
+    file can then 'own' most of it and clear the tightness bar. Real clusters are dense; this is not."""
+    pairs = [("alpha", "bravo"), ("bravo", "charlie"), ("charlie", "delta"), ("delta", "echo")]
+    per_file = {}
+    for i, (a, b) in enumerate(pairs):
+        for k in range(3):  # each adjacent pair co-occurs in 3 files, so union-find links the chain
+            per_file[f"link{i}_{k}.py"] = {a, b}
+    per_file["big.py"] = {"alpha", "bravo", "charlie", "delta", "echo"}  # touches everything
+    assert cluster(per_file) == []
+    loose = cluster(per_file, cohesion=0.0)
+    assert loose and loose[0].cohesion < 0.6   # it is only the cohesion bar that rejects it
+
+
+def test_a_dense_cluster_keeps_its_high_cohesion(tmp_path):
+    per_file = {"state.py": set(STATES)}
+    for i, piece in enumerate(_pieces(STATES)):
+        per_file[f"p{i}.py"] = set(piece)
+    found = cluster(per_file)
+    assert len(found) == 1 and found[0].cohesion == 1.0
+
+
+def test_keyboard_key_names_are_not_domain_values():
+    """Several components each handling their own keys is ordinary event handling, and the vocabulary
+    belongs to the DOM, not to this system — no file here could be its owner."""
+    text = ('if key == "ArrowUp":\n    pass\n'
+            'if key == "Escape":\n    pass\n'
+            'if key == "shipped":\n    pass\n')
+    assert branch_values(text) == {"shipped"}
+
+
+def test_a_cluster_of_only_key_names_disappears(tmp_path):
+    keys = ["ArrowUp", "ArrowDown", "Enter", "Escape"]
+    _write(tmp_path, "src/ui/list.tsx", _piece(keys))
+    _write(tmp_path, "src/ui/scroll.tsx", _piece(keys[:3]))
+    _write(tmp_path, "src/ui/menu.tsx", _piece(keys[1:]))
+    files = {"src/ui/list.tsx", "src/ui/scroll.tsx", "src/ui/menu.tsx"}
+    assert find_decisions(tmp_path, {"ui": files}) == []
+
+
+# --- the languages _CODE_EXTS advertises ---------------------------------------------------
+
+def test_extracts_branch_values_from_go():
+    assert {"pending", "shipped"} <= branch_values(
+        'if kind == "pending" {\n}\nswitch kind {\ncase "shipped":\n}\n')
+
+
+def test_extracts_branch_values_from_ruby():
+    assert {"pending", "shipped"} <= branch_values(
+        'if kind == "pending"\nend\ncase kind\nwhen "shipped"\nend\n')
+
+
+def test_extracts_branch_values_from_java():
+    """Java compares strings with .equals(), not ==, so the == forms alone would miss its idiom."""
+    assert {"pending", "shipped"} <= branch_values(
+        'if (kind.equals("pending")) { }\nswitch (kind) {\n  case "shipped": break;\n}\n')
+
+
+def test_extracts_match_arms_from_kotlin_and_rust():
+    kotlin = 'when (kind) {\n    "shipped" -> a()\n    "pending" -> b()\n}\n'
+    rust = 'match kind {\n    "shipped" => 1,\n    "pending" => 2,\n}\n'
+    assert {"pending", "shipped"} <= branch_values(kotlin)
+    assert {"pending", "shipped"} <= branch_values(rust)
+
+
+def test_arrow_functions_are_not_read_as_match_arms():
+    """The arm pattern must not fire on JS/TS arrows, which are everywhere."""
+    assert branch_values('const f = (x) => x + 1\nitems.map((i) => i.id)\nconst h = () => "shipped"\n') == set()
+
+
+def test_enum_declarations_are_python_and_ts_only(tmp_path):
+    """Go has no enum construct; Java/Kotlin enum bodies carry constructor args this parser can't read.
+    Those files can still *escape* an enum — they just can't declare one."""
+    _write(tmp_path, "src/app/status.go", 'type Status string\nconst (\n\tShipped Status = "shipped"\n)\n')
+    _write(tmp_path, "src/app/Status.java", 'enum Status { SHIPPED("shipped"), PAID("paid"); }')
+    assert enum_defs(tmp_path, {"src/app/status.go", "src/app/Status.java"}) == []
