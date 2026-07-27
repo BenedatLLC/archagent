@@ -19,13 +19,21 @@ architecture is well-formed.**
 ## Steps
 1. Run `archagent evaluate --json` and read the findings. Also read the relevant `architecture/subsystems/*.md`,
    `deployment.md`, and `constitution.md` for the intended design.
-2. **Check the run's coverage first — before reading a single finding as good news.** The JSON's `inactive`
-   list names every signal family that produced *nothing because the metadata it needs is absent* (no
-   `**Service:**`, `**Tier:**`, or `**Connects:**`). A group with zero findings there is **not** "clean" —
-   it wasn't measured. If a family you care about is inactive, the highest-value move is often to add that
-   metadata (in the `describe` step) and re-run, not to write a report. Likewise read `history`: if
-   `cautions` flags a thin or bulk-heavy or non-conventional history, weight the co-change findings lightly
-   and say so.
+2. **Check the run's coverage first — before reading a single finding as good news.** Three fields, all
+   of which change what the findings mean:
+   - `inactive` names every signal family that produced *nothing because the metadata it needs is absent*
+     (no `**Service:**`, `**Tier:**`, or `**Connects:**`). A group with zero findings there is **not**
+     "clean" — it wasn't measured. If a family you care about is inactive, the highest-value move is often
+     to add that metadata (in the `describe` step) and re-run, not to write a report. Note that groups E
+     and F need none of that metadata: they run on any repo with git, and F's enum signal runs without git
+     at all, so their silence *is* meaningful.
+   - `truncated` names any family whose list was capped at its highest-ranked few. "10 findings" there
+     means "10 of N" — say so in the report rather than implying the list is the whole inventory.
+   - `history.cautions` and `history.profile` say how far to trust the history. Read the caution's scope:
+     "only N commits mapped to subsystems" limits the *subsystem* co-change signals only — per-file churn,
+     which drives group E and F's ranking, still used the whole window. If the profile reports no usable
+     bug-fix convention, or warns it is over-matching, read the fix-labeled counts as noise and lean on
+     total churn.
 3. For each candidate, decide:
    - **Confirm** — real problem. Explain the impact in this system's terms (what change becomes risky/slow).
    - **Dismiss** — expected here (say why: e.g. an intentional shared kernel, a framework-imposed hub).

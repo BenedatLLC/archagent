@@ -206,3 +206,44 @@ def test_mixed_escape_gives_both_recommendations(tmp_path):
     rec = found[0].recommendation
     assert "For the 1 in python:" in rec and "For the 1 across the language boundary:" in rec
     assert found[0].title == "Enum bypassed by its raw values"  # not purely cross-language
+
+
+# --- coverage reporting: a capped list must not read as a complete inventory ----------------
+
+def test_truncated_lists_are_reported(tmp_path):
+    """`showing 10 of 78` and `10 findings` are very different claims. Never let the cap be silent."""
+    cfg = _cfg(tmp_path)
+    # 15 nested + churny against 35 flat + stable: the 15 tie at the top of both axes, so all of them
+    # clear the top-quartile bar and more than MAX_REPORTED qualify
+    hot = [f"src/pkg/hot{i}.py" for i in range(15)]
+    cold = {f"src/pkg/cold{i}.py": _flat() for i in range(35)}
+    _commit(cfg, "init", {**cold, **{h: _nested() for h in hot}})
+    for i in range(1, 6):
+        _commit(cfg, f"c{i}", {h: _nested(salt=i) for h in hot})
+    result = evaluate(cfg)
+    fams = {fam: (shown, found) for fam, shown, found in result.truncated}
+    assert "E — change-prone complex files" in fams
+    shown, found = fams["E — change-prone complex files"]
+    assert shown == 10 and found > 10
+    assert len(_of(result, "change-prone-file")) == shown
+
+
+def test_nothing_is_reported_as_truncated_when_it_fits(tmp_path):
+    cfg = _cfg(tmp_path)
+    _commit(cfg, "init", {"src/pkg/hot.py": _nested(), "src/pkg/b.py": _flat(), "src/pkg/c.py": _flat()})
+    for i in range(1, 5):
+        _commit(cfg, f"c{i}", {"src/pkg/hot.py": _nested(salt=i)})
+    assert evaluate(cfg).truncated == []
+
+
+def test_thin_subsystem_mapping_caution_does_not_disown_per_file_churn(tmp_path):
+    """The caution used to read as though the whole history were thin, which would wrongly discount the
+    change-prone-file findings that in fact used every commit in the window."""
+    cfg = _cfg(tmp_path)   # no **Covers:** anywhere, so nothing maps to a subsystem
+    _commit(cfg, "init", {"src/pkg/hot.py": _nested(), "src/pkg/b.py": _flat()})
+    for i in range(1, 8):
+        _commit(cfg, f"c{i}", {"src/pkg/hot.py": _nested(salt=i)})
+    result = evaluate(cfg)
+    caution = next(c for c in result.history_cautions if "mapped to subsystems" in c)
+    assert "*subsystem* co-change" in caution
+    assert "Per-file churn is unaffected" in caution

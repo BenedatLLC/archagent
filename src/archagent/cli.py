@@ -409,6 +409,7 @@ def evaluate(
             "git_available": result.git_available,
             "history_analyzed": result.history_analyzed,
             "inactive": [{"family": fam, "reason": why} for fam, why in result.inactive],
+            "truncated": [{"family": fam, "shown": n, "found": m} for fam, n, m in result.truncated],
             "history": {
                 "ran": result.history_ran,
                 "commits_seen": result.commits_seen,
@@ -449,6 +450,11 @@ def evaluate(
                           f"({prof.fix_matched}/{prof.subjects_sampled} subjects, {prof.source})[/]")
         for c in result.history_cautions:
             console.print(f"  [yellow]caution:[/] {c}")
+        console.print("")
+    if result.truncated:
+        console.print("[bold]Truncated[/] — these lists are the highest-ranked, not everything found:")
+        for fam, shown, found in result.truncated:
+            console.print(f"  [dim]{fam}[/] — showing {shown} of {found}")
         console.print("")
     if result.inactive:
         console.print("[bold]Inactive signals[/] — produced no findings for lack of metadata (not proof of "

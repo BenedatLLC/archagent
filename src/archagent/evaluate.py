@@ -94,6 +94,9 @@ class EvaluationResult:
     bulk_skipped: int = 0          # commits skipped as bulk (mass rename/reformat)
     conventional_pct: int = 0      # share of subjects following Conventional Commits
     history_cautions: list[str] = field(default_factory=list)
+    # Signal families whose output was capped. A ranked top-10 read as a complete inventory is the
+    # difference between "10 problems" and "10 of 41 problems" — never let that be invisible.
+    truncated: list[tuple[str, int, int]] = field(default_factory=list)  # (family, shown, found)
     # The learned per-project bug-fix recognizer the history checks ran with (see history.py).
     history_profile: "HistoryProfile | None" = None
 
@@ -220,12 +223,12 @@ def evaluate(config: Config, history: bool = True, since: str | None = None) -> 
         result.history_cautions = _history_cautions(cc) + list(profile.cautions)
         if model.subs:
             result.findings += _cochange_smells(model, cc)
-        result.findings += _change_prone_files(config, cc, profile)
-        result.findings += _scattered_truth(config, model, cc)
+        result.findings += _change_prone_files(config, cc, profile, result)
+        result.findings += _scattered_truth(config, model, cc, result)
 
     # The enum-escape check is a pure code scan — the owner is declared, not inferred from history — so
     # unlike the two above it runs with no git at all. Churn only orders the results when it is there.
-    result.findings += _enum_escapes(config, cc)
+    result.findings += _enum_escapes(config, cc, result)
 
     # service-level (deployment) static signals
     svc_edges = extract_service_edges(root)
@@ -288,8 +291,9 @@ def _history_cautions(cc: "CoChange") -> list[str]:
     """Reasons the co-change signal may be weak, surfaced so a reader doesn't over-trust regime B."""
     out: list[str] = []
     if cc.commits_analyzed < _HISTORY_MIN:
-        out.append(f"thin history — only {cc.commits_analyzed} commit(s) mapped to subsystems; "
-                   "co-change smells are low-confidence")
+        out.append(f"only {cc.commits_analyzed} commit(s) mapped to subsystems — the *subsystem* "
+                   "co-change smells are low-confidence. Per-file churn is unaffected: the "
+                   f"change-prone-file and ranking signals still used all {cc.commits_seen} commit(s)")
     if cc.bulk_pct >= _BULK_PCT_WARN:
         out.append(f"{cc.bulk_pct}% of commits skipped as bulk ({cc.bulk_skipped}/{cc.commits_seen}) — "
                    "a mass reformat/regen can dilute the signal")
@@ -742,14 +746,16 @@ def _cochange_smells(model, cc) -> list[Finding]:
 
 # --- Group E (history): change-prone complex files ----------------------------------------
 
-def _change_prone_files(config: Config, cc, profile: "HistoryProfile") -> list[Finding]:
+def _change_prone_files(config: Config, cc, profile: "HistoryProfile", result=None) -> list[Finding]:
     """Check A — a file that changes constantly *and* is complex, the sign of an abstraction absorbing
     special cases. Per-file, unlike the oversized-subsystem check, and from history rather than structure."""
     root = config.project_root
     spots = find_hotspots(root, _source_files(config), cc.file_commits, cc.file_fix_commits)
     if not spots:
         return []
-    thin = cc.commits_analyzed < _HISTORY_MIN and cc.commits_seen < _HISTORY_MIN
+    thin = cc.commits_seen < _HISTORY_MIN
+    if result is not None and len(spots) > MAX_REPORTED:
+        result.truncated.append(("E — change-prone complex files", MAX_REPORTED, len(spots)))
     out: list[Finding] = []
     for h in spots[:MAX_REPORTED]:
         # shown whenever a recognizer was learned at all; how much to trust it is the profile's cautions
@@ -770,7 +776,7 @@ def _change_prone_files(config: Config, cc, profile: "HistoryProfile") -> list[F
 
 # --- Group F (history-ranked): scattered single source of truth ---------------------------
 
-def _scattered_truth(config: Config, model: _Model, cc) -> list[Finding]:
+def _scattered_truth(config: Config, model: _Model, cc, result=None) -> list[Finding]:
     """Check B — one decision (a set of domain values) branched on in several files instead of resolved
     once. Found in the code; git history only ranks which duplications actually cost anything."""
     root = config.project_root
@@ -778,6 +784,9 @@ def _scattered_truth(config: Config, model: _Model, cc) -> list[Finding]:
     if not groups:
         return []
     decisions = find_decisions(root, groups, cc.file_commits, cc.file_fix_commits)
+    eligible = [d for d in decisions if d.churn / len(d.files) >= DECISION_MIN_CHURN]
+    if result is not None and len(eligible) > MAX_DECISIONS:
+        result.truncated.append(("F — scattered single source of truth", MAX_DECISIONS, len(eligible)))
     out: list[Finding] = []
     for d in decisions:
         per_file = d.churn / len(d.files)
@@ -804,13 +813,15 @@ def _scattered_truth(config: Config, model: _Model, cc) -> list[Finding]:
     return out
 
 
-def _enum_escapes(config: Config, cc) -> list[Finding]:
+def _enum_escapes(config: Config, cc, result=None) -> list[Finding]:
     """The declared-owner half of Check B: an enum is the single source of truth for a set of values,
     and some other file re-decides it by comparing against those values as raw strings."""
     escapes = find_enum_escapes(
         config.project_root, _source_files(config),
         cc.file_commits if cc else None, cc.file_fix_commits if cc else None,
     )
+    if result is not None and len(escapes) > MAX_DECISIONS:
+        result.truncated.append(("F — enum bypassed by its raw values", MAX_DECISIONS, len(escapes)))
     out: list[Finding] = []
     for e in escapes[:MAX_DECISIONS]:
         where = "; ".join(
