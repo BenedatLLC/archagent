@@ -23,7 +23,7 @@ from .config import Config
 from .connscan import sync_call_targets
 from .datamap import store_touches, table_defs
 from .deployscan import extract_service_edges
-from .dupdecide import find_decisions, find_enum_escapes
+from .dupdecide import find_decisions, find_enum_escapes, language_of
 from .history import HistoryProfile, history_profile
 from .hotspots import MAX_REPORTED, find_hotspots
 from .mdutil import strip_code_fences
@@ -818,21 +818,52 @@ def _enum_escapes(config: Config, cc) -> list[Finding]:
         )
         shown = ", ".join(e.values[:6]) + (f", +{len(e.values) - 6} more" if len(e.values) > 6 else "")
         unwrapped = sorted(e.unwrapped)
+        cross, same = e.cross_language, e.same_language
+        note = (f"; {len(unwrapped)} unwrap it with `.value ==`" if unwrapped else "")
+        if cross:
+            note += (f"; {len(cross)} of them are {_langs(cross)} while {e.enum} is "
+                     f"{e.definer_lang} — no import can cross that boundary")
         out.append(Finding(
             sign="enum-value-escape", group="F",
             severity="med" if unwrapped or len(e.escapes) >= 3 else "low",
-            title="Enum bypassed by its raw values",
+            title=("Enum vocabulary duplicated across a language boundary" if cross and not same
+                   else "Enum bypassed by its raw values"),
             subjects=[e.definer, *e.files],
             detail=(f"{e.enum} (declared in {e.definer}) is compared as bare strings "
-                    f"{{{shown}}} in {len(e.escapes)} other file(s): {where}"
-                    + (f"; {len(unwrapped)} unwrap it with `.value ==`" if unwrapped else "")),
-            recommendation=(f"These files re-decide what {e.enum} already owns. Compare against the enum "
-                            "member itself, or call the owner's own predicate, so adding or renaming a "
-                            "member can't silently leave a stale string behind. Dismiss the ones reading a "
-                            "value that genuinely arrived serialized (from JSON, a DB column, a request)."),
-            regime="static", confidence="med" if unwrapped else "low",
+                    f"{{{shown}}} in {len(e.escapes)} other file(s): {where}{note}"),
+            recommendation=_escape_advice(e, cross, same),
+            # A cross-language escape is the more reliable half of this signal: nothing links the two
+            # sides, so there is no compiler or import to explain the match away as coincidence. Every
+            # cross-language case in the evaluation pass held up under review.
+            regime="static", confidence="med" if (unwrapped or cross) else "low",
         ))
     return out
+
+
+def _langs(files: list[str]) -> str:
+    return "/".join(sorted({language_of(f) or "unknown" for f in files}))
+
+
+def _escape_advice(e, cross: list[str], same: list[str]) -> str:
+    """What to actually do — which differs entirely depending on whether the escapers *could* import
+    the enum. Telling a TypeScript file to compare against a Python enum member is not advice."""
+    dismissal = ("Dismiss any file reading a value that genuinely arrived serialized (from JSON, a "
+                 "database column, a request, a third-party webhook) — comparing that as a string is "
+                 "correct.")
+    in_language = (f"Compare against the {e.enum} member itself, or call the owner's own predicate, so "
+                   "adding or renaming a member can't silently leave a stale string behind.")
+    across = (f"{e.enum} is {e.definer_lang} and these files are {_langs(cross)}, so they cannot import "
+              "it — the second copy of the vocabulary is unavoidable, and nothing on either side will "
+              "flag it when the two drift apart. Generate the other language's constants from this enum "
+              "(or both from one schema) and compare against those, rather than leaving bare strings "
+              "spread across the boundary.")
+    if cross and not same:
+        return f"{across} {dismissal}"
+    if cross:
+        return (f"These files re-decide what {e.enum} already owns. For the {len(same)} in "
+                f"{e.definer_lang}: {in_language} For the {len(cross)} across the language boundary: "
+                f"{across} {dismissal}")
+    return f"These files re-decide what {e.enum} already owns. {in_language} {dismissal}"
 
 
 def _decision_groups(config: Config, model: _Model) -> dict[str, set[str]]:

@@ -128,6 +128,13 @@ Mined from `git log`; require a git repo (skip with `--no-history`, window with 
   file, so they never reach the "duplicated across three files" bar. This is the only group-F signal that
   runs without git. The dismissal to expect: a value that genuinely arrived serialized (a JSON field, a DB
   column, a request parameter) is legitimately compared as a string.
+  **Read which of the two variants you got**, because the fix is different. When the escaping files share
+  the enum's language, they can just import it. When they don't — a Python enum compared as bare strings by
+  the TypeScript frontend, which was 5 of 9 such findings on one real repo — no import exists to fix it: a
+  second copy of the vocabulary is unavoidable, and *nothing on either side fails* when the two drift. The
+  recommendation there is to generate one side from the other (or both from a shared schema); the title
+  says "across a language boundary" and the detail names both languages. Cross-language cases are the more
+  reliable half of the signal — nothing links the two sides, so the match can't be explained away.
 
 **Both new signals are low-to-medium confidence by construction and never fail a build.** They are also
 worth cross-reading: a file that appears in *both* — churny and complex, and holding a duplicated decision —

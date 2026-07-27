@@ -268,6 +268,13 @@ _TS_MEMBER = re.compile(r"""(?P<member>\w+)\s*=\s*(?P<q>['"`])(?P<v>[^'"`\n]+)(?
 # reads a ref), and it only counts in Python, where `.value` is how you unwrap an enum member. In
 # TypeScript `.value` is an ordinary property name — Vue compares a Babel AST node's `key.value`
 # against `'set'`, which has nothing to do with the `TriggerOpTypes` enum that also has a `set`.
+# Which language a file belongs to. An enum can only be *imported* by files in its own language, so
+# whether the escapers share the definer's language changes what the fix even is.
+_LANG_BY_EXT = {
+    ".py": "python",
+    ".ts": "ts", ".tsx": "ts", ".js": "ts", ".jsx": "ts", ".mjs": "ts", ".cjs": "ts",
+    ".go": "go", ".rb": "ruby", ".java": "jvm", ".kt": "jvm", ".rs": "rust",
+}
 _UNWRAPPED = re.compile(r"""\.value\s*(?:[=!]=|\bin\b|\bnot\s+in\b)|[=!]=\s*[\w.\[\]()'"]*\.value\b""")
 
 
@@ -294,8 +301,32 @@ class EnumEscape:
         return sorted(self.escapes)
 
     @property
+    def definer_lang(self) -> str:
+        return language_of(self.definer)
+
+    @property
+    def cross_language(self) -> list[str]:
+        """Escapers written in a different language from the enum.
+
+        These cannot be fixed by importing the enum — no import crosses the boundary — so the finding
+        has to recommend something else. Measured on OpenHands: five of nine escapes were a Python enum
+        with TypeScript escapers, three of them exclusively so.
+        """
+        return sorted(f for f in self.escapes if language_of(f) != self.definer_lang)
+
+    @property
+    def same_language(self) -> list[str]:
+        return sorted(f for f in self.escapes if language_of(f) == self.definer_lang)
+
+    @property
     def values(self) -> list[str]:
         return sorted({v for hits in self.escapes.values() for _, v in hits})
+
+
+def language_of(rel: str) -> str:
+    """The language family of a path, or "" when unrecognized."""
+    dot = rel.rfind(".")
+    return _LANG_BY_EXT.get(rel[dot:], "") if dot != -1 else ""
 
 
 def enum_defs(root, files: set[str]) -> list[EnumDef]:

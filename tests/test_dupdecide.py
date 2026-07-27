@@ -256,3 +256,32 @@ def test_vendored_and_test_files_are_not_scanned(tmp_path):
     _write(tmp_path, "src/vendor/x.py", _escaper(["summarized", "sem-search", "research"]))
     assert find_enum_escapes(tmp_path, {"src/app/state.py", "tests/test_chat.py",
                                         "src/vendor/x.py"}) == []
+
+
+def test_cross_language_escapers_are_identified(tmp_path):
+    """A Python enum whose escapers are TypeScript is still a real duplicated vocabulary, but it cannot
+    be fixed by importing the enum — there is no import across that boundary."""
+    _write(tmp_path, "api/models.py", STATE_ENUM)
+    _write(tmp_path, "web/panel.tsx", _escaper(["summarized", "sem-search", "research"]))
+    _write(tmp_path, "api/service.py", _escaper(["summarized", "sem-search", "research"]))
+    found = find_enum_escapes(tmp_path, {"api/models.py", "web/panel.tsx", "api/service.py"})
+    e = found[0]
+    assert e.definer_lang == "python"
+    assert e.cross_language == ["web/panel.tsx"]
+    assert e.same_language == ["api/service.py"]
+
+
+def test_same_language_escapers_are_not_flagged_as_cross(tmp_path):
+    _write(tmp_path, "api/models.py", STATE_ENUM)
+    _write(tmp_path, "api/service.py", _escaper(["summarized", "sem-search", "research"]))
+    e = find_enum_escapes(tmp_path, {"api/models.py", "api/service.py"})[0]
+    assert e.cross_language == [] and e.same_language == ["api/service.py"]
+
+
+def test_related_extensions_count_as_one_language(tmp_path):
+    """`.ts` and `.tsx` can import each other, so an escape between them is not cross-language."""
+    _write(tmp_path, "web/kinds.ts",
+           "export enum Kind {\n  A = 'alpha',\n  B = 'bravo',\n  C = 'charlie',\n}\n")
+    _write(tmp_path, "web/panel.tsx", _escaper(["alpha", "bravo", "charlie"]))
+    e = find_enum_escapes(tmp_path, {"web/kinds.ts", "web/panel.tsx"})[0]
+    assert e.cross_language == []

@@ -145,3 +145,64 @@ def test_falls_back_to_directories_when_no_subsystems_declared(tmp_path):
     _churn_the_decision(cfg)
     found = _of(evaluate(cfg), "scattered-source-of-truth")
     assert found and found[0].detail.startswith("in src/orders:")
+
+
+# --- the enum-value escape, and what it recommends -----------------------------------------
+
+STATE_ENUM = ('from enum import Enum\n\n\nclass WorkflowState(Enum):\n'
+              '    INITIAL = "initial"\n    SUMMARIZED = "summarized"\n'
+              '    SEM_SEARCH = "sem-search"\n    RESEARCH = "research"\n')
+
+
+def _escaper(values):
+    return "".join(f'if name == "{v}":\n    pass\n' for v in values)
+
+
+def _escape_finding(cfg, files):
+    _commit(cfg, "init", files)
+    return _of(evaluate(cfg), "enum-value-escape")
+
+
+def test_same_language_escape_says_import_the_member(tmp_path):
+    cfg = _cfg(tmp_path)
+    found = _escape_finding(cfg, {
+        "src/pkg/state.py": STATE_ENUM,
+        "src/pkg/service.py": _escaper(["summarized", "sem-search", "research"]),
+    })
+    assert len(found) == 1
+    f = found[0]
+    assert f.title == "Enum bypassed by its raw values"
+    assert "Compare against the WorkflowState member itself" in f.recommendation
+    assert "cannot import" not in f.recommendation
+
+
+def test_cross_language_escape_recommends_generating_the_other_side(tmp_path):
+    """Telling a TypeScript file to compare against a Python enum member is not advice."""
+    cfg = _cfg(tmp_path)
+    cfg.languages = ["python", "ts"]
+    found = _escape_finding(cfg, {
+        "src/api/state.py": STATE_ENUM,
+        "src/web/panel.tsx": _escaper(["summarized", "sem-search", "research"]),
+    })
+    assert len(found) == 1
+    f = found[0]
+    assert f.title == "Enum vocabulary duplicated across a language boundary"
+    assert "cannot import" in f.recommendation
+    assert "Generate the other language's constants" in f.recommendation
+    assert "Compare against the WorkflowState member itself" not in f.recommendation
+    assert "no import can cross that boundary" in f.detail
+    # nothing links the two sides, so a match can't be coincidence the way a same-language one might
+    assert f.confidence == "med"
+
+
+def test_mixed_escape_gives_both_recommendations(tmp_path):
+    cfg = _cfg(tmp_path)
+    cfg.languages = ["python", "ts"]
+    found = _escape_finding(cfg, {
+        "src/api/state.py": STATE_ENUM,
+        "src/api/service.py": _escaper(["summarized", "sem-search", "research"]),
+        "src/web/panel.tsx": _escaper(["summarized", "sem-search", "research"]),
+    })
+    rec = found[0].recommendation
+    assert "For the 1 in python:" in rec and "For the 1 across the language boundary:" in rec
+    assert found[0].title == "Enum bypassed by its raw values"  # not purely cross-language
