@@ -191,8 +191,17 @@ the evidence argues for:
   where the value arrives untyped (a `string`/`any` field off an API response, or — as with OpenHands'
   `ActionType` — an event typed with literal unions rather than the enum). Python keeps the stronger claim,
   having no such checker, and cross-language escapes are unaffected because neither compiler sees the other
-  side. **Open:** confirm with a real `tsc` run whether the two surviving TS-only findings
-  (`ActionType`, `I18nKey`) are guarded in practice; reading suggests they are.
+  side.
+
+  **Verified with a real `tsc` run** (OpenHands frontend, deps installed, baseline typecheck clean, stale
+  literal injected at each finding site): `ActionType` errors at both sites — TS2367 in `guards.ts:44` and
+  TS2678 in `get-action-content.ts:132` — so it is compiler-guarded and its finding is a false positive.
+  `I18nKey` produces **no error**, because `type Suggestion = { label: I18nKey | string }` widens the field
+  back to `string`, so TypeScript can never narrow it and the switch is unchecked; renaming a member would
+  leave those arms silently stale. One guarded, one real — exactly the distinction the narrowed
+  recommendation asks the reader to make, so the wording holds. A blanket suppression of TS-only escapes
+  would have discarded a real finding.
+
 - [ ] **Branch on enum *members*, not just their values.** `state == WorkflowState.SUMMARIZED` is currently
   invisible to the clustering scan, so a decision dispatched through enum members — the well-behaved
   version of the same shape — cannot be seen at all. The enum index needed for it already exists.
