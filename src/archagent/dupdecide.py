@@ -22,6 +22,10 @@ The pipeline, all deterministic:
 What survives is a *candidate*. Adapters, database backends, and plugin families legitimately branch on the
 same values in parallel; the scan surfaces them and the reviewer dismisses them. That is the intended
 division of labour — the code finds facts, the model judges them.
+
+A second detector lives at the bottom of this module: `find_enum_escapes`. Where the scan above *infers*
+the decision and its owner, an enum *declares* both — which makes a sharper question answerable, and is the
+"never calls the owner" idea of the design's Appendix A.
 """
 
 from __future__ import annotations
@@ -79,18 +83,24 @@ class Decision:
         return sorted(f for f in self.files if f != self.owner)
 
 
+def _line_branch_values(line: str) -> set[str]:
+    values: set[str] = set()
+    for rx in (_EQ, _EQ_REV, _CASE):
+        for m in rx.finditer(line):
+            values.add(m.group("v"))
+    for m in _IN_SET.finditer(line):
+        for lit in _LITERAL.finditer(m.group(1)):
+            values.add(lit.group("v"))
+    return values
+
+
 def branch_values(text: str) -> set[str]:
     """The domain literals a file branches on — equality tests, `case` arms, membership sets."""
     values: set[str] = set()
     for line in text.splitlines():
         if _COMMENT.match(line):
             continue
-        for rx in (_EQ, _EQ_REV, _CASE):
-            for m in rx.finditer(line):
-                values.add(m.group("v"))
-        for m in _IN_SET.finditer(line):
-            for lit in _LITERAL.finditer(m.group(1)):
-                values.add(lit.group("v"))
+        values |= _line_branch_values(line)
     return {v for v in values if _keep(v)}
 
 
@@ -222,4 +232,176 @@ def find_decisions(
             d.fix_churn = sum(fix_churn.get(f, 0) for f in d.files)
             out.append(d)
     out.sort(key=lambda d: (-d.churn, -d.fix_churn, -len(d.values), d.owner))
+    return out
+
+
+# --- the enum-value escape: a declared owner bypassed by its own serialized values ---------
+#
+# The duplication scan above infers the decision from co-occurrence. When the project has already
+# *declared* one — an enum — the owner is not a guess, and a sharper question becomes answerable:
+# does anyone re-decide it by comparing against the enum's raw string values instead of calling the
+# owner? That is the "never calls the owner" detector of the design's Appendix A, arriving through a
+# door the clustering scan can't use.
+#
+# Found in the wild on the first repo it was pointed at: a `WorkflowState` enum with a full set of
+# transition methods beside it, and one file asking `current_state.value == "summarized"` five times.
+# The clustering scan cannot see that — the enum's values are *assigned* in the definer and only
+# *compared* in one other file, so they never reach the "branched on in >= 3 files" bar.
+
+# Precision knobs, all set by measuring false alarms on real repos. The failure mode is a *word
+# collision*: LiteLLM has a `Role` enum containing "system", and a hundred files compare an API
+# payload's `role` field to "system" without knowing that enum exists. Requiring either several of
+# the enum's members or a real share of them separates "re-deciding this enum" from "using a word
+# that happens to be one of its values".
+MIN_ESCAPED_VALUES = 3      # this many distinct members escaped in one file is enough on its own
+MIN_PAIR_COVERAGE = 0.5     # ... or two, if they are at least this share of the whole enum
+
+_ENUM_BASE = re.compile(r"\b(?:Enum|IntEnum|StrEnum|Flag|IntFlag)\b")
+_PY_CLASS = re.compile(r"^(?P<indent>[ \t]*)class\s+(?P<name>\w+)\s*\((?P<bases>[^)]*)\)\s*:")
+_PY_MEMBER = re.compile(
+    r"""^[ \t]+(?P<member>[A-Za-z_]\w*)\s*(?::[^=\n]+)?=\s*(?P<q>['"])(?P<v>[^'"\n]+)(?P=q)""")
+_TS_ENUM = re.compile(r"\benum\s+(?P<name>\w+)\s*\{(?P<body>[^}]*)\}", re.DOTALL)
+_TS_MEMBER = re.compile(r"""(?P<member>\w+)\s*=\s*(?P<q>['"`])(?P<v>[^'"`\n]+)(?P=q)""")
+# `state.value == "x"` — the enum object is in hand and deliberately unwrapped, which is close to
+# conclusive. Two guards, both learned from false alarms: it must be *adjacent to the comparison*
+# (a bare `.value` anywhere on the line matches every other line of a Vue codebase, where `.value`
+# reads a ref), and it only counts in Python, where `.value` is how you unwrap an enum member. In
+# TypeScript `.value` is an ordinary property name — Vue compares a Babel AST node's `key.value`
+# against `'set'`, which has nothing to do with the `TriggerOpTypes` enum that also has a `set`.
+_UNWRAPPED = re.compile(r"""\.value\s*(?:[=!]=|\bin\b|\bnot\s+in\b)|[=!]=\s*[\w.\[\]()'"]*\.value\b""")
+
+
+@dataclass
+class EnumDef:
+    name: str
+    file: str
+    members: dict[str, str] = field(default_factory=dict)   # member name -> its string value
+
+
+@dataclass
+class EnumEscape:
+    """An enum whose string values are compared directly, outside the file that declares it."""
+
+    enum: str
+    definer: str
+    escapes: dict[str, list[tuple[int, str]]] = field(default_factory=dict)  # file -> [(line, value)]
+    unwrapped: set[str] = field(default_factory=set)   # files using the `.value` idiom
+    churn: int = 0
+    fix_churn: int = 0
+
+    @property
+    def files(self) -> list[str]:
+        return sorted(self.escapes)
+
+    @property
+    def values(self) -> list[str]:
+        return sorted({v for hits in self.escapes.values() for _, v in hits})
+
+
+def enum_defs(root, files: set[str]) -> list[EnumDef]:
+    """Every string-valued enum the project declares. Auto-numbered and `auto()` members are skipped:
+    only a member with a string value can be escaped by a string comparison."""
+    out: list[EnumDef] = []
+    for rel in sorted(files):
+        if not rel.endswith(_CODE_EXTS) or is_excluded(rel):
+            continue
+        try:
+            text = (root / rel).read_text(errors="replace")
+        except OSError:
+            continue
+        out += _py_enums(rel, text) if rel.endswith(".py") else _ts_enums(rel, text)
+    return [d for d in out if d.members]
+
+
+def _py_enums(rel: str, text: str) -> list[EnumDef]:
+    lines = text.splitlines()
+    out: list[EnumDef] = []
+    for i, line in enumerate(lines):
+        m = _PY_CLASS.match(line)
+        if not m or not _ENUM_BASE.search(m.group("bases")):
+            continue
+        indent = len(m.group("indent").expandtabs(4))
+        members: dict[str, str] = {}
+        for body in lines[i + 1:]:
+            if body.strip() and len(body.expandtabs(4)) - len(body.expandtabs(4).lstrip()) <= indent:
+                break  # dedented out of the class body
+            mm = _PY_MEMBER.match(body)
+            if mm:
+                members[mm.group("member")] = mm.group("v")
+        out.append(EnumDef(name=m.group("name"), file=rel, members=members))
+    return out
+
+
+def _ts_enums(rel: str, text: str) -> list[EnumDef]:
+    return [
+        EnumDef(name=m.group("name"), file=rel,
+                members={x.group("member"): x.group("v") for x in _TS_MEMBER.finditer(m.group("body"))})
+        for m in _TS_ENUM.finditer(text)
+    ]
+
+
+def find_enum_escapes(
+    root,
+    files: set[str],
+    churn: dict[str, int] | None = None,
+    fix_churn: dict[str, int] | None = None,
+) -> list[EnumEscape]:
+    """Files that branch on an enum's raw string values instead of on the enum itself.
+
+    A value claimed by two different enums is dropped — it can't be attributed, and guessing would
+    manufacture findings. A file is only reported when it escapes several of one enum's values, or
+    when it uses the `.value` idiom, which says outright that the enum object was in hand.
+    """
+    churn, fix_churn = churn or {}, fix_churn or {}
+    defs = enum_defs(root, files)
+    owner: dict[str, EnumDef | None] = {}
+    for d in defs:
+        for v in d.members.values():
+            if not _keep(v):
+                continue
+            owner[v] = None if v in owner and owner[v] is not d else d
+    claimed = {v: d for v, d in owner.items() if d is not None}
+    if not claimed:
+        return []
+
+    found: dict[str, EnumEscape] = {}
+    for rel in sorted(files):
+        if not rel.endswith(_CODE_EXTS) or is_excluded(rel):
+            continue
+        try:
+            text = (root / rel).read_text(errors="replace")
+        except OSError:
+            continue
+        if looks_generated(text):
+            continue
+        per_enum: dict[str, list[tuple[int, str]]] = {}
+        unwrapped: set[str] = set()
+        for lineno, line in enumerate(text.splitlines(), 1):
+            if _COMMENT.match(line):
+                continue
+            for v in _line_branch_values(line):
+                d = claimed.get(v)
+                if d is None or d.file == rel:
+                    continue  # unknown value, or the enum's own declaring file
+                per_enum.setdefault(d.name, []).append((lineno, v))
+                if rel.endswith(".py") and _UNWRAPPED.search(line):
+                    unwrapped.add(d.name)
+        for name, hits in per_enum.items():
+            d = next(x for x in defs if x.name == name)
+            distinct = len({v for _, v in hits})
+            coverage = distinct / len(d.members)
+            strong = name in unwrapped
+            if not (strong or distinct >= MIN_ESCAPED_VALUES
+                    or (distinct >= 2 and coverage >= MIN_PAIR_COVERAGE)):
+                continue  # too few of the enum's members to be anything but a word collision
+            esc = found.setdefault(name, EnumEscape(enum=name, definer=d.file))
+            esc.escapes[rel] = sorted(hits)
+            if name in unwrapped:
+                esc.unwrapped.add(rel)
+
+    out = list(found.values())
+    for esc in out:
+        esc.churn = sum(churn.get(f, 0) for f in esc.escapes)
+        esc.fix_churn = sum(fix_churn.get(f, 0) for f in esc.escapes)
+    out.sort(key=lambda e: (-e.churn, -len(e.escapes), e.enum))
     return out

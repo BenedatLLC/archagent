@@ -23,7 +23,7 @@ from .config import Config
 from .connscan import sync_call_targets
 from .datamap import store_touches, table_defs
 from .deployscan import extract_service_edges
-from .dupdecide import find_decisions
+from .dupdecide import find_decisions, find_enum_escapes
 from .history import HistoryProfile, history_profile
 from .hotspots import MAX_REPORTED, find_hotspots
 from .mdutil import strip_code_fences
@@ -222,6 +222,10 @@ def evaluate(config: Config, history: bool = True, since: str | None = None) -> 
             result.findings += _cochange_smells(model, cc)
         result.findings += _change_prone_files(config, cc, profile)
         result.findings += _scattered_truth(config, model, cc)
+
+    # The enum-escape check is a pure code scan — the owner is declared, not inferred from history — so
+    # unlike the two above it runs with no git at all. Churn only orders the results when it is there.
+    result.findings += _enum_escapes(config, cc)
 
     # service-level (deployment) static signals
     svc_edges = extract_service_edges(root)
@@ -796,6 +800,37 @@ def _scattered_truth(config: Config, model: _Model, cc) -> list[Finding]:
                             "is an intended family of implementations behind a shared interface, in which "
                             "case dismiss it."),
             regime="history", confidence="low",
+        ))
+    return out
+
+
+def _enum_escapes(config: Config, cc) -> list[Finding]:
+    """The declared-owner half of Check B: an enum is the single source of truth for a set of values,
+    and some other file re-decides it by comparing against those values as raw strings."""
+    escapes = find_enum_escapes(
+        config.project_root, _source_files(config),
+        cc.file_commits if cc else None, cc.file_fix_commits if cc else None,
+    )
+    out: list[Finding] = []
+    for e in escapes[:MAX_DECISIONS]:
+        where = "; ".join(
+            f"{f}:{','.join(str(ln) for ln, _ in e.escapes[f][:3])}" for f in e.files[:4]
+        )
+        shown = ", ".join(e.values[:6]) + (f", +{len(e.values) - 6} more" if len(e.values) > 6 else "")
+        unwrapped = sorted(e.unwrapped)
+        out.append(Finding(
+            sign="enum-value-escape", group="F",
+            severity="med" if unwrapped or len(e.escapes) >= 3 else "low",
+            title="Enum bypassed by its raw values",
+            subjects=[e.definer, *e.files],
+            detail=(f"{e.enum} (declared in {e.definer}) is compared as bare strings "
+                    f"{{{shown}}} in {len(e.escapes)} other file(s): {where}"
+                    + (f"; {len(unwrapped)} unwrap it with `.value ==`" if unwrapped else "")),
+            recommendation=(f"These files re-decide what {e.enum} already owns. Compare against the enum "
+                            "member itself, or call the owner's own predicate, so adding or renaming a "
+                            "member can't silently leave a stale string behind. Dismiss the ones reading a "
+                            "value that genuinely arrived serialized (from JSON, a DB column, a request)."),
+            regime="static", confidence="med" if unwrapped else "low",
         ))
     return out
 

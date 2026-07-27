@@ -335,8 +335,20 @@ calibration (thresholds, the tightness bar, the ranking) is noted inline and lef
 4. **Command/skill updates** — **done**. New `E` and `F` groups in the `evaluate` output and JSON
    (`--group A|B|C|D|E|F`), the learned profile reported under `history.profile`, and the `evaluate` skill
    guidance extended with both signals and how to judge them (including the intended-family false alarm).
-5. **Later, if warranted:** the separate config-threading check (§6.4), and the deferred declared-owner
-   overlay with its "never calls the owner" detector (Appendix A). Both still open.
+5. **Later, if warranted:** the separate config-threading check (§6.4) — still open — and the deferred
+   declared-owner overlay (Appendix A), still deferred as a *file format*. Its **"never calls the owner"
+   detector shipped without it**: where the project already declares an owner as an **enum**, no
+   `capabilities.md` entry is needed to know the authority or the key words, so `find_enum_escapes`
+   flags files that re-decide the enum by comparing against its raw member strings
+   (`state.value == "summarized"` instead of `WorkflowState.SUMMARIZED`). This catches a shape the
+   clustering scan structurally cannot: the enum's values are *assigned* in the definer and only
+   *compared* elsewhere, so they never reach the "branched on in ≥3 files" bar. Precision comes from two
+   measured guards — a file must escape ≥3 of the enum's members, or ≥2 that are ≥50% of it (LiteLLM has
+   a `Role` enum containing "system", and dozens of files compare an API payload's role to `"system"`
+   knowing nothing of it); and the near-conclusive `.value ==` unwrap only counts in Python, since in
+   TypeScript `.value` is an ordinary property (Vue compares a Babel node's `key.value` to `'set'`,
+   unrelated to its `TriggerOpTypes.SET`). Measured after both guards: 0 findings on Django, 0 on
+   Datasette, 0 on vue-core, 17 on LiteLLM, and the 1 real one on my-research-assistant that prompted it.
 
 **Calibration as shipped** (the values §5 and §6 left to implementation): top-quartile bar on both hotspot
 axes (`PCTILE_BAR = 0.75`) with tied files sharing an average rank; `MIN_LOC = 30`; a value must be branched

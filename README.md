@@ -279,8 +279,9 @@ CLI:
   **cross-boundary observability** (no request tracing across services); plus **git-history** signals —
   **shotgun surgery** / implicit coupling and **unstable interface** (subsystem co-change),
   **change-prone complex files** (per-file churn × indentation complexity, both as within-repo
-  percentiles), and **scattered single source of truth** (one decision's value set branched on across
-  several files, with the likely owner inferred and the candidates ranked by churn).
+  percentiles), and **scattered single source of truth** — either inferred (one decision's value set
+  branched on across several files, likely owner inferred, ranked by churn) or **declared** (an enum
+  bypassed by comparisons against its raw member strings; the one signal here that needs no git).
   `--json`, `--group A|B|C|D|E|F`, `--min-severity`, `--no-history`, `--since`, `--exit-code`.
 - `archagent history-profile` — learn how *this* repo words its bug-fix commits (`Fixed #123` vs
   `fix(scope):` vs free-form), which the history signals above rely on. Prints what it inferred; `--write`

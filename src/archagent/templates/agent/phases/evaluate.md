@@ -120,6 +120,15 @@ Mined from `git log`; require a git repo (skip with `--no-history`, window with 
   the pieces are genuinely partial copies of one rule that can drift — then the recommendation is "these
   N files should call the owner", naming the owner.
 
+- **Enum bypassed by its raw values** (group F) — the project *declares* a single source of truth (an
+  enum) and some other file re-decides it by comparing against the member strings, e.g.
+  `state.value == "summarized"` instead of `state is WorkflowState.SUMMARIZED`. Higher precision than the
+  clustering signal above, because the owner is declared rather than inferred — and it catches a case the
+  clustering cannot see, where the values are *assigned* in the definer and only *compared* in one other
+  file, so they never reach the "duplicated across three files" bar. This is the only group-F signal that
+  runs without git. The dismissal to expect: a value that genuinely arrived serialized (a JSON field, a DB
+  column, a request parameter) is legitimately compared as a string.
+
 **Both new signals are low-to-medium confidence by construction and never fail a build.** They are also
 worth cross-reading: a file that appears in *both* — churny and complex, and holding a duplicated decision —
 is usually the strongest root in the whole report, because two independent signals agree on it.

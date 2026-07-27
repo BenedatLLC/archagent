@@ -1,6 +1,12 @@
 """Check B — scattered single source of truth (dupdecide.py)."""
 
-from archagent.dupdecide import branch_values, cluster, find_decisions
+from archagent.dupdecide import (
+    branch_values,
+    cluster,
+    enum_defs,
+    find_decisions,
+    find_enum_escapes,
+)
 
 STATES = ["pending", "paid", "shipped", "refunded", "cancelled"]
 
@@ -126,3 +132,127 @@ def test_cluster_separates_two_unrelated_decisions(tmp_path):
     found = cluster(per_file, subsystem="app")
     assert {d.owner for d in found} == {"state.py", "theme.py"}
     assert {tuple(d.values) for d in found} == {tuple(sorted(STATES)), tuple(sorted(colors))}
+
+
+# --- the enum-value escape (the declared-owner half of Check B) ----------------------------
+
+STATE_ENUM = '''from enum import Enum
+
+
+class WorkflowState(Enum):
+    """States in the workflow."""
+    INITIAL = "initial"
+    SELECT_NEW = "select-new"
+    SUMMARIZED = "summarized"
+    SEM_SEARCH = "sem-search"
+    RESEARCH = "research"
+'''
+
+
+def _escaper(values, unwrap=False):
+    lhs = "self.machine.current_state.value" if unwrap else "name"
+    return "".join(f'if {lhs} == "{v}":\n    pass\n' for v in values)
+
+
+def test_reads_string_valued_enum_members(tmp_path):
+    _write(tmp_path, "src/app/state.py", STATE_ENUM)
+    defs = enum_defs(tmp_path, {"src/app/state.py"})
+    assert [d.name for d in defs] == ["WorkflowState"]
+    assert defs[0].members["SEM_SEARCH"] == "sem-search"
+    assert len(defs[0].members) == 5
+
+
+def test_skips_enums_with_no_string_values(tmp_path):
+    _write(tmp_path, "src/app/e.py",
+           "from enum import Enum, auto\n\n\nclass Color(Enum):\n    RED = auto()\n    BLUE = 2\n")
+    assert enum_defs(tmp_path, {"src/app/e.py"}) == []
+
+
+def test_reads_typescript_enums(tmp_path):
+    _write(tmp_path, "src/app/kinds.ts",
+           "export enum Kind {\n  Alpha = 'alpha',\n  Beta = 'beta',\n  Gamma = 'gamma',\n}\n")
+    defs = enum_defs(tmp_path, {"src/app/kinds.ts"})
+    assert defs[0].name == "Kind" and defs[0].members["Beta"] == "beta"
+
+
+def test_flags_a_file_comparing_against_the_raw_values(tmp_path):
+    _write(tmp_path, "src/app/state.py", STATE_ENUM)
+    _write(tmp_path, "src/app/chat.py", _escaper(["summarized", "sem-search", "research"]))
+    found = find_enum_escapes(tmp_path, {"src/app/state.py", "src/app/chat.py"})
+    assert len(found) == 1
+    e = found[0]
+    assert e.enum == "WorkflowState" and e.definer == "src/app/state.py"
+    assert e.files == ["src/app/chat.py"]
+    assert e.values == ["research", "sem-search", "summarized"]
+
+
+def test_the_declaring_file_is_never_its_own_escaper(tmp_path):
+    _write(tmp_path, "src/app/state.py", STATE_ENUM + '\n' + _escaper(["summarized", "research"]))
+    assert find_enum_escapes(tmp_path, {"src/app/state.py"}) == []
+
+
+def test_one_matching_word_is_treated_as_coincidence(tmp_path):
+    """LiteLLM has a `Role` enum containing "system"; a hundred files compare a payload's role to
+    "system" without knowing it exists. One value is never enough."""
+    _write(tmp_path, "src/app/state.py", STATE_ENUM)
+    _write(tmp_path, "src/app/other.py", _escaper(["research"]))
+    assert find_enum_escapes(tmp_path, {"src/app/state.py", "src/app/other.py"}) == []
+
+
+def test_two_values_need_to_be_half_the_enum(tmp_path):
+    _write(tmp_path, "src/app/state.py", STATE_ENUM)                       # 5 members
+    _write(tmp_path, "src/app/other.py", _escaper(["research", "summarized"]))   # 2/5 = 40%
+    assert find_enum_escapes(tmp_path, {"src/app/state.py", "src/app/other.py"}) == []
+
+    _write(tmp_path, "src/app/pair.py", "from enum import Enum\n\n\nclass Mode(Enum):\n"
+                                        '    ON = "engaged"\n    OFF = "disengaged"\n')
+    _write(tmp_path, "src/app/uses.py", _escaper(["engaged", "disengaged"]))     # 2/2 = 100%
+    found = find_enum_escapes(tmp_path, {"src/app/pair.py", "src/app/uses.py"})
+    assert [e.enum for e in found] == ["Mode"]
+
+
+def test_unwrapping_with_dot_value_is_enough_on_its_own(tmp_path):
+    _write(tmp_path, "src/app/state.py", STATE_ENUM)
+    _write(tmp_path, "src/app/chat.py", _escaper(["summarized"], unwrap=True))
+    found = find_enum_escapes(tmp_path, {"src/app/state.py", "src/app/chat.py"})
+    assert found and found[0].unwrapped == {"src/app/chat.py"}
+
+
+def test_dot_value_outside_python_is_an_ordinary_property(tmp_path):
+    """Vue compares a Babel node's `key.value` to 'set', which has nothing to do with the enum that
+    also happens to have a `set` member — so `.value` only counts as unwrapping in Python."""
+    _write(tmp_path, "src/app/ops.ts", "export enum TriggerOpTypes {\n  SET = 'set',\n"
+                                       "  ADD = 'add',\n  DELETE = 'delete',\n  CLEAR = 'clear',\n}\n")
+    _write(tmp_path, "src/app/compile.ts", "if (p.key.value === 'set') {\n  run()\n}\n")
+    assert find_enum_escapes(tmp_path, {"src/app/ops.ts", "src/app/compile.ts"}) == []
+
+
+def test_a_value_two_enums_share_is_not_attributed(tmp_path):
+    _write(tmp_path, "src/app/a.py", "from enum import Enum\n\n\nclass A(Enum):\n"
+                                     '    X = "shared"\n    Y = "alpha"\n')
+    _write(tmp_path, "src/app/b.py", "from enum import Enum\n\n\nclass B(Enum):\n"
+                                     '    X = "shared"\n    Z = "beta"\n')
+    _write(tmp_path, "src/app/uses.py", _escaper(["shared", "alpha", "beta"]))
+    found = find_enum_escapes(tmp_path, {"src/app/a.py", "src/app/b.py", "src/app/uses.py"})
+    assert all("shared" not in e.values for e in found)
+
+
+def test_escapes_are_ranked_by_churn(tmp_path):
+    _write(tmp_path, "src/app/state.py", STATE_ENUM)
+    _write(tmp_path, "src/app/quiet.py", "from enum import Enum\n\n\nclass Quiet(Enum):\n"
+                                         '    A = "alpha"\n    B = "bravo"\n    C = "charlie"\n')
+    _write(tmp_path, "src/app/hot.py", _escaper(["summarized", "sem-search", "research"]))
+    _write(tmp_path, "src/app/cold.py", _escaper(["alpha", "bravo", "charlie"]))
+    files = {"src/app/state.py", "src/app/quiet.py", "src/app/hot.py", "src/app/cold.py"}
+    found = find_enum_escapes(tmp_path, files, {"src/app/hot.py": 40, "src/app/cold.py": 1},
+                              {"src/app/hot.py": 12})
+    assert [e.enum for e in found] == ["WorkflowState", "Quiet"]
+    assert found[0].churn == 40 and found[0].fix_churn == 12
+
+
+def test_vendored_and_test_files_are_not_scanned(tmp_path):
+    _write(tmp_path, "src/app/state.py", STATE_ENUM)
+    _write(tmp_path, "tests/test_chat.py", _escaper(["summarized", "sem-search", "research"]))
+    _write(tmp_path, "src/vendor/x.py", _escaper(["summarized", "sem-search", "research"]))
+    assert find_enum_escapes(tmp_path, {"src/app/state.py", "tests/test_chat.py",
+                                        "src/vendor/x.py"}) == []
