@@ -173,7 +173,9 @@ flags a single *file*, using its change history. They look at different things a
 change-prone file often sits inside an oversized subsystem, but need not.
 
 **Still to settle (via experiment):** the history window, the exact "top quartile" bar, and whether total
-change-count or bug-fix change-count is the better signal.
+change-count or bug-fix change-count is the better signal. The held-out defect study in
+`evaluating-archagent.md` §7 is designed to answer the last of these against an outcome that does not
+depend on our own labelling — including whether the complexity axis earns its place over churn alone.
 
 ---
 

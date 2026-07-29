@@ -224,7 +224,7 @@ the evidence argues for:
   This is the concrete case for the deferred declared-owner overlay, and the clearest thing it would buy.
 - [ ] **Threshold sensitivity sweep.** Eight knobs (`PCTILE_BAR`, `MIN_LOC`, `MIN_FILES_PER_VALUE`,
   `TIGHTNESS`, `COHESION`, `MIN_ESCAPED_VALUES`, `MIN_PAIR_COVERAGE`, `DECISION_MIN_CHURN`), each set from
-  one repo's false alarms. Nobody knows which are load-bearing and which are decoration.
+  one repo's false alarms. Nobody knows which ones actually change the output and which are decoration.
 - [ ] **Golden-output fixture.** Unit tests cover mechanics; nothing catches an aggregate behaviour change.
   A small committed repo with asserted findings would make regressions show up as a diff — the four fixes
   in the evaluation pass were all found by hand, and would not have been caught by CI.
@@ -295,9 +295,41 @@ the evidence argues for:
 
 ## Measurement
 
-- [ ] **Does archagent keep agents adherent?** The evaluation the survey called for — measure whether an
-  agent working under archagent drifts less than one without it (cf. the Constraint Decay result that
-  motivates the project). This is what turns the thesis into evidence.
+Designed in **`docs/designs/evaluating-archagent.md`**, which separates three things that had been
+conflated: the deterministic signals (L1), the skills that judge them into a report (L2), and the artifact
+as context for a coding agent (L3, the research claim). Near-term goal is confidence in the tool; a paper
+is a later consideration. Items below are in build order.
+
+- [ ] **`--until` / `--as-of` plumbing** (design §5). `mine_cochange` takes `--since` but not `--until`,
+  and `evaluate` passes neither. Needed by every evaluation here, and useful on its own. Note the trap the
+  design calls out: bounding *history* without checking out the *tree* measures old history against new
+  code and looks fine, so the tool should warn when `HEAD` is newer than `--until`.
+- [ ] **Pinned-corpus regression** (§6). A script that clones selected repositories at a pinned tag into a
+  temp worktree, runs the tool, and diffs the findings against a recorded expectation. The golden fixtures
+  pin ~40 hand-written files; this is the half that would notice a change breaking Django. Opt-in, since
+  it needs network.
+- [ ] **Held-out defect study** (§7). Compute signals as of T, then ask whether the flagged files
+  accumulate more **defect-fixing commits** in (T, now] than churn-matched controls — an outcome that does
+  not depend on our own labelling, which is the weakness in every quality number we currently have.
+  Recognise defect fixes from commit wording (no external service), cross-checked on a couple of repos
+  against issues a public tracker confirms were labelled bugs; archagent itself never gains an
+  issue-tracker dependency. **The controls are the experiment** — churn predicts churn, so an unmatched
+  comparison proves nothing. This is the only item that can retire a signal.
+- [ ] **End-to-end self-evaluation** (§8). `describe` + `evaluate` at one revision, scored; then update to
+  a later revision and score again. Tests the update path, which is where an artifact-maintenance tool is
+  most likely to fail. Open dependency: it must invoke a coding agent non-interactively, so establish the
+  run-to-run noise floor before comparing any two scores.
+- [ ] **The rubric** (§9). Half deterministic (ADL conformance, coverage, clean exits, `drift` near-zero
+  right after `describe`, non-vacuous invariants), half judged 1–5 with a cited `file:line` behind every
+  score (accuracy, completeness, usefulness of invariants, prose against `writing-style.md`, report
+  quality, update quality).
+- [ ] **Blind comparison of the skill layer** (§10). Same findings, three arms — shipped guidance, a
+  generic prompt, no guidance — shuffled and scored by a judge that is not told which is which. The
+  intended-family dismissals from the corpus pass give it real ground truth rather than taste.
+- [ ] **Does archagent keep agents adherent?** (L3) The evaluation the survey called for — measure whether
+  an agent working under archagent drifts less than one without it (cf. the Constraint Decay result that
+  motivates the project). This is what turns the thesis into evidence. Deliberately last: it is the
+  hardest to design and the least useful while L1 and L2 are unmeasured.
 
 ---
 
