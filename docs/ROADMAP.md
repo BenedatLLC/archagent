@@ -343,6 +343,17 @@ is a later consideration. Items below are in build order.
 - [ ] **Blind comparison of the skill layer** (§10). Same findings, three arms — shipped guidance, a
   generic prompt, no guidance — shuffled and scored by a judge that is not told which is which. The
   intended-family dismissals from the corpus pass give it real ground truth rather than taste.
+- [ ] **Closing the loop — automatic feedback into prompts and tools** (§13). **Deferred until the basic
+  evaluation is proven**; recorded so the pieces before it are built in a shape that admits it. Inspired by
+  *Self-Harnesses* (arXiv 2606.09498): mine failures from traces, propose minimal edits tied to them,
+  accept only if regression tests still pass. We already have their safeguard — the golden fixtures and
+  pinned corpus. The difference is their acceptance metric is an objective task pass rate while ours would
+  be partly model-judged, so the gate must be the objective criteria only (deterministic rubric half plus
+  ground-truthed dismissals), with judged scores informing proposals and never deciding them. Preconditions:
+  noise floor measured, calibration established, three-way repo split, blocking regression nets, and traces
+  persisted. Prompts and config are eligible; thresholds stay on the slow defect-study loop, and check code
+  is proposed rather than applied. Evaluation assets stay read-only to any proposer — an agent that can
+  edit both the prompt and the test will improve the score.
 - [ ] **Does archagent keep agents adherent?** (L3) The evaluation the survey called for — measure whether
   an agent working under archagent drifts less than one without it (cf. the Constraint Decay result that
   motivates the project). This is what turns the thesis into evidence. Deliberately last: it is the

@@ -78,7 +78,8 @@ This design covers L1 and L2 in full and sketches L3 only far enough to keep fro
   tag or commit SHA, works in a temporary checkout, and never mutates a local working copy.
 - **Tuning set and held-out set are separate, and stay separate.** Thresholds were fitted on Django,
   LiteLLM, opencode, OpenHands, and Datasette; those five can no longer produce an unbiased number for
-  anything tuned on them.
+  anything tuned on them. If an automatic proposer is ever introduced (§13) this becomes a three-way
+  split, because selecting among proposals consumes a held-out set as surely as tuning does.
 - **A check must be able to fail.** If an evaluation cannot produce a result that would retire a signal,
   it is not measuring anything. Negative results are the point.
 - **Cheap evidence first.** History and public issues before human judgement, because they scale and they
@@ -316,6 +317,12 @@ A command — `scripts/selfeval.py <repo-url> --from <rev1> --to <rev2>` — run
 Output is a scorecard (JSON, plus a readable markdown summary) written under `evaluations/<repo>-<date>/`,
 comparable across runs so a change to a prompt can be shown to help or hurt.
 
+**Persist a trace, not only the scorecard.** Alongside the scores, record what actually happened: which
+findings the skill was given, which it confirmed or dismissed and on what stated grounds, what reached the
+report, and where any of that disagreed with the label store. A score says something regressed; a trace
+says where. This is also the input any future feedback loop would mine (§13), and it makes failures
+diagnosable by hand long before that.
+
 **The dependency to settle:** steps 2 and 5 need a coding agent, run non-interactively. That makes this
 command different in kind from everything else archagent ships — it invokes an agent rather than being
 invoked by one. Which agent, how it is pinned (model + version), and how much its variance swamps the
@@ -446,6 +453,10 @@ Appendix A of `hotspots-and-single-source-of-truth.md` wanted a declared-owner f
 intended families that correctly re-surface on every corpus run get labelled once and stay labelled. If
 this works, the separate `capabilities.md` format is probably unnecessary.
 
+**Agreement is conditional, not a constant.** The rate is measured over a particular distribution of
+output. Anything that moves that distribution — a prompt rewrite, a model change, an optimiser (§13) —
+invalidates it, and it has to be re-sampled from the new output rather than carried forward.
+
 **Cautions.** This is an evaluation mode and never a runtime gate — the ground rule that a full pass needs
 no human still holds. And a label from the tool's own author is better than model-only but is not
 independent; the store records who reviewed each item so that can be weighed later.
@@ -492,7 +503,73 @@ calibration problem has been handled.
 
 ---
 
-## 13. Threats to validity
+## 13. Closing the loop — feeding results back into prompts and tools
+
+**Status: deferred.** Nothing here gets built until the evaluation itself is proven — the preconditions
+below are not a formality, they are what separates a feedback loop from an amplifier of our own mistakes.
+Recorded now so the earlier sections are built in a shape that admits it later.
+
+The inspiration is *Self-Harnesses: Harnesses That Improve Themselves* (arXiv 2606.09498): mine failure
+patterns from execution traces, propose minimal edits tied to those failures, and accept an edit only if
+regression tests still pass. The regression gate is the piece we already have — golden fixtures plus the
+pinned corpus (§6), which between them catch the failure that matters most, a check quietly *losing* a
+finding rather than producing a wrong one.
+
+**The difference that drives the design.** Self-Harness accepts edits against task pass rates, a metric
+that does not care what any model thinks. Our nearest equivalent for the skill layer is a rubric scored by
+a model. An optimiser pointed at a model-judged score will find judge quirks at least as readily as
+quality, so the acceptance gate cannot be the rubric as a whole.
+
+### 13.1 Preconditions
+
+1. **Noise floor measured** (§8) — no delta can be called an improvement until repeat runs on identical
+   inputs establish the spread.
+2. **Calibration established** (§11) — an agreement rate between judge and person.
+3. **A three-way repository split** — train to propose against, dev to select among proposals, test
+   consulted rarely against a stated budget. Two sets are not enough: proposal *selection* consumes a
+   held-out set as surely as tuning does.
+4. **Regression nets blocking**, not advisory (§6).
+5. **Traces persisted** (§8) — a scorecard is a number; weakness mining needs a record of what happened.
+
+### 13.2 Shape, if built
+
+- **Eligible surfaces: prompts and configuration.** Thresholds stay on the slow loop, because their
+  objective metric is the defect study and its outcome window is months; letting a fast loop tune them
+  re-creates exactly the fit-then-measure failure §7.1 exists to prevent. Changes to check *code* are
+  proposed, never applied automatically.
+- **Two loops at different speeds.** Fast: prompt edits, gated on the deterministic half of §9 plus the
+  ground-truthed dismissals from the label store. Slow: threshold changes, gated on §7. The fast loop's
+  results are re-checked by the slow one periodically.
+- **Acceptance is gated on objective criteria only.** Judged rubric scores may *inform proposals* — they
+  are good at pointing at what is weak — but they never decide acceptance.
+- **Calibration is re-sampled every round.** Agreement between judge and person is conditional on the
+  output distribution it was measured over. An optimiser moves that distribution, so a rate carried
+  forward from before the change may no longer describe anything. Without this the loop can settle in a
+  region where the judge is confidently wrong and nothing says so.
+- **Containment.** The evaluation assets — fixtures, goldens, corpus expectations, the label store — are
+  **read-only to the optimiser**. An agent able to edit both the prompt and the test will improve the
+  score. Accepted edits land as a branch with provenance (which run, which failure it answers, before and
+  after on each gate), never straight onto the main line — the same stance archagent takes toward its own
+  findings.
+- **Stopping rule.** No acceptance when the delta sits inside the noise floor.
+
+### 13.3 The deterministic criteria need an adversarial reading first
+
+Being machine-checkable does not make a criterion safe to optimise against. Two from §9 that are already
+gameable:
+
+- **Coverage** — the share of files claimed by some subsystem's `**Covers:**` — is maximised by writing
+  `**Covers:** src/**` in one document. Perfect score, no architecture described.
+- **Drift near zero after describe** is maximised by writing documents vague enough that nothing can
+  contradict them.
+
+Both are fine as *diagnostics* and dangerous as *targets*. Before any criterion becomes an acceptance
+gate, it gets read adversarially — what is the laziest change that maximises this? — and either paired
+with a counter-criterion or left out of the gate.
+
+---
+
+## 14. Threats to validity
 
 Written down because they are easy to forget once numbers exist.
 
@@ -506,12 +583,17 @@ Written down because they are easy to forget once numbers exist.
 - **Proxy drift.** "Defect-fixing commit" is a proxy for "defect". The learned recogniser captures
   fix-labelled maintenance, which on Django was roughly half features and docs.
 - **Self-preference in judging** (§10).
-- **Goodhart.** Once the rubric exists, prompts will be tuned to it. Keep some criteria out of the prompts,
-  and re-read the rubric when scores rise without the output visibly improving.
+- **Goodhart.** Once the rubric exists, prompts will be tuned to it — by hand well before any optimiser
+  exists. Keep some criteria out of the prompts, re-read the rubric when scores rise without the output
+  visibly improving, and read every deterministic criterion adversarially before it gates anything
+  (§13.3 shows two from §9 that are trivially gameable).
+- **Held-out decay through selection.** Choosing among candidate changes on the held-out set spends it,
+  even though nothing was "tuned" on it. §13.1 answers this with a three-way split and a consultation
+  budget; until then, the held-out set is looked at rarely and each look is recorded.
 
 ---
 
-## 14. Build order
+## 15. Build order
 
 1. **`--until` / as-of plumbing** (§5) — the prerequisite for everything else, including the mismatch
    warning. Small.
@@ -529,7 +611,7 @@ Written down because they are easy to forget once numbers exist.
 
 ---
 
-## 15. Out of scope
+## 16. Out of scope
 
 - **Any runtime dependency on an issue tracker.** Defect data belongs to the harness, not the tool.
 - **Modifying the local test-repository checkouts.** They are the measurement baseline; evaluations work in
