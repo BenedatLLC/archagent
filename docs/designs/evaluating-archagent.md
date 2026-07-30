@@ -372,7 +372,47 @@ independent; the store records who reviewed each item so that can be weighed lat
 
 ---
 
-## 12. Threats to validity
+## 12. Tooling — what we build and what we adopt
+
+The judged half of §9 needs the usual scaffolding around an LLM judge: prompt construction, score
+extraction against a schema, retries, thresholds, caching (judge calls are the slow, expensive part), and
+some way to combine machine-checkable gates with judged criteria in one score.
+
+**DeepEval is the candidate on the table** for that, as a dev/test dependency only. Two things fit well.
+Its `DAG` metric — a graph-based judge builder with deterministic branching and model calls at the leaves —
+is close to the shape §9 already has, where a failed ADL conformance check should short-circuit the whole
+score rather than be averaged with a prose rating. And it is pytest-shaped, which matches the suite we
+already run.
+
+Two things fit badly. Its metric catalogue (answer relevancy, faithfulness, contextual recall) assumes a
+query → answer → context triple, which an architecture artifact judged against a codebase is not; we would
+use `G-Eval` and `DAG` and none of the rest, and its `LLMTestCase` shape would mean stuffing a document set
+into `actual_output`. Shoehorning tends to drag what gets measured toward what the framework represents
+easily, and criteria like "would this invariant catch a violation someone might plausibly commit" resist
+that shape. Separately, the annotation and persistence features are the hosted product, whereas the label
+store of §11 is deliberately a local, versioned, diffable file — the most distinctive part of this design
+is the part such a framework least supports without its platform.
+
+**Decision: not yet, and not ruled out.** Build order items 1–3 have no model in the loop, so nothing there
+would use it. At item 4, build one rubric criterion **twice** — hand-rolled and with `DAG` — and compare
+effort and output. That is a day's work and settles the question with evidence.
+
+Two rules that hold either way:
+
+- **No evaluation dependency enters the shipped package.** Everything here lives in the dev/test group;
+  `archagent` keeps running with nothing but a git repository.
+- **The judge sits behind a thin interface, and the scorecard schema is ours.** Whatever produces a score,
+  the stored shape does not change, so the trial is cheap to reverse and results stay comparable across a
+  tooling switch.
+
+**A caution about the stack.** There is a lot of model judgement piled up here — a model-judged framework
+scoring a model-written report about a tool whose findings a model acts on. §11 is the only thing anchoring
+that to a human, and no framework supplies it. Adopting one should not create the impression that the
+calibration problem has been handled.
+
+---
+
+## 13. Threats to validity
 
 Written down because they are easy to forget once numbers exist.
 
@@ -391,7 +431,7 @@ Written down because they are easy to forget once numbers exist.
 
 ---
 
-## 13. Build order
+## 14. Build order
 
 1. **`--until` / as-of plumbing** (§5) — the prerequisite for everything else, including the mismatch
    warning. Small.
@@ -400,7 +440,8 @@ Written down because they are easy to forget once numbers exist.
 3. **Held-out defect study** (§7) — the credibility anchor, and the only item that can retire a signal.
    Start with the history-only proxy; add issue verification as a cross-check on two repositories.
 4. **Self-evaluation tool + rubric v1** (§8, §9) — begin with the deterministic half only, which is
-   useful on its own and needs no agent; add the judged half once the noise floor is known.
+   useful on its own and needs no agent; add the judged half once the noise floor is known. This is the
+   point at which to run the DeepEval trial of §12, not before.
 5. **Human spot-check and calibration** (§11) — build it alongside the judged half of the rubric, not
    after. Until an agreement rate exists, a rubric score is a number with unknown meaning.
 6. **Blind comparison** (§10).
@@ -408,7 +449,7 @@ Written down because they are easy to forget once numbers exist.
 
 ---
 
-## 14. Out of scope
+## 15. Out of scope
 
 - **Any runtime dependency on an issue tracker.** Defect data belongs to the harness, not the tool.
 - **Modifying the local test-repository checkouts.** They are the measurement baseline; evaluations work in

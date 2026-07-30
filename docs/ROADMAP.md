@@ -333,6 +333,13 @@ is a later consideration. Items below are in build order.
   judged half of the rubric, not after. Note the convergence: this store is the "reviewed — intended,
   dismissed" record Appendix A of the hotspots design wanted a `capabilities.md` file for, which probably
   makes that file unnecessary.
+- [ ] **Judge tooling: trial DeepEval against a hand-rolled baseline** (§12). A dev/test dependency only —
+  nothing evaluation-related enters the shipped package. Its `DAG` metric (deterministic branching with
+  model calls at the leaves) is close to the rubric's half-gates/half-judged shape, and it is pytest-shaped;
+  against that, its metric catalogue assumes a query→answer→context triple that an architecture artifact
+  judged against a codebase is not, and its annotation features are the hosted product while our label
+  store stays a local file. Decide by building one rubric criterion both ways at item 4 above, not by
+  adopting up front. Keep the judge behind a thin interface with our scorecard schema as the stable part.
 - [ ] **Blind comparison of the skill layer** (§10). Same findings, three arms — shipped guidance, a
   generic prompt, no guidance — shuffled and scored by a judge that is not told which is which. The
   intended-family dismissals from the corpus pass give it real ground truth rather than taste.
