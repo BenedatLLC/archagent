@@ -400,6 +400,10 @@ overlay*.
 **When to build it.** Only if real use shows the overlay needs a structured format. In the interim, record
 accept/dismiss the way `evaluate` findings are already handled (an ADR, or a lightweight suppressions note).
 
+**A likely replacement.** The human spot-check of `evaluating-archagent.md` §11 stores durable verdicts
+against a revision-independent finding identity — which is this overlay's main job, reached from the
+evaluation side and without a new declared format. If that store works, this appendix is probably moot.
+
 **Sketch, if built.** A file alongside the invariants list, read with the same table parser (strip Markdown
 formatting from **every** column). Enforcement would check each declared entry against the current code via a
 **detector**, written with a leading keyword so kinds can be added without changing the format:

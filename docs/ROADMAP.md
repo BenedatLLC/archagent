@@ -323,6 +323,16 @@ is a later consideration. Items below are in build order.
   right after `describe`, non-vacuous invariants), half judged 1–5 with a cited `file:line` behind every
   score (accuracy, completeness, usefulness of invariants, prose against `writing-style.md`, report
   quality, update quality).
+- [ ] **Human spot-check and calibration** (§11). A small stratified sample of findings and rubric scores,
+  reviewed by a person with the tool's own severity/confidence **withheld** until after the verdict, so the
+  exercise measures agreement with reality rather than with our prior. The point is not volume — nobody is
+  labelling 78 hotspot findings — but the agreement rate between person and model judge, which is what
+  turns a rubric score into an estimate with an error bar instead of an assertion. Verdicts persist in a
+  label store keyed revision-independently, so labels survive re-runs and are never spent twice; changing
+  one requires a note, or labels drift toward whatever the tool currently claims. Build it *with* the
+  judged half of the rubric, not after. Note the convergence: this store is the "reviewed — intended,
+  dismissed" record Appendix A of the hotspots design wanted a `capabilities.md` file for, which probably
+  makes that file unnecessary.
 - [ ] **Blind comparison of the skill layer** (§10). Same findings, three arms — shipped guidance, a
   generic prompt, no guidance — shuffled and scored by a judge that is not told which is which. The
   intended-family dismissals from the corpus pass give it real ground truth rather than taste.

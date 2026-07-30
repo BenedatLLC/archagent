@@ -108,6 +108,11 @@ This design covers L1 and L2 in full and sketches L3 only far enough to keep fro
                                          │ §9 rubric (deterministic + judged)
               ┌──────────────────────────▼─────────────────────────────────┐
               │ §10 blind comparison — is it the *guidance* doing the work? │
+              └──────────────────────────┬─────────────────────────────────┘
+                                         │  §9 and §10 are judged by a model
+              ┌──────────────────────────▼─────────────────────────────────┐
+              │ §11 human spot-check — a small blind sample, stored durably,│
+              │ giving the agreement rate that calibrates those judgements  │
               └────────────────────────────────────────────────────────────┘
 ```
 
@@ -272,6 +277,10 @@ score. The judged half covers what matters most and cannot be automated.
   are dismissals reasoned?
 - *Update quality* (second run only) — are the changes reflected, and is stale content gone?
 
+**Calibration.** These scores are only worth tracking once we know how far the judge agrees with a
+person; §11 is how that is established, and the agreement interval belongs next to any score quoted from
+this rubric.
+
 **Anti-gaming.** Scores without a citation are discarded. The judging subagent is a separate invocation
 that sees the artifact and the code but not the previous scores, so it cannot anchor on them. Where we
 have ground truth — the labelled intended-family cases from the corpus pass — it is scored automatically
@@ -299,12 +308,71 @@ families that a good report must **dismiss with a reason**. Whether an arm dismi
 checkable, not a matter of taste.
 
 **A caution to record with any result:** if the judge and the author are the same model family, the
-comparison partly measures self-preference. Use a different model for judging where possible, and say
-which was used.
+comparison partly measures self-preference. Use a different model for judging where possible, say which
+was used, and calibrate it against human labels (§11) before treating a difference between arms as real.
 
 ---
 
-## 11. Threats to validity
+## 11. Human spot-check and calibration
+
+**Question:** do the automated judgements of §9 and §10 mean anything?
+
+Nothing so far establishes that. A model scoring a rubric produces a number whether or not the number
+tracks reality, and the corpus pass showed how easily a single interested labeller drifts. The fix is not
+more human labelling — nobody is going to review 78 hotspot findings — but *enough* human labelling to
+measure how far the automated judge agrees with a person. That agreement rate is what turns every
+automated score into an estimate with an error bar instead of an assertion.
+
+**What gets reviewed.** Two kinds of item, because they answer different questions:
+
+- **Findings** — confirm / dismiss / unsure, plus a one-line reason. Gives per-signal precision from a
+  judge who did not build the signal.
+- **Rubric scores** — agree / too high / too low, plus a reason. Shows whether the judging subagent drifts
+  systematically in one direction, which a single overall agreement number would hide.
+
+**Mechanics.** `scripts/spotcheck.py generate` writes a worksheet; `… ingest` parses it back. Three
+details decide whether the labels are worth collecting:
+
+- **Blind the tool's own claim.** The worksheet shows evidence only — the files, the value set, a short
+  code excerpt, the churn — and withholds severity, confidence, and the recommendation until after the
+  verdict is recorded. Shown up front, they anchor the reviewer and the exercise measures agreement with
+  our own prior instead of with reality.
+- **A worksheet, not a prompt loop.** Markdown, one block per item, with a fixed answer line the parser
+  reads leniently. Thirty items is a week of spare moments, not one sitting, and a file can be reviewed
+  in an editor, committed, and diffed.
+- **Stratified sampling, capped.** Across signals, confidence tiers, and repositories, so a cheap
+  high-confidence class can't dominate the estimate. Where the tool *rejected* something and we can
+  reconstruct it (the cohesion and stop-value cases), include a few — precision alone never notices a
+  check that has quietly stopped finding anything.
+
+**The label store is the durable asset.** `evaluations/labels/<repo>.jsonl`, one record per labelled
+finding, keyed by a **revision-independent identity** (sign + owner path + a hash of the value set) so a
+label survives re-runs and tool changes. Each record keeps the verdict, the reason, who reviewed it, the
+date, and the tool's claim *at the time of labelling*. Re-running asks only about items with no label. If
+a finding's evidence has materially changed, its label is marked stale rather than silently reused.
+
+Two properties follow from storing them this way. Labels are expensive, and this stops us spending them
+twice on the same finding. And **once written, a label is not quietly rewritten** — changing a verdict
+requires a note saying why, or the labels drift toward whatever the tool currently claims and the whole
+exercise becomes circular.
+
+**What it reports.** Human-vs-judge agreement on the overlapping items with a confidence interval;
+per-signal precision from human labels, with intervals; and the direction of any systematic rubric drift.
+Small samples give wide intervals, so the scorecard prints the interval — a point estimate off thirty
+labels invites false precision.
+
+**A convergence worth noting.** This store is exactly the "reviewed — intended, dismissed" record that
+Appendix A of `hotspots-and-single-source-of-truth.md` wanted a declared-owner file for: the three
+intended families that correctly re-surface on every corpus run get labelled once and stay labelled. If
+this works, the separate `capabilities.md` format is probably unnecessary.
+
+**Cautions.** This is an evaluation mode and never a runtime gate — the ground rule that a full pass needs
+no human still holds. And a label from the tool's own author is better than model-only but is not
+independent; the store records who reviewed each item so that can be weighed later.
+
+---
+
+## 12. Threats to validity
 
 Written down because they are easy to forget once numbers exist.
 
@@ -323,7 +391,7 @@ Written down because they are easy to forget once numbers exist.
 
 ---
 
-## 12. Build order
+## 13. Build order
 
 1. **`--until` / as-of plumbing** (§5) — the prerequisite for everything else, including the mismatch
    warning. Small.
@@ -333,12 +401,14 @@ Written down because they are easy to forget once numbers exist.
    Start with the history-only proxy; add issue verification as a cross-check on two repositories.
 4. **Self-evaluation tool + rubric v1** (§8, §9) — begin with the deterministic half only, which is
    useful on its own and needs no agent; add the judged half once the noise floor is known.
-5. **Blind comparison** (§10).
-6. **L3 task benchmark** — not designed here. Revisit once L1 and L2 have numbers.
+5. **Human spot-check and calibration** (§11) — build it alongside the judged half of the rubric, not
+   after. Until an agreement rate exists, a rubric score is a number with unknown meaning.
+6. **Blind comparison** (§10).
+7. **L3 task benchmark** — not designed here. Revisit once L1 and L2 have numbers.
 
 ---
 
-## 13. Out of scope
+## 14. Out of scope
 
 - **Any runtime dependency on an issue tracker.** Defect data belongs to the harness, not the tool.
 - **Modifying the local test-repository checkouts.** They are the measurement baseline; evaluations work in
