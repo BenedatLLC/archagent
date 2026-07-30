@@ -120,17 +120,26 @@ This design covers L1 and L2 in full and sketches L3 only far enough to keep fro
 
 ## 5. Prerequisite — running as of a past commit
 
-Every evaluation below needs the same capability, and it has two halves that are easy to confuse.
+Every evaluation below needs the same capability. It has *three* paths into the repository, and each one
+reads the present unless told otherwise — missing any of them produces a plausible, silently wrong answer.
 
 **The history half.** `mine_cochange` already accepts `--since`; it needs `--until` (and `evaluate` needs
 to pass it through). That bounds churn, fix-churn, and co-change to a window ending at T.
+
+**The commit-wording profile.** `history._subjects` runs `git log --no-merges -n 4000` with no time bound,
+so an as-of run would learn the bug-fix recogniser from commits made *after* T and then use it to label
+commits from before. The effect on accuracy is small; the problem is that it is leakage, in a study whose
+entire premise is that nothing after T touches the signal. It takes the same bound.
 
 **The tree half.** The complexity measure and every branch-value scan read files *from disk*. Bounding the
 history without checking out the code measures old history against new code — a silent, plausible-looking
 wrong answer. The harness therefore materialises the tree with `git worktree add` (or a shared clone) at
 the chosen revision, and runs the tool there.
 
-Because the two halves can disagree, the tool should **warn when `HEAD`'s commit date is newer than
+`drift` has the same issue in `_last_commit_ts`, which matters because §9 scores "drift is near zero right
+after describe" as a deterministic check.
+
+Because the paths can disagree, the tool should **warn when `HEAD`'s commit date is newer than
 `--until`**: that combination is almost always a mistake, and it is invisible in the output otherwise.
 
 A convenience `--as-of <rev-or-date>` sets `--until` from the revision's date. It does not check anything
@@ -154,9 +163,15 @@ rev = "5.2"                       # tag or SHA, never a branch
 paths = { python = ["django"] }
 ```
 
-For each entry it clones (shallow where possible, cached between runs), checks out `rev` into a temp
-worktree, runs `archagent evaluate --json --until <rev-date>`, and compares a projection of the result —
-the same shape the golden tests use — against a recorded expectation under `tests/corpus/<name>.json`.
+For each entry it clones, checks out `rev` into a temp worktree, runs
+`archagent evaluate --json --until <rev-date>`, and compares a projection of the result — the same shape
+the golden tests use — against a recorded expectation under `tests/corpus/<name>.json`.
+
+**Not a shallow clone.** `--depth` truncates history, and churn, fix-churn and co-change are computed from
+the full log — a shallow clone would quietly produce different numbers rather than an error. Use a blobless
+partial clone (`git clone --filter=blob:none`), which keeps every commit and fetches file contents on
+demand, and cache the clone between runs. Expectations are regenerated the same way as the unit goldens,
+by an explicit environment variable, so accepting a change is always a deliberate act.
 
 Differences from the unit goldens, all deliberate: it needs network and is therefore opt-in
 (`pytest -m corpus` or a make target, not the default suite); the expectations are large, so the script
@@ -208,8 +223,73 @@ subsequently change **together** in defect-fixing commits more than a matched se
 the cost the finding claims — a change to one forcing a change to the others — expressed as something the
 history can confirm or deny.
 
-**Repositories.** A held-out set, disjoint from the tuning five, chosen for long history and public
-issue trackers. This set is used for nothing else, ever.
+### 7.1 Pre-registered analysis
+
+Fixed **before** any outcome is computed, because every one of these choices moves the answer, and picking
+them after seeing results is the same failure as tuning thresholds on the repositories you then measure.
+Deviations get recorded in the results with a reason.
+
+**Order of operations.** Signals are computed and the flagged set is **written to disk and committed**
+before any outcome data is fetched. The harness refuses to compute outcomes if the flagged set does not
+already exist. This is mechanical, not a matter of discipline.
+
+**1. Renames.** Follow them. A file flagged at T that was later moved would otherwise have its subsequent
+fixes attributed to nothing — deflating the signal precisely for the churny files the checks flag, which
+biases *against* us in a way that looks like a null result. The miner reads `git log --name-status -M` and
+canonicalises every later path back to its name at T. Files whose rename chain is ambiguous are dropped and
+counted.
+
+**2. Files that disappear.** A flagged file deleted during the window is **excluded from the primary
+analysis and reported as a count**. Deletion is ambiguous — it may be the refactor the finding asked for,
+or an unrelated reorganisation — and either inclusion rule embeds an assumption. The count is published so
+the reader can see how much was dropped, and a sensitivity analysis treating deletions as zero-defect is
+reported alongside. If the two disagree, neither is claimed.
+
+**3. Matching.** Stratify by churn decile at T, computed over all scored files in the repository. Within
+each decile, compare the defect-fix rate of flagged files against unflagged ones, then pool across deciles.
+Stratification rather than nearest-neighbour matching: it has no sampling variance, no arbitrary control
+count, and it makes the comparison legible decile by decile. Deciles containing no flagged file, or fewer
+than five unflagged ones, are excluded and counted.
+
+**4. The statistic.** Primary outcome is the **stratified rate ratio** of defect-fixing commits per file,
+flagged versus unflagged, with a **95% bootstrap interval resampling files within strata** (2000 draws).
+Bootstrap rather than a parametric interval because per-file defect counts are overdispersed and we would
+rather not defend a distributional assumption.
+
+**5. Normalisation.** Primary outcome is the raw count of defect-fixing commits touching the file in
+(T, now], because the comparison is already stratified on churn and the strata make size roughly
+comparable. Per-KLOC is reported as a secondary and is not the basis of any claim.
+
+**Primary versus secondary.** Exactly one primary test per check, stated in advance:
+
+- *Check A* — flagged (churn × complexity, top quartile on both) versus unflagged, stratified as above.
+- *Check B* — for each flagged duplicated decision, do its files change **together** in a defect-fixing
+  commit more often than a matched set of same-size file groups drawn from the same subsystem?
+
+Everything else — complexity-only versus the product, fix-weighted versus total churn, per-KLOC, the
+deletion sensitivity check — is **secondary and exploratory**. Secondary results may motivate a future
+pre-registered test; they are never reported as findings on their own.
+
+**What the result licenses.** If the primary interval's lower bound exceeds 1, the check predicts later
+defect activity beyond what churn alone explains. If it includes 1, we do **not** claim predictive value —
+and specifically, the complexity axis of Check A would then need justifying on other grounds (readability,
+reviewer agreement) or dropping. Predicting defects is not the only reason a signal might be worth having,
+but it is the reason we have been implying, so a null result changes what we may say.
+
+**Defect-fix recognition, exactly.** History-only is the learned recogniser bounded to (T, now]. The
+issue-verified cross-check, run on two repositories, links a commit to an issue by an explicit reference in
+the message (`#123`, `PROJ-456`), then asks the tracker whether that issue carries a bug-type label; the
+label vocabulary differs per project, so the mapping is recorded per repository in the manifest rather than
+guessed. Where the two recognisers disagree by more than 20% of commits on a repository, that repository's
+history-only numbers are reported but not pooled.
+
+**Repositories.** A held-out set of 3–4, disjoint from every repository used for tuning or regression —
+which rules out Django, LiteLLM, opencode, OpenHands, Datasette, vue-core and my-research-assistant, all of
+which have already been read while building or calibrating the checks. Selection criteria, fixed now:
+several years of history, a public issue tracker with bug labels, a mix of commit conventions, at least one
+non-Python project, and no prior contact with archagent. The specific repositories and their pinned
+revisions are chosen once, recorded in the manifest, and **not changed after a run has been made** — the
+usual way a held-out set decays is by being quietly swapped when the numbers disappoint.
 
 ---
 
