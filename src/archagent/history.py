@@ -80,6 +80,7 @@ class HistoryProfile:
     """The learned recognizer plus how much to trust it."""
 
     style: str = "unknown"                             # label for the dominant commit style
+    until: str | None = None                           # the window this was learned over, if bounded
     fix_patterns: list[str] = field(default_factory=list)   # regexes that identify fix-labeled commits
     subjects_sampled: int = 0
     fix_matched: int = 0
@@ -109,6 +110,7 @@ class HistoryProfile:
     def to_dict(self) -> dict:
         return {
             "style": self.style,
+            "until": self.until,
             "fix_patterns": self.fix_patterns,
             "subjects_sampled": self.subjects_sampled,
             "fix_matched": self.fix_matched,
@@ -122,9 +124,10 @@ class HistoryProfile:
 
 # --- evidence gathering (plain, reproducible — no model) ----------------------------------
 
-def gather_evidence(root: Path, arch_dir: Path | None = None, sample: int = _SUBJECT_SAMPLE) -> dict:
+def gather_evidence(root: Path, arch_dir: Path | None = None, sample: int = _SUBJECT_SAMPLE,
+                    until: str | None = None) -> dict:
     """Facts about this repo's commit wording, for `infer_profile` or for a model to judge."""
-    subjects = _subjects(root, sample)
+    subjects = _subjects(root, sample, until)
     lead = _leading_words(subjects)
     stats = []
     for name, pattern in _CANDIDATES:
@@ -147,8 +150,11 @@ def gather_evidence(root: Path, arch_dir: Path | None = None, sample: int = _SUB
     }
 
 
-def _subjects(root: Path, sample: int) -> list[str]:
-    out = _git(root, "log", "--no-merges", "-n", str(sample), "--pretty=format:%s")
+def _subjects(root: Path, sample: int, until: str | None = None) -> list[str]:
+    args = ["log", "--no-merges", "-n", str(sample), "--pretty=format:%s"]
+    if until:
+        args.append(f"--until={until}")
+    out = _git(root, *args)
     return [s for s in (out or "").splitlines() if s.strip()]
 
 
@@ -282,6 +288,7 @@ def load_profile(root: Path) -> HistoryProfile | None:
         domain_terms=[str(t) for t in data.get("domain_terms", [])],
         guideline_sources=[str(s) for s in data.get("guideline_sources", [])],
         cautions=[str(c) for c in data.get("cautions", [])],
+        until=(str(data["until"]) if data.get("until") else None),
         source=str(data.get("source") or "cached"),
     )
 
@@ -301,14 +308,22 @@ def save_profile(root: Path, profile: HistoryProfile) -> Path:
     return p
 
 
-def history_profile(root: Path, arch_dir: Path | None = None, use_cache: bool = True) -> HistoryProfile:
+def history_profile(root: Path, arch_dir: Path | None = None, use_cache: bool = True,
+                    until: str | None = None) -> HistoryProfile:
     """The profile `evaluate` runs with: a cached one if present, otherwise inferred in memory.
 
     `evaluate` never writes the cache — it stays read-only. `archagent history-profile` is what persists
     a profile (and is where an agent can sharpen the recognizer).
+
+    **A bounded run ignores the cache.** A profile cached from a full-history run was learned from commits
+    made after the cutoff, and using it to label commits from before is leakage — small in its effect on
+    accuracy, and fatal to a study whose premise is that nothing after the cutoff informs the signal. The
+    window is recorded on the profile so a future cache can be matched rather than merely bypassed.
     """
-    if use_cache:
+    if use_cache and not until:
         cached = load_profile(root)
         if cached:
             return cached
-    return infer_profile(gather_evidence(root, arch_dir))
+    profile = infer_profile(gather_evidence(root, arch_dir, until=until))
+    profile.until = until
+    return profile

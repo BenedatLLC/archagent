@@ -65,16 +65,21 @@ def mine_cochange(
     cap: int = 3000,
     max_commit_files: int = 50,
     fix_re: re.Pattern | None = None,
+    until: str | None = None,
 ) -> CoChange:
     """Co-change counts at the subsystem level, plus per-file churn.
 
     `file_subs` maps a repo-relative file to its subsystems. `fix_re` is the project's learned bug-fix
     recognizer (see `history.py`); pass None to skip the fix-weighted counts rather than guessing.
+    `since`/`until` bound the window — `until` is what lets an evaluation be run *as of* a past commit,
+    so that later history can serve as an outcome nobody could have seen at the time.
     """
     result = CoChange()
     args = ["log", "--no-merges", "--name-only", f"--pretty=format:{_BOUNDARY}%H{_SUBJ_SEP}%s", "-n", str(cap)]
     if since:
         args.append(f"--since={since}")
+    if until:
+        args.append(f"--until={until}")
     out = _git(root, *args)
     if out is None:
         return result
@@ -111,6 +116,31 @@ def mine_cochange(
                 key = frozenset((ordered[i], ordered[j]))
                 result.pair[key] = result.pair.get(key, 0) + 1
     return result
+
+
+# --- history window helpers (shared by evaluate, drift, and the history profile) -----------
+
+def resolve_as_of(root: Path, rev_or_date: str) -> str:
+    """A git date string for `--until`, from either a revision or a date.
+
+    `--as-of v5.2` is the useful form: it reads the tag's own commit date, so the caller does not have to
+    look it up. Anything git cannot resolve as a revision is passed through untouched and treated as a
+    date, which is what makes `--as-of 2025-01-01` work too.
+    """
+    iso = _git(root, "log", "-1", "--format=%cI", rev_or_date)
+    return iso or rev_or_date
+
+
+def tree_newer_than(root: Path, until: str) -> bool:
+    """Whether the checked-out tree is newer than the history window.
+
+    Bounding the history without checking out the matching code measures old history against new files,
+    and nothing in the output looks wrong. Rather than parse git's date grammar ourselves, ask git: the
+    newest commit at or before `until` should *be* HEAD. If it isn't, the two disagree.
+    """
+    head = _git(root, "log", "-1", "--format=%ct", "HEAD")
+    bounded = _git(root, "log", "-1", "--format=%ct", f"--until={until}", "HEAD")
+    return bool(head) and head != bounded
 
 
 def _commits(log: str):

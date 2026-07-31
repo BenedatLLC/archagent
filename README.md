@@ -282,7 +282,9 @@ CLI:
   percentiles), and **scattered single source of truth** — either inferred (one decision's value set
   branched on across several files, likely owner inferred, ranked by churn) or **declared** (an enum
   bypassed by comparisons against its raw member strings; the one signal here that needs no git).
-  `--json`, `--group A|B|C|D|E|F`, `--min-severity`, `--no-history`, `--since`, `--exit-code`.
+  `--json`, `--group A|B|C|D|E|F`, `--min-severity`, `--no-history`, `--since`, `--until`, `--as-of`,
+  `--exit-code`. `--until` / `--as-of <tag>` bound the history so a run can be reproduced *as of* a past
+  revision; they do not check anything out, and the run warns if your tree is newer than the window.
 - `archagent history-profile` — learn how *this* repo words its bug-fix commits (`Fixed #123` vs
   `fix(scope):` vs free-form), which the history signals above rely on. Prints what it inferred; `--write`
   caches it to `.archagent/history-profile.json`, `--evidence` dumps the raw facts (commit guidelines,

@@ -18,7 +18,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .cochange import mine_cochange
+from .cochange import mine_cochange, tree_newer_than
 from .config import Config
 from .connscan import sync_call_targets
 from .datamap import store_touches, table_defs
@@ -195,7 +195,8 @@ def _tier_of(text: str) -> str | None:
 
 # --- entry point --------------------------------------------------------------------------
 
-def evaluate(config: Config, history: bool = True, since: str | None = None) -> EvaluationResult:
+def evaluate(config: Config, history: bool = True, since: str | None = None,
+             until: str | None = None) -> EvaluationResult:
     root = config.project_root
     result = EvaluationResult(git_available=_git_available(root))
     model = _build_model(config)
@@ -212,15 +213,23 @@ def evaluate(config: Config, history: bool = True, since: str | None = None) -> 
     # the per-file signals below do not, so the miner runs whenever there's a git repo.
     cc = None
     if history and result.git_available:
-        profile = history_profile(root, config.architecture_dir)
+        profile = history_profile(root, config.architecture_dir, until=until)
         result.history_profile = profile
-        cc = mine_cochange(root, model.file_subs, since=since, fix_re=profile.matcher())
+        cc = mine_cochange(root, model.file_subs, since=since, until=until, fix_re=profile.matcher())
         result.history_ran = True
         result.history_analyzed = cc.commits_analyzed
         result.commits_seen = cc.commits_seen
         result.bulk_skipped = cc.bulk_skipped
         result.conventional_pct = cc.conventional_pct
         result.history_cautions = _history_cautions(cc) + list(profile.cautions)
+        if until and tree_newer_than(root, until):
+            # The one failure this whole option invites: history bounded, tree not. Nothing in the output
+            # looks wrong — the complexity numbers and branch values just describe code that did not exist
+            # in the window being mined.
+            result.history_cautions.insert(0, (
+                f"history is bounded to {until} but the checked-out tree is newer — the file-content "
+                "checks are reading present-day code against past history. Check out the revision you "
+                "mean to evaluate (`git worktree add`), or drop --until."))
         if model.subs:
             result.findings += _cochange_smells(model, cc)
         result.findings += _change_prone_files(config, cc, profile, result)

@@ -82,7 +82,9 @@ class DriftResult:
         )
 
 
-def find_drift(config: Config) -> DriftResult:
+def find_drift(config: Config, until: str | None = None) -> DriftResult:
+    """`until` bounds the staleness comparison to a past window, so `drift` can be scored as of a
+    revision the way the rest of the evaluation is (see docs/designs/evaluating-archagent.md §5)."""
     root = config.project_root
     arch = config.architecture_dir
     result = DriftResult(git_available=_git_available(root))
@@ -130,7 +132,7 @@ def find_drift(config: Config) -> DriftResult:
             # staleness: only subsystem docs describe code, and only when git can tell us
             if result.git_available:
                 covered = _covered_files(root, covers, refs, source_files)
-                newer = [f for f in covered if _committed_after(root, f, rel_doc)]
+                newer = [f for f in covered if _committed_after(root, f, rel_doc, until)]
                 if newer:
                     shown = ", ".join(newer[:3]) + (f" (+{len(newer) - 3} more)" if len(newer) > 3 else "")
                     result.stale.append((rel_doc, f"{len(newer)} covered file(s) changed after the doc: {shown}"))
@@ -286,13 +288,17 @@ def _git_available(root: Path) -> bool:
     return _git(root, "rev-parse", "--is-inside-work-tree") == "true"
 
 
-def _last_commit_ts(root: Path, rel_path: str) -> int | None:
-    out = _git(root, "log", "-1", "--format=%ct", "--", rel_path)
+def _last_commit_ts(root: Path, rel_path: str, until: str | None = None) -> int | None:
+    args = ["log", "-1", "--format=%ct"]
+    if until:
+        args.append(f"--until={until}")
+    out = _git(root, *args, "--", rel_path)
     return int(out) if out else None
 
 
-def _committed_after(root: Path, file_rel: str, doc_rel: str) -> bool:
-    ft, dt = _last_commit_ts(root, file_rel), _last_commit_ts(root, doc_rel)
+def _committed_after(root: Path, file_rel: str, doc_rel: str, until: str | None = None) -> bool:
+    ft = _last_commit_ts(root, file_rel, until)
+    dt = _last_commit_ts(root, doc_rel, until)
     return ft is not None and dt is not None and ft > dt
 
 

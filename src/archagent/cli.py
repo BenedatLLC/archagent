@@ -22,6 +22,7 @@ from .drift import find_drift, module_map
 from .evaluate import evaluate as run_evaluate
 from .generate import generate
 from .graph import collect_subsystems, graph_block, write_to_index
+from .cochange import resolve_as_of
 from .history import PROFILE_PATH, gather_evidence, history_profile, save_profile
 from .hooks import install_hook
 from .invscan import scan_invariants
@@ -238,12 +239,14 @@ def check(
 @app.command()
 def drift(
     project: Path = typer.Option(Path("."), help="Target repo root"),
+    until: str = typer.Option("", help="Ignore commits after this git date — bounds the staleness check"),
+    as_of: str = typer.Option("", "--as-of", help="Set --until from a revision's own date (e.g. a tag). Does NOT check anything out."),
     exit_code: bool = typer.Option(False, "--exit-code", help="Exit 1 if any drift is found (for CI)"),
     as_json: bool = typer.Option(False, "--json", help="Emit the drift report as JSON (for tooling / agents)"),
 ) -> None:
     """Reflexion-diff: report where the architecture/ docs and the code have drifted (informational)."""
     config = load_config(project.resolve())
-    result = find_drift(config)
+    result = find_drift(config, until=(resolve_as_of(project.resolve(), as_of) if as_of else (until or None)))
 
     if as_json:
         print(json.dumps({
@@ -383,12 +386,15 @@ def evaluate(
     min_severity: str = typer.Option("low", help="Only show findings at/above this severity: low|med|high"),
     no_history: bool = typer.Option(False, "--no-history", help="Skip git co-change mining (regime A only, offline)"),
     since: str = typer.Option("", help="Co-change window as a git date, e.g. '12.months' or '2025-01-01'"),
+    until: str = typer.Option("", help="Ignore commits after this git date — bounds the history window"),
+    as_of: str = typer.Option("", "--as-of", help="Set --until from a revision's own date (e.g. a tag). Does NOT check anything out: check out the same revision yourself, or the run reads present-day code against past history."),
     as_json: bool = typer.Option(False, "--json", help="Emit findings as JSON (for the skill / tooling)"),
     exit_code: bool = typer.Option(False, "--exit-code", help="Exit 1 if any shown finding remains (opt-in CI gate)"),
 ) -> None:
     """Judge the architecture for system-level smells (candidate signals for /archagent-evaluate)."""
     config = load_config(project.resolve())
-    result = run_evaluate(config, history=not no_history, since=since or None)
+    window = resolve_as_of(project.resolve(), as_of) if as_of else (until or None)
+    result = run_evaluate(config, history=not no_history, since=since or None, until=window)
 
     sev_floor = {"low": 0, "med": 1, "high": 2}.get(min_severity.lower(), 0)
     order = {"low": 0, "med": 1, "high": 2}

@@ -1,0 +1,155 @@
+"""Running as of a past commit — the prerequisite for every evaluation in
+`docs/designs/evaluating-archagent.md`.
+
+Three separate paths read the repository and each one reads the present unless told otherwise: the
+co-change miner, the commit-wording profile, and `drift`'s staleness comparison. A fourth — the file
+contents themselves — cannot be bounded by a flag at all and is the caller's job, which is why the
+mismatch warning exists.
+"""
+
+import subprocess
+
+from archagent.cochange import mine_cochange, resolve_as_of, tree_newer_than
+from archagent.config import Config, PythonConfig, TSConfig
+from archagent.drift import find_drift
+from archagent.evaluate import evaluate
+from archagent.history import HistoryProfile, history_profile, save_profile
+
+EARLY = "2020-01-01T00:00:00 +0000"
+LATE = "2024-01-01T00:00:00 +0000"
+CUTOFF = "2022-01-01"
+
+
+def _git(root, *args, date=None):
+    env = None
+    if date:
+        import os
+        env = {**os.environ, "GIT_AUTHOR_DATE": date, "GIT_COMMITTER_DATE": date}
+    subprocess.run(["git", "-C", str(root), *args], check=True, capture_output=True, env=env)
+
+
+def _repo(tmp):
+    _git(tmp, "init", "-q")
+    _git(tmp, "config", "user.email", "t@example.com")
+    _git(tmp, "config", "user.name", "t")
+    (tmp / "architecture" / "subsystems").mkdir(parents=True)
+    return Config(
+        project_root=tmp, languages=["python"],
+        python=PythonConfig(root_package="pkg", source_paths=["src"]),
+        ts=TSConfig(source_paths=["src"]),
+    )
+
+
+def _commit(cfg, msg, files, date):
+    for rel, content in files.items():
+        p = cfg.project_root / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(content)
+    _git(cfg.project_root, "add", "-A")
+    _git(cfg.project_root, "commit", "-q", "-m", msg, date=date)
+
+
+def _two_era_repo(tmp):
+    """Three commits in 2020, three in 2024 — so a 2022 cutoff must halve everything."""
+    cfg = _repo(tmp)
+    for i in range(3):
+        _commit(cfg, f"old change {i}", {"src/pkg/a.py": f"old{i}\n"}, EARLY)
+    for i in range(3):
+        _commit(cfg, f"fix: new change {i}", {"src/pkg/a.py": f"new{i}\n"}, LATE)
+    return cfg
+
+
+# --- the miner ----------------------------------------------------------------------------
+
+def test_until_bounds_the_commit_window(tmp_path):
+    cfg = _two_era_repo(tmp_path)
+    assert mine_cochange(tmp_path, {}).commits_seen == 6
+    assert mine_cochange(tmp_path, {}, until=CUTOFF).commits_seen == 3
+
+
+def test_until_bounds_per_file_churn(tmp_path):
+    cfg = _two_era_repo(tmp_path)
+    assert mine_cochange(tmp_path, {}, until=CUTOFF).file_commits["src/pkg/a.py"] == 3
+
+
+def test_since_and_until_compose(tmp_path):
+    cfg = _two_era_repo(tmp_path)
+    assert mine_cochange(tmp_path, {}, since="2019-01-01", until=CUTOFF).commits_seen == 3
+
+
+# --- the commit-wording profile -----------------------------------------------------------
+
+def test_until_bounds_the_subject_sample(tmp_path):
+    """The leakage that is easy to miss: without this the recogniser is learned from commits made after
+    the cutoff and then used to label commits from before it."""
+    cfg = _two_era_repo(tmp_path)
+    full = history_profile(tmp_path)
+    bounded = history_profile(tmp_path, until=CUTOFF)
+    assert full.subjects_sampled == 6 and bounded.subjects_sampled == 3
+    # only the 2024 commits say "fix:", so a bounded run must not learn that convention
+    assert full.fix_patterns and not bounded.fix_patterns
+
+
+def test_a_bounded_run_ignores_a_full_history_cache(tmp_path):
+    """A cached profile carries no record of the window it was learned over, so reusing one in a bounded
+    run silently reintroduces the leakage the bound exists to prevent."""
+    cfg = _two_era_repo(tmp_path)
+    save_profile(tmp_path, HistoryProfile(style="cached-from-full", fix_patterns=[r"^fix"],
+                                          subjects_sampled=999))
+    assert history_profile(tmp_path).style == "cached-from-full"          # unbounded: cache wins
+    assert history_profile(tmp_path, until=CUTOFF).style != "cached-from-full"
+
+
+def test_the_window_is_recorded_on_the_profile(tmp_path):
+    cfg = _two_era_repo(tmp_path)
+    assert history_profile(tmp_path, until=CUTOFF).until == CUTOFF
+    assert history_profile(tmp_path).until is None
+
+
+# --- resolving a revision, and the tree/history mismatch ----------------------------------
+
+def test_as_of_reads_a_revisions_own_date(tmp_path):
+    cfg = _two_era_repo(tmp_path)
+    _git(tmp_path, "tag", "v1")
+    assert resolve_as_of(tmp_path, "v1").startswith("2024-01-01")
+
+
+def test_as_of_passes_a_plain_date_through(tmp_path):
+    _two_era_repo(tmp_path)
+    assert resolve_as_of(tmp_path, "2021-06-01") == "2021-06-01"
+
+
+def test_tree_newer_than_detects_the_mismatch(tmp_path):
+    cfg = _two_era_repo(tmp_path)
+    assert tree_newer_than(tmp_path, CUTOFF)          # HEAD is 2024, window ends 2022
+    assert not tree_newer_than(tmp_path, "2025-01-01")
+
+
+def test_evaluate_warns_when_the_tree_is_newer_than_the_window(tmp_path):
+    """Bounding history without checking out the matching code is the one mistake this option invites,
+    and it produces no visible symptom — the complexity numbers simply describe the wrong files."""
+    cfg = _two_era_repo(tmp_path)
+    caution = evaluate(cfg, until=CUTOFF).history_cautions[0]
+    assert "checked-out tree is newer" in caution
+    assert "git worktree add" in caution
+    assert not any("checked-out tree is newer" in c for c in evaluate(cfg).history_cautions)
+
+
+def test_evaluate_passes_the_window_to_the_miner(tmp_path):
+    cfg = _two_era_repo(tmp_path)
+    assert evaluate(cfg).commits_seen == 6
+    assert evaluate(cfg, until=CUTOFF).commits_seen == 3
+
+
+# --- drift ---------------------------------------------------------------------------------
+
+def test_drift_staleness_respects_the_window(tmp_path):
+    """The doc was written after the code in 2020 and the code changed again in 2024. Bounded to 2022 the
+    doc is current; unbounded it is stale."""
+    cfg = _repo(tmp_path)
+    _commit(cfg, "code", {"src/pkg/a.py": "v0\n"}, EARLY)
+    _commit(cfg, "doc", {"architecture/subsystems/pkg.md": "# Pkg\n\n**Covers:** `src/pkg/*.py`\n"}, EARLY)
+    _commit(cfg, "later code change", {"src/pkg/a.py": "v1\n"}, LATE)
+
+    assert find_drift(cfg).stale
+    assert not find_drift(cfg, until=CUTOFF).stale

@@ -300,10 +300,13 @@ conflated: the deterministic signals (L1), the skills that judge them into a rep
 as context for a coding agent (L3, the research claim). Near-term goal is confidence in the tool; a paper
 is a later consideration. Items below are in build order.
 
-- [ ] **`--until` / `--as-of` plumbing** (design §5). `mine_cochange` takes `--since` but not `--until`,
-  and `evaluate` passes neither. Needed by every evaluation here, and useful on its own. Note the trap the
-  design calls out: bounding *history* without checking out the *tree* measures old history against new
-  code and looks fine, so the tool should warn when `HEAD` is newer than `--until`.
+- [x] **`--until` / `--as-of` plumbing** (design §5) — **shipped.** `mine_cochange` takes `--since` but not `--until`,
+  All three paths that read the repository are bounded — the co-change miner, the commit-wording profile
+  (`history._subjects`, the leakage that was easy to miss), and `drift`'s staleness comparison — plus
+  `--as-of <rev>`, which reads a tag's own commit date. A bounded run also ignores a cached profile, since
+  a cache carries no record of the window it was learned over. The fourth path, file *contents*, cannot be
+  bounded by a flag: `evaluate` warns when `HEAD` is newer than `--until` rather than silently measuring
+  present-day code against past history.
 - [ ] **Pinned-corpus regression** (§6). A script that clones selected repositories at a pinned tag into a
   temp worktree, runs the tool, and diffs the findings against a recorded expectation. The golden fixtures
   pin ~40 hand-written files; this is the half that would notice a change breaking Django. Opt-in, since
