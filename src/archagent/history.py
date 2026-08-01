@@ -125,9 +125,9 @@ class HistoryProfile:
 # --- evidence gathering (plain, reproducible — no model) ----------------------------------
 
 def gather_evidence(root: Path, arch_dir: Path | None = None, sample: int = _SUBJECT_SAMPLE,
-                    until: str | None = None) -> dict:
+                    until: str | None = None, since: str | None = None) -> dict:
     """Facts about this repo's commit wording, for `infer_profile` or for a model to judge."""
-    subjects = _subjects(root, sample, until)
+    subjects = _subjects(root, sample, until, since)
     lead = _leading_words(subjects)
     stats = []
     for name, pattern in _CANDIDATES:
@@ -150,10 +150,13 @@ def gather_evidence(root: Path, arch_dir: Path | None = None, sample: int = _SUB
     }
 
 
-def _subjects(root: Path, sample: int, until: str | None = None) -> list[str]:
+def _subjects(root: Path, sample: int, until: str | None = None,
+              since: str | None = None) -> list[str]:
     args = ["log", "--no-merges", "-n", str(sample), "--pretty=format:%s"]
     if until:
         args.append(f"--until={until}")
+    if since:
+        args.append(f"--since={since}")
     out = _git(root, *args)
     return [s for s in (out or "").splitlines() if s.strip()]
 
@@ -309,7 +312,7 @@ def save_profile(root: Path, profile: HistoryProfile) -> Path:
 
 
 def history_profile(root: Path, arch_dir: Path | None = None, use_cache: bool = True,
-                    until: str | None = None) -> HistoryProfile:
+                    until: str | None = None, since: str | None = None) -> HistoryProfile:
     """The profile `evaluate` runs with: a cached one if present, otherwise inferred in memory.
 
     `evaluate` never writes the cache — it stays read-only. `archagent history-profile` is what persists
@@ -320,10 +323,10 @@ def history_profile(root: Path, arch_dir: Path | None = None, use_cache: bool = 
     accuracy, and fatal to a study whose premise is that nothing after the cutoff informs the signal. The
     window is recorded on the profile so a future cache can be matched rather than merely bypassed.
     """
-    if use_cache and not until:
+    if use_cache and not (until or since):
         cached = load_profile(root)
         if cached:
             return cached
-    profile = infer_profile(gather_evidence(root, arch_dir, until=until))
+    profile = infer_profile(gather_evidence(root, arch_dir, until=until, since=since))
     profile.until = until
     return profile

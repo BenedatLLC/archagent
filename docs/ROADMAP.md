@@ -323,7 +323,21 @@ is a later consideration. Items below are in build order.
   the worst outcome available, since the baseline would then have enforced the broken behaviour. The walk
   now gets a 300s budget, a failure sets `CoChange.mining_failed`, and `evaluate` reports it as a loud
   caution plus an inactive family rather than silence.
-- [ ] **Held-out defect study** (§7). Compute signals as of T, then ask whether the flagged files
+- [~] **Held-out defect study** (§7) — **harness shipped, run 1 inconclusive.**
+  `scripts/defect_study.py flag|outcome|report` computes the signals as of a cutoff, writes the flagged set
+  to disk, and refuses to compute outcomes until that file exists, so the pre-registered ordering is
+  mechanical. Renames are followed back to each file's name at the cutoff, deleted files are excluded and
+  counted, the statistic is a Mantel-Haenszel rate ratio across churn deciles with a seeded bootstrap
+  interval, and a zero-width interval is reported as degenerate rather than as confidence.
+  **Run 1 (poetry, scrapy) is null but underpowered**: RR 0.99 [0.44, 2.40] and 0.95 [0.41, 2.30], on 10
+  and 13 flagged files after stratification. An interval that wide cannot tell "no effect" from "an effect
+  we could not see", so it licenses nothing in either direction. Full record with the deviations:
+  `evaluations/defect-study/RESULTS.md`.
+- [ ] **Run 2 of the defect study on larger repositories.** The binding criterion turns out to be *scored
+  files*, not years of history — flask has thousands of commits and 22 scored files. Candidates with no
+  prior contact: ansible, home-assistant, pandas, kibana. Run 1 is kept and reported alongside, not
+  replaced: §7.1's rule against swapping a held-out set exists for exactly the case where the first numbers
+  disappoint. A power calculation belongs in the manifest. Compute signals as of T, then ask whether the flagged files
   accumulate more **defect-fixing commits** in (T, now] than churn-matched controls — an outcome that does
   not depend on our own labelling, which is the weakness in every quality number we currently have.
   Recognise defect fixes from commit wording (no external service), cross-checked on a couple of repos

@@ -292,6 +292,11 @@ label vocabulary differs per project, so the mapping is recorded per repository 
 guessed. Where the two recognisers disagree by more than 20% of commits on a repository, that repository's
 history-only numbers are reported but not pooled.
 
+**Minimum size.** A repository needs enough *scored files* — not merely enough history — for decile
+stratification to have anything to compare. Run 1 found this the hard way: flask has thousands of commits
+and 22 scored files, and every one of its strata fell below the five-control minimum. See
+`evaluations/defect-study/RESULTS.md`.
+
 **Repositories.** A held-out set of 3–4, disjoint from every repository used for tuning or regression —
 which rules out Django, LiteLLM, opencode, OpenHands, Datasette, vue-core and my-research-assistant, all of
 which have already been read while building or calibrating the checks. Selection criteria, fixed now:

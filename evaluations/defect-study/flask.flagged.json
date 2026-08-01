@@ -1,0 +1,36 @@
+{
+  "churn_at_cutoff": {
+    "src/flask/__init__.py": 66,
+    "src/flask/app.py": 121,
+    "src/flask/blueprints.py": 57,
+    "src/flask/cli.py": 58,
+    "src/flask/config.py": 23,
+    "src/flask/ctx.py": 34,
+    "src/flask/debughelpers.py": 14,
+    "src/flask/globals.py": 12,
+    "src/flask/helpers.py": 78,
+    "src/flask/json/__init__.py": 24,
+    "src/flask/json/provider.py": 10,
+    "src/flask/json/tag.py": 10,
+    "src/flask/logging.py": 11,
+    "src/flask/sansio/app.py": 9,
+    "src/flask/sansio/blueprints.py": 4,
+    "src/flask/sansio/scaffold.py": 6,
+    "src/flask/sessions.py": 28,
+    "src/flask/templating.py": 15,
+    "src/flask/testing.py": 31,
+    "src/flask/typing.py": 24,
+    "src/flask/views.py": 17,
+    "src/flask/wrappers.py": 21
+  },
+  "commits_at_cutoff": 3000,
+  "cutoff": "2025-02-18",
+  "cutoff_rev": "959052fb8d49c4473f6d8a928d745ae7c38c7e95",
+  "flagged_change_prone": [
+    "src/flask/app.py"
+  ],
+  "flagged_decisions": [],
+  "head": "3.1.3",
+  "profile_style": "leading-verb",
+  "repo": "flask"
+}

@@ -1,0 +1,45 @@
+# The held-out set for the defect study (design §7.1).
+#
+# Disjoint from every repository used for tuning or regression: django, litellm, opencode, OpenHands,
+# datasette, vue-core and my-research-assistant have all been read while building or calibrating the
+# checks, so none of them can produce an unbiased number.
+#
+# Selection criteria, fixed before any run: several years of history, a public issue tracker with bug
+# labels, a mix of commit conventions, at least one non-Python project, and no prior contact with
+# archagent.
+#
+# PINNED ONCE AND NOT CHANGED AFTER A RUN. Quietly swapping a held-out repository when the numbers
+# disappoint is the usual way a held-out set stops being held out.
+#
+# `head` is the end of the outcome window and `cutoff_months` its length, so the window is fixed rather
+# than growing with the calendar — two runs a month apart must produce the same number.
+
+cutoff_months = 12
+
+[[repo]]
+name = "flask"
+url = "https://github.com/pallets/flask"
+head = "3.1.3"
+paths = { python = ["src/flask"] }
+# free-form subjects, squash-merged PRs
+
+[[repo]]
+name = "poetry"
+url = "https://github.com/python-poetry/poetry"
+head = "2.4.1"
+paths = { python = ["src/poetry"] }
+# conventional commits
+
+[[repo]]
+name = "scrapy"
+url = "https://github.com/scrapy/scrapy"
+head = "2.17.0"
+paths = { python = ["scrapy"] }
+# long history, issue-reference style
+
+[[repo]]
+name = "prettier"
+url = "https://github.com/prettier/prettier"
+head = "3.9.6"
+paths = { ts = ["src"] }
+# the non-Python entry
