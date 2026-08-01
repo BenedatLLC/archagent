@@ -52,6 +52,35 @@ Three specific gaps follow from that:
 
 ---
 
+## 1a. Where this stands (2026-08-01)
+
+**L1 (the deterministic signals) now has evidence that does not depend on our judgement.** The held-out
+defect study ran four times, each pre-registered before running, and three of four adequately-powered
+repositories show that files flagged as change-prone-and-complex go on to accumulate significantly more
+defect-fixing commits than churn-matched controls — across two languages and three architectures. The
+fourth shows the same effect at reduced magnitude. Full record with every deviation:
+`evaluations/defect-study/RESULTS.md`.
+
+Two limits on how that may be quoted. Magnitudes are **not comparable across repositories** — the rate
+ratio tracks how concentrated defect fixes are, partly mechanically — so pass/fail stands but the numbers
+are not effect sizes for the check in general. And every attempt on a *small* repository was underpowered,
+so nothing here speaks to those.
+
+**L2 (the skills) still has none, and the reason is structural.** The machinery is built — deterministic
+rubric, worksheet, label store, agreement statistics — but it holds no labels, and labels produced by the
+person who built the checks would recreate the closed loop §1 opens by criticising. This is the binding
+constraint, and it is a people problem rather than a code problem.
+
+**A pattern worth recording, because it recurred five times.** Every serious defect found while building
+this was a *silent* failure — a condition that rendered as a plausible clean result rather than an error:
+a timed-out history walk read as a repository with no commits; an outcome walk read as a year with no
+defects; a corrupt clone read as an empty history; a bounded history run against an unbounded tree; and a
+cached profile learned from after the cutoff. None produced a stack trace. Each was caught by a
+consistency check — a number next to another number that could not both be true — rather than by the code
+failing. Budget for the guards accordingly; they caught more than the tests did.
+
+---
+
 ## 2. What is being evaluated
 
 Three layers, needing three different methods. Conflating them is why "is archagent good?" has been hard
@@ -59,8 +88,8 @@ to answer.
 
 | Layer | What it is | How it's judged | Status |
 |---|---|---|---|
-| **L1 — signals** | the deterministic output of `evaluate` / `drift` / `check` | precision against review; prediction against later defects | partly measured, one biased pass |
-| **L2 — skills** | the prompts that judge, cluster, and write up findings | blind comparison against a baseline prompt, scored on a rubric | not started |
+| **L1 — signals** | the deterministic output of `evaluate` / `drift` / `check` | precision against review; prediction against later defects | **measured** — 3 of 4 powered repositories predict later defects (§7); precision still from one biased pass |
+| **L2 — skills** | the prompts that judge, cluster, and write up findings | blind comparison against a baseline prompt, scored on a rubric | machinery built, **no labels**; blocked on an independent reviewer |
 | **L3 — artifact as context** | whether a maintained architecture artifact makes a coding agent better | task benchmark | not started; this is the research claim |
 
 This design covers L1 and L2 in full and sketches L3 only far enough to keep from designing it out.
@@ -606,20 +635,30 @@ Written down because they are easy to forget once numbers exist.
 
 ---
 
-## 15. Build order
+## 15. Build order — and where it stands
 
-1. **`--until` / as-of plumbing** (§5) — the prerequisite for everything else, including the mismatch
-   warning. Small.
-2. **Pinned-corpus regression** (§6) — the highest ratio of protection to effort, and it makes every later
-   change safer to make.
-3. **Held-out defect study** (§7) — the credibility anchor, and the only item that can retire a signal.
-   Start with the history-only proxy; add issue verification as a cross-check on two repositories.
-4. **Self-evaluation tool + rubric v1** (§8, §9) — begin with the deterministic half only, which is
-   useful on its own and needs no agent; add the judged half once the noise floor is known. This is the
-   point at which to run the DeepEval trial of §12, not before.
-5. **Human spot-check and calibration** (§11) — build it alongside the judged half of the rubric, not
-   after. Until an agreement rate exists, a rubric score is a number with unknown meaning.
-6. **Blind comparison** (§10).
+| # | item | state |
+|---|---|---|
+| 1 | `--until` / as-of plumbing (§5) | **done** |
+| 2 | Pinned-corpus regression (§6) | **done** — 3 of 5 repositories recorded |
+| 3 | Held-out defect study (§7) | **done, 4 runs** — 3 of 4 powered repositories pass |
+| 4 | Self-evaluation + rubric (§8, §9) | **deterministic half done**; judged half gated on 5; `run` blocked on the agent seam |
+| 5 | Human spot-check and calibration (§11) | **machinery done, no labels collected** |
+| 6 | Blind comparison (§10) | not started — needs 5 first |
+| 7 | L3 task benchmark | not designed |
+
+1. **`--until` / as-of plumbing** (§5) — shipped. Three paths into the repository needed bounding, not the
+   two this document originally described; the third (the commit-wording profile) was leakage.
+2. **Pinned-corpus regression** (§6) — shipped as opt-in pytest. It found a silent failure in the miner on
+   its first real run, which had already been recorded as a baseline before anyone looked.
+3. **Held-out defect study** (§7) — shipped, four runs, each pre-registered before running. The one item
+   here that could retire a signal did not: see below.
+4. **Self-evaluation tool + rubric v1** (§8, §9) — the deterministic half is shipped and useful on its
+   own. The judged half is gated on item 5, and `selfeval.py run` refuses rather than half-implementing
+   the agent seam. The DeepEval trial of §12 belongs here and has not been run.
+5. **Human spot-check and calibration** (§11) — machinery shipped, **zero labels**. This is the binding
+   constraint on the whole L2 half, and it cannot be resolved by the person who built the checks.
+6. **Blind comparison** (§10) — not started; without item 5 its judge would be uncalibrated.
 7. **L3 task benchmark** — not designed here. Revisit once L1 and L2 have numbers.
 
 ---

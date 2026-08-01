@@ -300,6 +300,15 @@ conflated: the deterministic signals (L1), the skills that judge them into a rep
 as context for a coding agent (L3, the research claim). Near-term goal is confidence in the tool; a paper
 is a later consideration. Items below are in build order.
 
+**Where this stands (2026-08-01).** L1 has evidence that does not depend on our judgement: across four
+pre-registered runs, 3 of 4 adequately-powered repositories show that flagged files go on to accumulate
+significantly more defect-fixing commits than churn-matched controls, in two languages and three
+architectures (`evaluations/defect-study/RESULTS.md`). Magnitudes are not comparable across repositories
+and small repositories remain unmeasured. L2 has no evidence at all: the rubric, worksheet, label store
+and statistics are built, but **no labels have been collected**, and labels from whoever built the checks
+would recreate the closed loop the design exists to break. That is the binding constraint on everything
+downstream — judged rubric, blind comparison, and any feedback loop — and it needs a person, not code.
+
 - [x] **`--until` / `--as-of` plumbing** (design §5) — **shipped.** `mine_cochange` takes `--since` but not `--until`,
   All three paths that read the repository are bounded — the co-change miner, the commit-wording profile
   (`history._subjects`, the leakage that was easy to miss), and `drift`'s staleness comparison — plus
