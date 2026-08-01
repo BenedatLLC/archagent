@@ -26,6 +26,19 @@
 #
 # A repository enters a run only if it is expected to leave >= 60 flagged files and >= 120 controls after
 # stratification. Run 1 shipped without this and its null result carried no information as a result.
+#
+# REVISED AFTER RUN 3 — the bar above counts the wrong thing. For a count outcome the binding constraint
+# is *events*, not files: nova cleared the file bar within one file (59 of 60) and still returned
+# RR 4.45 [1.63, 16.14], because its window held only 28 defect-fixing commits. Simulating by event count:
+#
+#     defect-fix events on scored files      detects a 1.5x effect
+#              ~27                                    49%     <- nova
+#              ~54                                    69%
+#             ~108                                    95-99%  <- the bar
+#             ~216                                   100%
+#
+# From run 4 on: >= 100 defect-fixing commit-touches on scored files in the outcome window, AND enough
+# files (>= 60 flagged / >= 120 controls) for stratification to have anything to compare. Both, not either.
 
 cutoff_months = 12
 
@@ -125,3 +138,22 @@ url = "https://github.com/openstack/nova"
 head = "33.0.2"
 paths = { python = ["nova"] }
 run = 3
+
+# --- run 4 (2026-08-01) -------------------------------------------------------------------
+#
+# After run 3, architecture is ruled out as the explanation for the split: nova is deeply coupled, not a
+# plugin registry, and passes with the same specificity signature as home-assistant. Both passes are
+# Python; the one near-miss without specificity (angular) is TypeScript — and it is the only TypeScript
+# datapoint, carrying that whole question alone.
+#
+# kibana is TypeScript, of a different kind from angular: a large application/platform rather than a
+# framework, different domain, different conventions, no prior contact.
+#
+# PREDICTION recorded before running — see RESULTS.md "Run 4".
+
+[[repo]]
+name = "kibana"
+url = "https://github.com/elastic/kibana"
+head = "v9.4.4"
+paths = { ts = ["src"] }
+run = 4

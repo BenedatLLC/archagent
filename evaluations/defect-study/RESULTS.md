@@ -6,6 +6,35 @@ is not held out.
 
 ---
 
+## Run 4 (2026-08-01) — PRE-REGISTERED, NOT YET RUN
+
+**Committed before the run.**
+
+**What it tests.** After run 3 the split is no longer architectural — nova is deeply coupled and passes
+like home-assistant. Both passes are Python. The one near-miss lacking specificity, angular, is
+TypeScript, and it is the *only* TypeScript datapoint. Is that a property of the language and its
+ecosystem, or of angular?
+
+kibana is TypeScript of a different kind: a large application/platform rather than a framework, a
+different domain, different conventions.
+
+**The revised power bar applies** (see the manifest): ≥100 defect-fixing commit-touches on scored files,
+*and* ≥60 flagged / ≥120 controls. Run 3 showed the file-only bar counts the wrong thing.
+
+**What each outcome licenses:**
+
+| outcome | reading |
+|---|---|
+| passes, with specificity | the signal generalises across languages; angular is the outlier. Check A's defect-prediction claim would stand unqualified. |
+| fails, without specificity | two of two TypeScript repositories lack the signature. The claim gets scoped: *predicts defect activity in Python; not established for TypeScript*. Check A's ranking would need a language caveat in its finding text. |
+| passes, without specificity | the interval is driven by residual churn the stratification did not absorb in TS codebases. Would send us back to the control design before claiming anything about TypeScript. |
+| fails, with specificity | underpowered for the effect present. Report, and the language question stays open. |
+
+**Not conditioned on the result:** run 4 is reported whatever it says, and runs 1–3 stay on this page
+unchanged.
+
+---
+
 ## Run 3 (2026-08-01) — the architecture explanation is out; the split is by language
 
 **The pre-registration for this run is in the commit history (`5d890cc`), written before the run.** It
