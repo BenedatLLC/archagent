@@ -357,11 +357,16 @@ is a later consideration. Items below are in build order.
   (exploratory) RR 1.83 [1.51, 2.21]. Full record: `evaluations/defect-study/RESULTS.md`.
 - [x] **Prettier** — the clone validation repaired it and it ran: RR 0.93 [0.39, 3.21]. Clears the events
   bar (134) but not the file bar (22 flagged), so recorded, not counted.
-- [ ] **Explain angular.** The maintenance-mode hypothesis was tested and only partly holds: angular does
-  have the highest defect-fix share of any repository here (15.5% of commits), but it is not quiet (4,055
-  commits in the window), and home-assistant has an *even flatter* defect distribution (37% of files fixed
-  vs angular's 33%) while passing at 2.05. Whatever distinguishes angular, it is not how widely fixes are
-  spread. Next: check whether its flagged set is unusual in composition.
+- [x] **Angular explained, and an earlier claim corrected.** Its flagged set is *not* unusual — central
+  framework code (http client, ngtsc handlers, router, language-service), nothing test-adjacent or
+  generated. Churn predicts defects there about as strongly as elsewhere (d9/d5 = 4.3, against 4.5 for
+  home-assistant). The per-decile view is what settles it: angular's flagged files carry ~1.5× the fixes
+  of churn-matched peers in deciles 8 and 9 — the same order as home-assistant's decile 8 — and only
+  decile 7 inverts (0.87 on 11 files). So run 4's description of angular as showing "no specificity" and
+  being "merely busier" over-read a pooled interval whose lower bound was 0.978. It is **a weaker signal
+  the sample cannot resolve**, not the absence of one. The maintenance-mode hypothesis has partial support
+  (highest defect-fix share, 15.5%) but does not explain the null, since home-assistant's distribution is
+  flatter still and it passes.
 - [ ] **Report effect sizes with the concentration caveat.** Across repositories the rate ratio tracks how
   concentrated defect fixes are — 4–5% of files carrying fixes gives RR ~4.3–4.5 (kibana, nova), 28–37%
   gives 0.93–2.05. That is partly mechanical: a ratio has more room when fixes are rare. Pass/fail is a

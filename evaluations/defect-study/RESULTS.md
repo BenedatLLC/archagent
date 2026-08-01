@@ -125,9 +125,46 @@ This does not undercut the pass/fail conclusions, which are within-repository co
 controls. It does mean the *magnitudes* should not be quoted as effect sizes for the check in general, and
 home-assistant's 2.05 against a flat distribution is arguably the more impressive of the two passes.
 
-Angular remains unexplained. The next thing worth checking is whether its flagged set is unusual — for
-instance whether its complexity axis selects test-adjacent or generated-ish files that its own fix traffic
-avoids.
+### Angular's flagged set is not unusual — and "no signal" was the wrong description
+
+Checked, and it rules the composition hypothesis out. Angular's flagged files are central framework code,
+not test-adjacent or generated: `common/http/src/client.ts`, `compiler-cli/src/ngtsc/annotations/
+component/src/handler.ts`, `router`, `language-service`. Nothing junk-like is being selected.
+
+Two further checks then found where the difference actually lies.
+
+**Churn predicts defects about equally everywhere**, so churn-matching does not remove more in angular
+than elsewhere. Mean defects per file by churn decile, decile 9 against decile 5:
+
+| repo | d9/d5 | RR |
+|---|---|---|
+| kibana | 6.8 | 4.27 |
+| nova | ∞ (d5 = 0) | 4.45 |
+| homeassistant | 4.5 | 2.05 |
+| angular | 4.3 | 1.47 |
+| prettier | 4.0 | 0.93 |
+
+**The per-decile breakdown is the informative one, and it revises the earlier reading:**
+
+| decile | angular | homeassistant | kibana |
+|---|---|---|---|
+| 7 | **0.87** (11 flagged) | 3.01 (10) | 8.08 (24) |
+| 8 | 1.53 (20) | 1.61 (57) | 3.28 (40) |
+| 9 | 1.58 (32) | 2.19 (74) | 4.31 (43) |
+
+Angular is **not** flat. In its two largest strata the flagged files carry ~1.5× the defect fixes of their
+churn-matched peers — the same order as home-assistant's decile 8 (1.61). What pulls its pooled estimate
+under the line is decile 7 inverting (0.87, on only 11 flagged files) plus uniformly smaller effects.
+
+**Correcting what I wrote in run 4.** I described angular as showing "no specificity" and being "the
+pattern of a flagged set that is merely busier". That over-read a pooled interval whose lower bound was
+0.978. The per-decile view shows a real but modest effect in the strata that carry most of the files, with
+one small stratum going the other way. The accurate statement is **a weaker signal the sample cannot
+resolve**, not the absence of one — and its interval barely excluding a pass is what that looks like.
+
+The specificity comparison still separates the repositories, but by less than the headline suggested:
+defect ratio over all-commits ratio is 1.06 for angular, 1.60 for home-assistant, 4.3 for kibana. Angular
+is the weak end of a spectrum, not a different phenomenon.
 
 ---
 
