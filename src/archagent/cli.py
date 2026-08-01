@@ -26,6 +26,7 @@ from .cochange import resolve_as_of
 from .history import PROFILE_PATH, gather_evidence, history_profile, save_profile
 from .hooks import install_hook
 from .invscan import scan_invariants
+from .investigations import RATINGS, record as _record_inv
 from .init import KNOWN_AGENTS, detect_agents, init_project, upgrade_project
 from .invariants import parse_invariants
 from .status import status as run_status
@@ -412,6 +413,7 @@ def evaluate(
                 "subjects": f.subjects, "detail": f.detail, "recommendation": f.recommendation,
                 "regime": f.regime, "confidence": f.confidence, "values": f.values,
                 "investigate": f.investigate, "triage_reason": f.triage_reason,
+                "investigation": f.investigation,
             } for f in findings],
             "tier_declared": result.tier_declared,
             "git_available": result.git_available,
@@ -447,7 +449,12 @@ def evaluate(
             console.print(f"  [{style}]{f.severity.upper():4}[/] {f.title} — {subj}")
             console.print(f"       {f.detail}")
             console.print(f"       [dim]→ {f.recommendation} ({f.confidence} confidence, {f.regime})[/]")
-            if f.investigate:
+            if f.investigation:
+                inv = f.investigation
+                stale = " [yellow](stale)[/]" if inv["stale"] else ""
+                console.print(f"       [bold]investigated: {inv['rating'].upper()}[/]{stale} — "
+                              f"{inv['by']}, {inv['dated']}  [dim]{inv['path']}[/]")
+            elif f.investigate:
                 console.print(f"       [bold yellow]?[/] worth investigating — {f.triage_reason}")
                 console.print(f"         [dim]archagent investigate {f.id}[/]")
         console.print("")
@@ -554,6 +561,9 @@ def investigate(
     finding: str = typer.Argument(..., help="A finding id from `archagent evaluate` (sign:owner:hash)"),
     project: Path = typer.Option(Path("."), help="Target repo root"),
     until: str = typer.Option("", help="Ignore commits after this git date (match the run that found it)"),
+    record: Path = typer.Option(None, "--record", help="Markdown file holding a completed investigation to store"),
+    rating: str = typer.Option("", help=f"Consequence rating when recording: {'|'.join(RATINGS)}"),
+    by: str = typer.Option("", help="Who did the investigation"),
 ) -> None:
     """Print an investigation brief for one finding — the questions that turn a candidate into a verdict.
 
@@ -573,6 +583,33 @@ def investigate(
             for f in marked[:10]:
                 console.print(f"  [dim]{f.id}[/]  {f.title} — {f.subjects[0]}")
         raise typer.Exit(code=1)
+
+    if record is not None:
+        if rating not in RATINGS:
+            console.print(f"[red]--rating must be one of[/] {', '.join(RATINGS)}")
+            console.print("[dim]The rating is a claim about consequence, not about how much duplication "
+                          "there is: minor = nothing depends on it or a typo fails loudly; moderate = the "
+                          "copies can drift and nothing would catch it; critical = it already misbehaves, "
+                          "or a plausible edit makes it misbehave silently.[/]")
+            raise typer.Exit(code=1)
+        if not record.is_file():
+            console.print(f"[red]No such file:[/] {record}")
+            raise typer.Exit(code=1)
+        dest = _record_investigation(config.project_root, match, rating, record.read_text(), by)
+        console.print(f"[green]Recorded[/] {rating} investigation of {match.id}")
+        console.print(f"  {dest.relative_to(config.project_root)}")
+        console.print("[dim]  Commit it: the next run reports this verdict instead of re-inviting the "
+                      "investigation, and the next person starts from your write-up.[/]")
+        return
+
+    if match.investigation:
+        inv = match.investigation
+        flag = " [yellow](STALE — the finding's evidence has moved since)[/]" if inv["stale"] else ""
+        console.print(f"\n[bold]Already investigated[/] — rated [bold]{inv['rating']}[/] by "
+                      f"{inv['by']} on {inv['dated']}{flag}")
+        console.print(f"  {inv['path']}\n  [dim]{inv['summary']}[/]\n")
+        if not inv["stale"]:
+            console.print("[dim]Re-record with --record to supersede it.[/]\n")
 
     console.print(f"\n[bold]Investigation brief[/] — {match.title}")
     console.print(f"[dim]{match.id}[/]\n")
@@ -594,6 +631,10 @@ def investigate(
         console.print(f"   [bold]{level:9}[/] {meaning}")
     console.print("\n[dim]Write the answer as prose with file:line citations. A finding whose "
                   "investigation cannot point at a consequence is minor by definition.[/]\n")
+
+
+def _record_investigation(root: Path, match, rating: str, body: str, by: str) -> Path:
+    return _record_inv(root, match.id, rating, body, by, match.subjects, match.values)
 
 
 _BRIEF_QUESTIONS = [

@@ -285,6 +285,12 @@ CLI:
   `--json`, `--group A|B|C|D|E|F`, `--min-severity`, `--no-history`, `--since`, `--until`, `--as-of`,
   `--exit-code`. `--until` / `--as-of <tag>` bound the history so a run can be reproduced *as of* a past
   revision; they do not check anything out, and the run warns if your tree is newer than the window.
+- `archagent investigate <finding-id>` — print an investigation brief for one `evaluate` finding: what the
+  concept is, how many times it is declared, whether the copies have drifted, whether any code path
+  actually misbehaves, and whether it fails loudly or silently. `evaluate`'s severity counts files and
+  commits; a **minor / moderate / critical** rating requires reading the code. `--record <file.md>
+  --rating <level>` stores the result under `.archagent/investigations/` in the repo, so the next run
+  reports the verdict instead of asking again.
 - `archagent history-profile` — learn how *this* repo words its bug-fix commits (`Fixed #123` vs
   `fix(scope):` vs free-form), which the history signals above rely on. Prints what it inferred; `--write`
   caches it to `.archagent/history-profile.json`, `--evidence` dumps the raw facts (commit guidelines,

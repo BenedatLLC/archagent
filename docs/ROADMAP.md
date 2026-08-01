@@ -303,10 +303,15 @@ the evidence argues for:
   a crossed language boundary, or a `.value ==` unwrap), and the CLI names the command to run. The command
   prints a brief — seven questions modelled on a worked example, the files to start from, and the
   minor/moderate/critical scale — rather than pretending to answer them.
-- [ ] **Let the investigation write back.** The brief is currently one-way: an agent works through it and
-  the result lives wherever they put it. It should land next to the finding, so a rating survives the run
-  that produced it and a second investigation does not start from nothing. The spot-check label store is
-  the obvious home — same revision-independent key.
+- [x] **Investigation write-back** — `archagent investigate <id> --record <file.md> --rating
+  minor|moderate|critical --by NAME`. Investigations land in the **target repository** under
+  `.archagent/investigations/`, as markdown meant to be committed: they are findings about that codebase,
+  useful to whoever works on it next, and prose with citations diffs sensibly. A finding with a recorded
+  investigation reports its verdict instead of re-inviting the work, and drops out of the investigation
+  queue. The rating vocabulary is enforced, because a word nothing reads makes the record useless.
+  Staleness uses a fingerprint wider than the finding id — the id keys on owner and value set, so a
+  changed *set of involved files* is invisible to it. When the evidence has moved the old verdict is still
+  shown but marked stale, and the question reopens: the verdict was about the finding as it stood.
 - [ ] **Qualitative rubric criteria** (design §9, judged half). Clarity of prose and diagrams, logical
   strength and business criticality of invariants, completeness and correctness of the documentation —
   each needing a subagent with specific evaluation instructions, and each needing the same blinded human

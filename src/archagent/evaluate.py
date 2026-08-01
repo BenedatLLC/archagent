@@ -26,6 +26,7 @@ from .datamap import store_touches, table_defs
 from .deployscan import extract_service_edges
 from .dupdecide import find_decisions, find_enum_escapes, language_of, type_checked
 from .history import HistoryProfile, history_profile
+from .investigations import load as _load_investigation
 from .hotspots import MAX_REPORTED, find_hotspots
 from .mdutil import strip_code_fences
 from .obsscan import scan as _obs_scan
@@ -79,6 +80,7 @@ class Finding:
     regime: str = "static"     # "static" | "history"
     confidence: str = "med"    # "low" | "med" | "high"
     values: list[str] | None = None    # the value set, when the finding is about one
+    investigation: dict | None = None  # a recorded verdict, if someone has already looked
     # Whether this one looks worth the cost of a full investigation (see `_triage`). Deliberately not a
     # claim that it *is* serious: the first independent labelling round found a finding dismissed from its
     # summary alone that turned out to be the strongest in the set, so triage invites a look rather than
@@ -316,8 +318,24 @@ def evaluate(config: Config, history: bool = True, since: str | None = None,
     result.findings += _hardcoded_endpoints(config)
     result.findings += _observability(root, model)
 
+    _attach_investigations(root, result)
     result.inactive = _coverage(model, result, history_requested=history)
     return result
+
+
+def _attach_investigations(root: Path, result: "EvaluationResult") -> None:
+    """A finding someone has already investigated should report the verdict, not re-invite the work.
+
+    Recorded investigations live in the target repository and outlive any single run, so the expensive
+    half of the analysis is not repeated. A finding whose evidence has moved since is still shown, but
+    marked stale: the verdict was about the finding as it stood.
+    """
+    for f in result.findings:
+        inv = _load_investigation(root, f.id, f.subjects, f.values)
+        if inv:
+            f.investigation = inv.to_dict()
+            if not inv.stale:
+                f.investigate = False   # already answered; stop asking
 
 
 # --- coverage of the evaluation itself (which families were inactive, and why) -------------
