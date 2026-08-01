@@ -382,14 +382,25 @@ is a later consideration. Items below are in build order.
   against issues a public tracker confirms were labelled bugs; archagent itself never gains an
   issue-tracker dependency. **The controls are the experiment** — churn predicts churn, so an unmatched
   comparison proves nothing. This is the only item that can retire a signal.
-- [ ] **End-to-end self-evaluation** (§8). `describe` + `evaluate` at one revision, scored; then update to
-  a later revision and score again. Tests the update path, which is where an artifact-maintenance tool is
-  most likely to fail. Open dependency: it must invoke a coding agent non-interactively, so establish the
-  run-to-run noise floor before comparing any two scores.
-- [ ] **The rubric** (§9). Half deterministic (ADL conformance, coverage, clean exits, `drift` near-zero
-  right after `describe`, non-vacuous invariants), half judged 1–5 with a cited `file:line` behind every
-  score (accuracy, completeness, usefulness of invariants, prose against `writing-style.md`, report
-  quality, update quality).
+- [~] **The rubric, deterministic half** (§9) — **shipped.** `tests/rubric.py` +
+  `python scripts/selfeval.py score <path>`: ADL conformance (a gate), Covers globs resolving, coverage,
+  falsifiable-claim count, drift-after-describe, clean command exits (a gate), and how many `evaluate`
+  families were active. Needs no agent and no model.
+  **Every graded criterion is paired with its counter-criterion**, as §13.3 requires, and the tests build
+  the degenerate artifacts to prove it: one glob claiming the whole codebase scores 1.00 on coverage share
+  and under 0.50 on concentration; documents too vague to contradict score 1.00 on drift and under 0.20 on
+  specificity. In both cases the real artifact outscores the gamed one overall. Demonstrated on
+  `examples/sample_py`, which is an invariants-only fixture: 0.39 overall, gate failed, perfect drift
+  against 0.17 specificity.
+- [ ] **The rubric, judged half** (§9). 1–5 against anchored descriptors with a cited `file:line` behind
+  every score. Gated on the calibration of §11 — an uncalibrated judged score is a number of unknown
+  meaning.
+- [ ] **End-to-end self-evaluation** (§8). `scripts/selfeval.py run` is stubbed with an explicit refusal.
+  Steps 2 and 5 need a coding agent invoked non-interactively, which would make archagent an agent
+  *caller* rather than an agent *callee* — a different kind of dependency from anything it ships today.
+  Three questions first: which agent, how it is pinned, and how much of a score is agent variance. Until a
+  repeat run on identical inputs establishes that noise floor, comparing two scorecards is reading tea
+  leaves. Scoring an artifact you produced by hand already works.
 - [ ] **Human spot-check and calibration** (§11). A small stratified sample of findings and rubric scores,
   reviewed by a person with the tool's own severity/confidence **withheld** until after the verdict, so the
   exercise measures agreement with reality rather than with our prior. The point is not volume — nobody is
