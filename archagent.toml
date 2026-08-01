@@ -1,0 +1,6 @@
+[project]
+languages = ["python"]
+
+[python]
+root_package = "archagent"
+source_paths = ["src"]

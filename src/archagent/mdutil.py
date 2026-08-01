@@ -38,5 +38,8 @@ def is_empty_value(value: str) -> bool:
     v = value.strip().strip("_*`~ ").strip()
     if not v or v.startswith("("):
         return True
-    first = re.split(r"[\s,]+", v, maxsplit=1)[0].strip("()_*`—–- ").lower()
+    # trailing sentence punctuation too: "**Services:** none." is the natural way to write it, and
+    # without the "." here the whole sentence after it was tokenised into eleven phantom services —
+    # found by describing archagent with archagent
+    first = re.split(r"[\s,]+", v, maxsplit=1)[0].strip("()_*`—–-.:; ").lower()
     return first in _EMPTY_WORDS

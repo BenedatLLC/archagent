@@ -1,0 +1,61 @@
+# cli — the command surface
+
+**Covers:** `src/archagent/cli.py`, `src/archagent/__init__.py`
+**Tier:** ui
+**Connects:** invariant-pipeline via import, drift via import, evaluate via import, scaffolding via import, reporting via import, extraction via import, config via import
+
+## Purpose
+
+The only module a user or an agent talks to, and the only one that produces output. Everything below it
+returns data; `cli.py` decides how it is rendered — a Rich table for a person, `--json` for an agent.
+
+## Topology and components
+
+One [Typer](https://typer.tiangolo.com) application with fourteen commands, each a thin adapter: parse
+options, call one function, render its result. `__init__.py` exposes `main` as the `archagent` entry point
+and is the only importer of this module.
+
+The commands group by lifecycle stage: `init`/`upgrade` (scaffold), `gen`/`check` (enforce),
+`drift`/`modules`/`status`/`graph`/`lint-docs` (diff and describe), `evaluate`/`investigate`/
+`history-profile` (judge), `install-hook` (automate).
+
+## Key abstractions
+
+**Result objects, rendered late.** `run_evaluate()` returns an `EvaluationResult`; the CLI renders it
+twice, as text and as JSON, from the same object (`cli.py:375`). Adding a field to a finding does not
+touch the command.
+
+**Findings carry their own next step.** A finding marked `investigate` prints the exact command that acts
+on it (`cli.py:441`). A reader who cannot act on a finding drops it.
+
+## State and tiering
+
+Stateless. Every command reads the filesystem and git, writes at most to `.archagent/` or the artifact,
+and exits. Nothing is cached in process.
+
+## Lifecycles
+
+None — no command has states. A lifecycle diagram here would be decoration.
+
+## Key flows
+
+```mermaid
+sequenceDiagram
+    participant U as user / agent
+    participant C as cli.py
+    participant E as evaluate
+    participant G as git
+    U->>C: archagent evaluate --json
+    C->>E: evaluate(config, until=...)
+    E->>G: log --name-only (bounded)
+    G-->>E: commits + files
+    E-->>C: EvaluationResult (findings, cautions, coverage)
+    C-->>U: JSON, or a rendered report
+```
+_The shape every command takes: the CLI holds no logic, and the same result object serves both output
+modes. The git call is the only external process in this path._
+
+## Invariants
+
+- STR-001 — `print()` appears only here.
+- BND-001, BND-002 — nothing below imports this module.

@@ -39,3 +39,14 @@ def test_is_empty_value():
     assert is_empty_value("billing via sync-call, ledger") is False
     assert is_empty_value("DATABASE_URL") is False
     assert is_empty_value("src/pkg/**") is False
+
+
+def test_a_none_with_a_full_stop_is_still_a_non_declaration():
+    """`**Services:** none.` is the natural way to write it. Without stripping the period the rest of the
+    sentence was tokenised into phantom declarations — eleven of them, found when archagent described
+    itself."""
+    from archagent.mdutil import is_empty_value
+    assert is_empty_value("none.")
+    assert is_empty_value("none. archagent is a single command-line program, run in a repository.")
+    assert is_empty_value("N/A.")
+    assert not is_empty_value("nonebase, other")   # a real name that merely starts with the letters

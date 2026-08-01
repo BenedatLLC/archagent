@@ -293,6 +293,15 @@ the evidence argues for:
 - [ ] **More agents / plugin distribution.** Auto-detect additional coding agents; borrow Archy's plugin
   packaging.
 
+## Structural debt found by describing archagent with archagent
+
+- [ ] **Break the `drift` ↔ `extraction` cycle.** Declaring archagent's own architecture let `evaluate`
+  run its structural signals for the first time, and they found a genuine 2-node cycle at high confidence
+  plus the layer inversion behind it: `drift` (domain) imports the scanners, and `invscan`/`connscan`
+  import back into `drift` for `_source_files` and `_glob_files`. Fix: move `_git`, `_source_files`,
+  `_glob_files` and `_import_graph` into a leaf module both may import. ADR 0003 records the decision and
+  its cost. Deferred once already; the cycle makes it a defect rather than an aesthetic complaint.
+
 ## Findings that explain themselves
 
 - [x] **On-demand investigation** — `archagent investigate <finding-id>`. `evaluate`'s severity counts
