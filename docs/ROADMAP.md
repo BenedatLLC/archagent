@@ -352,9 +352,13 @@ is a later consideration. Items below are in build order.
   meaning stratification absorbed churn essentially exactly, against 4.27 on defect fixes. The power bar
   now counts **events, not files** (nova cleared the file bar within one file and still returned
   [1.63, 16.14] on 28 events); kibana clears it with 438.
-  **Standing: three of four adequately-powered repositories pass, all with the specificity signature,
-  across two languages and three architectures.** Angular is the outlier and why is unexplained. Pooled
-  (exploratory) RR 1.83 [1.51, 2.21]. Full record: `evaluations/defect-study/RESULTS.md`.
+  **Standing: three of four adequately-powered repositories pass, across two languages and three
+  architectures**, and the fourth is not a counter-example — angular shows the same effect at reduced
+  magnitude (~1.5× in the two deciles holding 52 of its 63 flagged files). Pooled (exploratory)
+  RR 1.83 [1.51, 2.21]. Magnitudes are not comparable across repositories: the ratio tracks how
+  concentrated defect fixes are, so pass/fail stands but the numbers are not effect sizes for the check in
+  general. Full record, newest first, with corrections marked in place:
+  `evaluations/defect-study/RESULTS.md`.
 - [x] **Prettier** — the clone validation repaired it and it ran: RR 0.93 [0.39, 3.21]. Clears the events
   bar (134) but not the file bar (22 flagged), so recorded, not counted.
 - [x] **Angular explained, and an earlier claim corrected.** Its flagged set is *not* unusual — central

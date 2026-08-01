@@ -2,11 +2,46 @@
 
 The analysis pre-registered in `docs/designs/evaluating-archagent.md` §7.1. **Every run stays on this
 page**, including the ones that said nothing: a held-out study whose disappointing runs quietly disappear
-is not held out.
+is not held out. Sections below are newest first; where a later section corrects an earlier one, the
+earlier text is left as written and the correction says so.
 
 ---
 
-## Run 4 (2026-08-01) — the language explanation is out too; angular is the outlier
+## Standing (current)
+
+Does the churn × complexity signal identify files that go on to accumulate more defect fixes than
+comparable files it did not flag?
+
+| repo | language | flagged/controls | RR | 95% CI | verdict |
+|---|---|---|---|---|---|
+| kibana | TypeScript | 107 / 257 | 4.27 | [2.05, 11.71] | **passes** |
+| nova | Python | 59 / 82 | 4.45 | [1.63, 16.14] | **passes** |
+| homeassistant | Python | 141 / 375 | 2.05 | [1.55, 2.67] | **passes** |
+| angular | TypeScript | 63 / 173 | 1.47 | [0.98, 2.18] | same effect, weaker; sample cannot resolve it |
+| prettier, ansible, pandas, poetry, scrapy | — | — | 0.93–1.18 | all span 1 | underpowered, uninformative |
+| flask, sympy | — | — | — | — | excluded at the flag step for power |
+
+**Three of four adequately-powered repositories pass, across two languages and three architectures.** The
+fourth is not a counter-example: angular's flagged files carry ~1.5× the defect fixes of their
+churn-matched peers in the two deciles holding 52 of its 63 flagged files, and only a small third stratum
+inverts. It is the weak end of a spectrum, not a contradiction — see the correction below, which revises
+run 4's harsher reading of it.
+
+Two qualifications on how to quote this:
+
+- **Magnitudes are not comparable across repositories.** The rate ratio tracks how *concentrated* defect
+  fixes are, partly mechanically: kibana and nova have 4–5% of files carrying any fix and RRs above 4;
+  home-assistant has 37% and an RR of 2.05. Pass/fail is a within-repository comparison and stands; the
+  numbers are not effect sizes for the check in general.
+- **The pooled figure is exploratory** (RR 1.83 [1.51, 2.21] over nine repositories) and was never
+  pre-registered.
+
+What this does *not* establish: anything about small repositories, where every attempt was underpowered;
+and anything about why angular's effect is weaker.
+
+---
+
+## Run 4 (2026-08-01) — the language explanation is out too
 
 **Pre-registered in commit `8f6f726` before the run**, with all four outcomes and what each would license.
 
@@ -19,7 +54,7 @@ different kind — a large application/platform, not a framework.
 | homeassistant | Python | plugin registry | 141 / 375 | 2.05 | [1.55, 2.67] | 1.28 | yes |
 | nova | Python | coupled service | 59 / 82 | 4.45 | [1.63, 16.14] | 1.35 | yes |
 | **kibana** | **TypeScript** | **platform** | **107 / 257** | **4.27** | **[2.05, 11.71]** | **0.99** | **yes** |
-| angular | TypeScript | framework | 63 / 173 | 1.47 | [0.98, 2.18] | 1.39 | no |
+| angular | TypeScript | framework | 63 / 173 | 1.47 | [0.98, 2.18] | 1.39 | weak (see correction) |
 
 **Answer: language is not the explanation either.** kibana passes, and with the cleanest specificity
 signature in the study: its all-commits ratio is **0.99 [0.80, 1.23]** — stratification absorbed churn
@@ -31,9 +66,13 @@ a bar of 100. The deletion sensitivity check holds (3.61 [1.78, 8.87] with delet
 where 8,645 files were deleted.
 
 **Standing: three of four adequately-powered repositories pass, all three with the specificity signature,
-across two languages and three architectures.** Angular is now the outlier rather than the representative
-of a category, and why it differs is unexplained. Pooled across all nine repositories (exploratory):
-RR 1.83 [1.51, 2.21].
+across two languages and three architectures.** Angular is no longer the representative of a category.
+Pooled across all nine repositories (exploratory): RR 1.83 [1.51, 2.21].
+
+> **Corrected later.** This section went on to describe angular as showing "no specificity" and being
+> "merely busier". The per-decile follow-up below shows that over-read a pooled interval whose lower bound
+> was 0.978: angular carries ~1.5× in its two largest strata. The wording here is left as written; the
+> corrected reading is in "Angular's flagged set is not unusual".
 
 This is the pre-registered "passes, with specificity" outcome, whose recorded reading was: *the signal
 generalises across languages; angular is the outlier; Check A's defect-prediction claim would stand
