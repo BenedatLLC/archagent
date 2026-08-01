@@ -307,10 +307,22 @@ is a later consideration. Items below are in build order.
   a cache carries no record of the window it was learned over. The fourth path, file *contents*, cannot be
   bounded by a flag: `evaluate` warns when `HEAD` is newer than `--until` rather than silently measuring
   present-day code against past history.
-- [ ] **Pinned-corpus regression** (§6). A script that clones selected repositories at a pinned tag into a
-  temp worktree, runs the tool, and diffs the findings against a recorded expectation. The golden fixtures
-  pin ~40 hand-written files; this is the half that would notice a change breaking Django. Opt-in, since
-  it needs network.
+- [x] **Pinned-corpus regression** (§6) — **shipped.** `pytest -m corpus` clones selected repositories at a
+  pinned tag into a temp worktree, runs `evaluate` as of that tag, and diffs a projection of the findings
+  against a recorded expectation; `ARCHAGENT_UPDATE_CORPUS=1` re-records after review. Excluded from the
+  default suite. The clone is blobless rather than shallow — `--depth` would truncate the history that
+  churn is computed from and produce different numbers rather than an error. Diffs are summarised as
+  LOST / NEW / CHANGED per finding, because a *lost* finding is the failure that matters and is invisible
+  in a raw JSON dump. Recorded so far: datasette, django, litellm; opencode and openhands are declared but
+  unrecorded, which skips before any network work. It earned its keep on first use by catching a silent
+  failure in the miner (below).
+- [x] **A failed history walk is no longer silent** — found by the corpus harness on its first real run.
+  `git log --name-only` over 3000 litellm commits took longer than the miner's 30s timeout, `_git`
+  returned None, and `mine_cochange` returned all-zero counts: every history signal went quiet and the run
+  read as a clean repository. It was recorded as litellm's regression baseline before anyone noticed —
+  the worst outcome available, since the baseline would then have enforced the broken behaviour. The walk
+  now gets a 300s budget, a failure sets `CoChange.mining_failed`, and `evaluate` reports it as a loud
+  caution plus an inactive family rather than silence.
 - [ ] **Held-out defect study** (§7). Compute signals as of T, then ask whether the flagged files
   accumulate more **defect-fixing commits** in (T, now] than churn-matched controls — an outcome that does
   not depend on our own labelling, which is the weakness in every quality number we currently have.

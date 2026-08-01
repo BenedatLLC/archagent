@@ -1,0 +1,40 @@
+# Repositories the checks are regression-tested against, pinned to a tag so a result is reproducible.
+#
+# These are the five the thresholds were tuned on. That is deliberate: regression testing wants realism
+# and stability, not independence — it asks "did the output change?", never "is the output right?".
+# The held-out set of design §7 must never appear here, or it stops being held out.
+#
+# `rev` is always a tag or a SHA. A branch would let the expectation drift underneath us.
+
+[[repo]]
+name = "datasette"
+url = "https://github.com/simonw/datasette"
+rev = "1.0a37"
+paths = { python = ["datasette"] }
+
+[[repo]]
+name = "django"
+url = "https://github.com/django/django"
+rev = "5.2.16"
+paths = { python = ["django"] }
+
+# Declared but not yet recorded — each is a large clone, so add expectations deliberately rather than
+# all at once. Until an expectation exists the harness reports it as unrecorded rather than failing.
+
+[[repo]]
+name = "litellm"
+url = "https://github.com/BerriAI/litellm"
+rev = "v1.95.0-dev.2"
+paths = { python = ["litellm"] }
+
+[[repo]]
+name = "opencode"
+url = "https://github.com/sst/opencode"
+rev = "v1.18.5"
+paths = { ts = ["packages"] }
+
+[[repo]]
+name = "openhands"
+url = "https://github.com/All-Hands-AI/OpenHands"
+rev = "cloud-1.47.1"
+paths = { python = ["openhands", "enterprise"], ts = ["frontend/src"] }

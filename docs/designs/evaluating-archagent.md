@@ -155,7 +155,10 @@ out — the caller is responsible for the tree, and the warning above is what ca
 The golden fixtures (`tests/test_golden.py`) pin behaviour on hand-written files. They are fast and they
 run in CI, but they cannot notice that a change broke Django. This adds the other half.
 
-A script — `scripts/corpus.py` — reads a manifest of repositories:
+**As built** it is opt-in pytest rather than a standalone script (`tests/corpus.py` + `tests/test_corpus.py`,
+marked `corpus` and excluded from the default suite by `addopts`), which reuses the golden tests' projection
+and their record-then-review workflow instead of duplicating both. `tests/corpus_manifest.toml` lists the
+repositories:
 
 ```toml
 [[repo]]
@@ -183,6 +186,11 @@ as the goldens.
 **Repository selection.** The five already used for tuning go in this set, because regression testing does
 not need independence — it needs realism and stability. The held-out set of §7 must not be used here, or
 it stops being held out.
+
+**Expectations are recorded per repository, not all at once.** A manifest entry with no recorded
+expectation skips — and skips *before* any network work, so declaring a repository costs nothing until
+someone records it. Each clone is hundreds of megabytes, and a harness that pulls five of them to then
+skip three is one nobody runs.
 
 ---
 

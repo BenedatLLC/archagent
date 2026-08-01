@@ -41,6 +41,12 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/archagent"]
 
+[tool.pytest.ini_options]
+# The corpus tests clone real repositories over the network and take minutes; the rest of the suite takes
+# seconds. Opt in with `pytest -m corpus`.
+markers = ["corpus: pinned-repository regression (network, slow)"]
+addopts = "-m 'not corpus'"
+
 [dependency-groups]
 dev = [
     "pytest>=9.1.1",

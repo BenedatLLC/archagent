@@ -1,0 +1,172 @@
+{
+  "findings": [
+    {
+      "sign": "change-prone-file",
+      "group": "E",
+      "severity": "high",
+      "confidence": "med",
+      "regime": "history",
+      "subjects": [
+        "django/db/models/sql/compiler.py"
+      ],
+      "values": null
+    },
+    {
+      "sign": "change-prone-file",
+      "group": "E",
+      "severity": "high",
+      "confidence": "med",
+      "regime": "history",
+      "subjects": [
+        "django/db/models/base.py"
+      ],
+      "values": null
+    },
+    {
+      "sign": "change-prone-file",
+      "group": "E",
+      "severity": "high",
+      "confidence": "med",
+      "regime": "history",
+      "subjects": [
+        "django/db/models/fields/related.py"
+      ],
+      "values": null
+    },
+    {
+      "sign": "change-prone-file",
+      "group": "E",
+      "severity": "high",
+      "confidence": "med",
+      "regime": "history",
+      "subjects": [
+        "django/db/models/fields/related_descriptors.py"
+      ],
+      "values": null
+    },
+    {
+      "sign": "change-prone-file",
+      "group": "E",
+      "severity": "med",
+      "confidence": "med",
+      "regime": "history",
+      "subjects": [
+        "django/db/models/constraints.py"
+      ],
+      "values": null
+    },
+    {
+      "sign": "change-prone-file",
+      "group": "E",
+      "severity": "med",
+      "confidence": "med",
+      "regime": "history",
+      "subjects": [
+        "django/contrib/admin/checks.py"
+      ],
+      "values": null
+    },
+    {
+      "sign": "change-prone-file",
+      "group": "E",
+      "severity": "med",
+      "confidence": "med",
+      "regime": "history",
+      "subjects": [
+        "django/db/models/sql/query.py"
+      ],
+      "values": null
+    },
+    {
+      "sign": "change-prone-file",
+      "group": "E",
+      "severity": "med",
+      "confidence": "med",
+      "regime": "history",
+      "subjects": [
+        "django/db/backends/base/schema.py"
+      ],
+      "values": null
+    },
+    {
+      "sign": "change-prone-file",
+      "group": "E",
+      "severity": "med",
+      "confidence": "med",
+      "regime": "history",
+      "subjects": [
+        "django/core/management/commands/inspectdb.py"
+      ],
+      "values": null
+    },
+    {
+      "sign": "change-prone-file",
+      "group": "E",
+      "severity": "med",
+      "confidence": "med",
+      "regime": "history",
+      "subjects": [
+        "django/db/backends/sqlite3/schema.py"
+      ],
+      "values": null
+    },
+    {
+      "sign": "scattered-source-of-truth",
+      "group": "F",
+      "severity": "med",
+      "confidence": "low",
+      "regime": "history",
+      "subjects": [
+        "django/db/backends/oracle/operations.py",
+        "django/db/backends/base/schema.py",
+        "django/db/backends/mysql/operations.py",
+        "django/db/backends/oracle/schema.py",
+        "django/db/backends/postgresql/operations.py",
+        "django/db/backends/sqlite3/_functions.py",
+        "django/db/backends/sqlite3/operations.py",
+        "django/db/models/functions/datetime.py",
+        "django/db/models/query.py"
+      ],
+      "values": [
+        "BooleanField",
+        "DateField",
+        "DateTimeField",
+        "JSONField",
+        "TimeField",
+        "UUIDField",
+        "+12 more"
+      ]
+    },
+    {
+      "sign": "hardcoded-endpoint",
+      "group": "D",
+      "severity": "med",
+      "confidence": "high",
+      "regime": "static",
+      "subjects": [
+        "django/contrib/gis/geoip2.py:206"
+      ],
+      "values": null
+    }
+  ],
+  "inactive": [
+    "A \u2014 data & source-of-truth / cross-service",
+    "B \u2014 layering (leaky abstraction)",
+    "B/C \u2014 connector topology",
+    "B \u2014 subsystem co-change"
+  ],
+  "truncated": [
+    [
+      "E \u2014 change-prone complex files",
+      10,
+      39
+    ]
+  ],
+  "history": {
+    "commits_seen": 3000,
+    "commits_analyzed": 0,
+    "profile_style": "leading-verb",
+    "fix_matched": 1708,
+    "subjects_sampled": 4000
+  }
+}

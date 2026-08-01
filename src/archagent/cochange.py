@@ -22,6 +22,7 @@ from pathlib import Path
 
 from .drift import _git
 
+_LOG_TIMEOUT = 300  # the full-history walk on a large repo takes tens of seconds; 30s silently truncated it
 _BOUNDARY = "@@@commit@@@"
 _SUBJ_SEP = "\x1f"  # unit separator between %H and %s, so subjects can't collide with the boundary
 # Conventional Commits: type(optional-scope)!: subject
@@ -45,6 +46,10 @@ class CoChange:
     file_commits: dict[str, int] = field(default_factory=dict)      # file -> commits touching it
     file_fix_commits: dict[str, int] = field(default_factory=dict)  # file -> fix-labeled commits touching it
     fix_commits: int = 0          # non-bulk commits the learned recognizer labels as fixes
+    # Whether the `git log` walk itself failed. Without this a timeout is indistinguishable from a
+    # repository with no commits: every count is zero, every history check goes quiet, and the run looks
+    # clean. Found by the pinned-corpus harness, which recorded exactly such a run as litellm's baseline.
+    mining_failed: bool = False
 
     def between(self, a: str, b: str) -> int:
         return self.pair.get(frozenset((a, b)), 0)
@@ -80,8 +85,9 @@ def mine_cochange(
         args.append(f"--since={since}")
     if until:
         args.append(f"--until={until}")
-    out = _git(root, *args)
+    out = _git(root, *args, timeout=_LOG_TIMEOUT)
     if out is None:
+        result.mining_failed = True
         return result
 
     for subject, files in _commits(out):

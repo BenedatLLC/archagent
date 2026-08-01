@@ -276,9 +276,17 @@ def _is_subsystem(doc: Path, arch: Path) -> bool:
 
 # --- git -----------------------------------------------------------------
 
-def _git(root: Path, *args: str) -> str | None:
+def _git(root: Path, *args: str, timeout: int = 30) -> str | None:
+    """Run git, or return None if it fails. Callers that cannot tell an empty result from a failure must
+    check for None themselves — `mine_cochange` learned this the hard way (see `CoChange.mining_failed`).
+
+    30s suits the single-fact queries this is mostly used for. The full-history walk needs longer: on a
+    large repository `git log --name-only` over thousands of commits takes tens of seconds, and more again
+    on a partial clone that fetches trees on demand.
+    """
     try:
-        proc = subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True, timeout=30)
+        proc = subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True,
+                              timeout=timeout)
     except (OSError, subprocess.SubprocessError):
         return None
     return proc.stdout.strip() if proc.returncode == 0 else None

@@ -153,3 +153,31 @@ def test_drift_staleness_respects_the_window(tmp_path):
 
     assert find_drift(cfg).stale
     assert not find_drift(cfg, until=CUTOFF).stale
+
+
+# --- a failed history walk must not look like a clean repository --------------------------
+
+def test_a_failed_git_walk_is_reported_not_silently_empty(tmp_path, monkeypatch):
+    """Found by the corpus harness: on a large repo the `git log --name-only` walk exceeded the miner's
+    timeout, `_git` returned None, and `mine_cochange` returned all-zero counts. Every history signal went
+    quiet and the run read as clean — and that run was recorded as a regression baseline before anyone
+    noticed."""
+    import archagent.cochange as cochange
+
+    cfg = _two_era_repo(tmp_path)
+    monkeypatch.setattr(cochange, "_git", lambda *a, **kw: None)
+
+    cc = cochange.mine_cochange(tmp_path, {})
+    assert cc.mining_failed and cc.commits_seen == 0
+
+    result = evaluate(cfg)
+    assert result.mining_failed
+    assert "history walk FAILED" in result.history_cautions[0]
+    assert any("history walk failed" in reason for _, reason in result.inactive)
+
+
+def test_a_healthy_walk_is_not_flagged_as_failed(tmp_path):
+    cfg = _two_era_repo(tmp_path)
+    result = evaluate(cfg)
+    assert not result.mining_failed
+    assert not any("history walk FAILED" in c for c in result.history_cautions)

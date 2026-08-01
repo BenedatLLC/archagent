@@ -1,0 +1,135 @@
+{
+  "findings": [
+    {
+      "sign": "change-prone-file",
+      "group": "E",
+      "severity": "high",
+      "confidence": "med",
+      "regime": "history",
+      "subjects": [
+        "datasette/views/base.py"
+      ],
+      "values": null
+    },
+    {
+      "sign": "change-prone-file",
+      "group": "E",
+      "severity": "high",
+      "confidence": "med",
+      "regime": "history",
+      "subjects": [
+        "datasette/views/database.py"
+      ],
+      "values": null
+    },
+    {
+      "sign": "change-prone-file",
+      "group": "E",
+      "severity": "med",
+      "confidence": "med",
+      "regime": "history",
+      "subjects": [
+        "datasette/views/special.py"
+      ],
+      "values": null
+    },
+    {
+      "sign": "change-prone-file",
+      "group": "E",
+      "severity": "med",
+      "confidence": "med",
+      "regime": "history",
+      "subjects": [
+        "datasette/views/index.py"
+      ],
+      "values": null
+    },
+    {
+      "sign": "change-prone-file",
+      "group": "E",
+      "severity": "med",
+      "confidence": "med",
+      "regime": "history",
+      "subjects": [
+        "datasette/facets.py"
+      ],
+      "values": null
+    },
+    {
+      "sign": "change-prone-file",
+      "group": "E",
+      "severity": "med",
+      "confidence": "med",
+      "regime": "history",
+      "subjects": [
+        "datasette/app.py"
+      ],
+      "values": null
+    },
+    {
+      "sign": "change-prone-file",
+      "group": "E",
+      "severity": "med",
+      "confidence": "med",
+      "regime": "history",
+      "subjects": [
+        "datasette/views/table.py"
+      ],
+      "values": null
+    },
+    {
+      "sign": "change-prone-file",
+      "group": "E",
+      "severity": "med",
+      "confidence": "med",
+      "regime": "history",
+      "subjects": [
+        "datasette/views/row.py"
+      ],
+      "values": null
+    },
+    {
+      "sign": "change-prone-file",
+      "group": "E",
+      "severity": "med",
+      "confidence": "med",
+      "regime": "history",
+      "subjects": [
+        "datasette/database.py"
+      ],
+      "values": null
+    },
+    {
+      "sign": "scattered-source-of-truth",
+      "group": "F",
+      "severity": "med",
+      "confidence": "low",
+      "regime": "history",
+      "subjects": [
+        "datasette/views/database.py",
+        "datasette/views/row.py",
+        "datasette/views/stored_queries.py",
+        "datasette/views/table.py"
+      ],
+      "values": [
+        "csv",
+        "html",
+        "json"
+      ]
+    }
+  ],
+  "inactive": [
+    "A \u2014 data & source-of-truth / cross-service",
+    "B \u2014 layering (leaky abstraction)",
+    "B/C \u2014 connector topology",
+    "B \u2014 subsystem co-change"
+  ],
+  "truncated": [],
+  "history": {
+    "commits_seen": 3000,
+    "commits_analyzed": 0,
+    "profile_style": "leading-verb",
+    "fix_matched": 353,
+    "subjects_sampled": 3374
+  }
+}

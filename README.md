@@ -388,6 +388,8 @@ archagent/
 │       └── agent/phases/     the neutral skill prompts (describe · check · invariant · evaluate)
 ├── examples/                 sample_py, sample_ts — end-to-end fixtures
 ├── tests/                    the pytest suite
+│   ├── golden/               projected `evaluate` output for the built-in fixture repos
+│   └── corpus/               … and for real repositories pinned to a tag (`pytest -m corpus`)
 └── .github/workflows/ci.yml  CI (runs the suite on every push/PR)
 ```
 

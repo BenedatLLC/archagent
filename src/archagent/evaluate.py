@@ -99,6 +99,7 @@ class EvaluationResult:
     truncated: list[tuple[str, int, int]] = field(default_factory=list)  # (family, shown, found)
     # The learned per-project bug-fix recognizer the history checks ran with (see history.py).
     history_profile: "HistoryProfile | None" = None
+    mining_failed: bool = False    # the git log walk errored or timed out; every history signal is void
 
     @property
     def any(self) -> bool:
@@ -220,8 +221,14 @@ def evaluate(config: Config, history: bool = True, since: str | None = None,
         result.history_analyzed = cc.commits_analyzed
         result.commits_seen = cc.commits_seen
         result.bulk_skipped = cc.bulk_skipped
+        result.mining_failed = cc.mining_failed
         result.conventional_pct = cc.conventional_pct
         result.history_cautions = _history_cautions(cc) + list(profile.cautions)
+        if cc.mining_failed:
+            result.history_cautions.insert(0, (
+                "the git history walk FAILED (timeout or git error) — every history-based signal is "
+                "silent for that reason, not because the repository is clean. Re-run; if it persists, "
+                "narrow the window with --since."))
         if until and tree_newer_than(root, until):
             # The one failure this whole option invites: history bounded, tree not. Nothing in the output
             # looks wrong — the complexity numbers and branch values just describe code that did not exist
@@ -284,7 +291,9 @@ def _coverage(model: _Model, result: "EvaluationResult", history_requested: bool
     elif not result.git_available:
         inactive.append(("B/E/F — git history", "git not available"))
     else:
-        if result.history_analyzed == 0:
+        if getattr(result, "mining_failed", False):
+            inactive.append(("B/E/F — git history", "the history walk failed; see the caution above"))
+        elif result.history_analyzed == 0:
             inactive.append(("B — subsystem co-change",
                              "no commits mapped to subsystems (declare **Covers:** so files map to "
                              "subsystems); the per-file history checks still ran"))
