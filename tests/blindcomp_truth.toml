@@ -1,0 +1,36 @@
+# Ground truth for the blind comparison (design §10).
+#
+# These verdicts come from the corpus pass recorded in
+# `research/architecture-agent/feedback/probe-results.md`, where every group-F finding was labelled by
+# reading the cited code. They are the part of a report that is checkable rather than a matter of taste:
+# a good report must dismiss an intended family *with a reason*, and must not dismiss a real one.
+#
+# Only findings whose verdict was unambiguous on review are listed. A finding I was unsure about is not
+# ground truth, and padding this file would make the measure look stronger than it is.
+
+[[item]]
+finding_id = "scattered-source-of-truth:django/db/backends/oracle/operations.py"
+repo = "django"
+subject = "django/db/backends/oracle/operations.py"
+aliases = ["backends/oracle", "database backend", "per-backend", "db backend"]
+expected = "dismiss"
+because = """Per-database-backend operations classes branch on the same field-type set by design: that is
+backend polymorphism behind one interface, not a decision torn apart. The archetypal intended family."""
+
+[[item]]
+finding_id = "scattered-source-of-truth:litellm/main.py"
+repo = "litellm"
+subject = "litellm/main.py"
+aliases = ["provider dispatch", "provider list"]
+expected = "confirm"
+because = """A 43-value provider list re-branched across five high-churn core files, one holding 98% of
+the set. Real duplication with a clear owner; the textbook positive case."""
+
+[[item]]
+finding_id = "scattered-source-of-truth:litellm/litellm_core_utils/get_supported_openai_params.py"
+repo = "litellm"
+subject = "get_supported_openai_params.py"
+aliases = ["supported openai params", "core_utils provider"]
+expected = "confirm"
+because = """The same provider decision again inside litellm_core_utils — owner holds 95% of 21 values,
+five other files hold pieces. Confirmed on review."""

@@ -438,7 +438,20 @@ downstream — judged rubric, blind comparison, and any feedback loop — and it
   judged against a codebase is not, and its annotation features are the hosted product while our label
   store stays a local file. Decide by building one rubric criterion both ways at item 4 above, not by
   adopting up front. Keep the judge behind a thin interface with our scorecard schema as the stable part.
-- [ ] **Blind comparison of the skill layer** (§10). Same findings, three arms — shipped guidance, a
+- [~] **Blind comparison of the skill layer** (§10) — **objective half shipped; generation deliberately
+  not automated.** `scripts/blindcomp.py prepare|score` writes three briefs over a byte-identical findings
+  payload (digest recorded on each, so a differing input cannot pass unnoticed), then blinds and shuffles
+  the returned reports, scores them without seeing which arm wrote which, and unblinds afterwards.
+  Generation is left to separate sessions on purpose: one model writing arm A (its own guidance), arms B
+  and C, then grading all three would measure self-preference, which is the failure §10 names.
+  Scoring is objective only — the ground-truth verdicts from the corpus pass (`tests/blindcomp_truth.toml`,
+  three findings labelled by reading code, including the archetypal intended family a good report must
+  dismiss *with a reason*), plus machine-checkable hygiene: evidence citations, clustering, and "tells"
+  that would identify an arm. §13.2 requires a gate to be objective, so this is the half that carries a
+  decision even once a judge exists.
+  Attribution took three attempts: a plain proximity window credits one dismissal against every finding
+  near it; *nearest* mention breaks on "…by design, dismissed. NextFile.py — …"; the rule that works is
+  the most recent finding named **before** the dismissal, which is how prose reads. Same findings, three arms — shipped guidance, a
   generic prompt, no guidance — shuffled and scored by a judge that is not told which is which. The
   intended-family dismissals from the corpus pass give it real ground truth rather than taste.
 - [ ] **Closing the loop — automatic feedback into prompts and tools** (§13). **Deferred until the basic
