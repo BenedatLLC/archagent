@@ -28,12 +28,20 @@ def test_a_recorded_investigation_round_trips(tmp_path):
     assert "drifted" in inv.body
 
 
-def test_it_lands_in_the_target_repository(tmp_path):
-    """Investigations are findings about *that* codebase and belong with it, committed, where whoever
-    works on it next will see them."""
+def test_it_lands_in_the_architecture_artifact(tmp_path):
+    """Investigations are durable, human-facing prose about the system, of the same kind as an ADR — so
+    they belong with the architecture documents, not under `.archagent/`, which is configuration and
+    generated output."""
     p = record(tmp_path, "sign:owner.py:abc", "minor", BODY, subjects=[], values=[])
-    assert p.is_relative_to(tmp_path / ".archagent" / "investigations")
+    assert p.is_relative_to(tmp_path / "investigations")
     assert p.suffix == ".md", "prose with citations should diff as prose"
+
+
+def test_the_location_follows_the_configured_architecture_directory(tmp_path):
+    """A project keeping its artifact at `docs/architecture` gets its investigations there too."""
+    arch = tmp_path / "docs" / "architecture"
+    p = record(arch, "sign:o.py:a", "minor", BODY)
+    assert p.is_relative_to(arch / "investigations")
 
 
 def test_an_unknown_rating_is_refused(tmp_path):
@@ -100,7 +108,7 @@ def test_an_investigated_finding_stops_asking_to_be_investigated(tmp_path):
     f = next(x for x in evaluate(cfg).findings if x.sign == "enum-value-escape")
     assert f.investigate, "the unwrapped .value escape should be flagged"
 
-    record(tmp_path, f.id, "minor", BODY, by="jf", subjects=f.subjects, values=f.values)
+    record(cfg.architecture_dir, f.id, "minor", BODY, by="jf", subjects=f.subjects, values=f.values)
     after = next(x for x in evaluate(cfg).findings if x.sign == "enum-value-escape")
     assert after.investigate is False
     assert after.investigation["rating"] == "minor" and not after.investigation["stale"]
@@ -110,6 +118,7 @@ def test_a_stale_investigation_still_asks(tmp_path):
     """If the finding has moved, the old verdict is shown but the question is open again."""
     cfg = _repo_with_escape(tmp_path)
     f = next(x for x in evaluate(cfg).findings if x.sign == "enum-value-escape")
-    record(tmp_path, f.id, "minor", BODY, subjects=f.subjects + ["elsewhere.py"], values=f.values)
+    record(cfg.architecture_dir, f.id, "minor", BODY, subjects=f.subjects + ["elsewhere.py"],
+           values=f.values)
     after = next(x for x in evaluate(cfg).findings if x.sign == "enum-value-escape")
     assert after.investigation["stale"] and after.investigate is True

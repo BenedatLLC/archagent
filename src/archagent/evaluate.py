@@ -318,12 +318,12 @@ def evaluate(config: Config, history: bool = True, since: str | None = None,
     result.findings += _hardcoded_endpoints(config)
     result.findings += _observability(root, model)
 
-    _attach_investigations(root, result)
+    _attach_investigations(config.architecture_dir, result)
     result.inactive = _coverage(model, result, history_requested=history)
     return result
 
 
-def _attach_investigations(root: Path, result: "EvaluationResult") -> None:
+def _attach_investigations(arch_dir: Path, result: "EvaluationResult") -> None:
     """A finding someone has already investigated should report the verdict, not re-invite the work.
 
     Recorded investigations live in the target repository and outlive any single run, so the expensive
@@ -331,7 +331,7 @@ def _attach_investigations(root: Path, result: "EvaluationResult") -> None:
     marked stale: the verdict was about the finding as it stood.
     """
     for f in result.findings:
-        inv = _load_investigation(root, f.id, f.subjects, f.values)
+        inv = _load_investigation(arch_dir, f.id, f.subjects, f.values)
         if inv:
             f.investigation = inv.to_dict()
             if not inv.stale:

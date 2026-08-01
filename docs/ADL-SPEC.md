@@ -79,8 +79,10 @@ architecture/
 ├── AGENTS.md                  OPTIONAL  tool-owned usage instructions
 ├── subsystems/
 │   └── <name>.md              zero or more subsystem documents (§4)
-└── decisions/
-    └── NNNN-<slug>.md         zero or more Architecture Decision Records (ADRs)
+├── decisions/
+│   └── NNNN-<slug>.md         zero or more Architecture Decision Records (ADRs)
+└── investigations/
+    └── <finding-id>.md        OPTIONAL  recorded analyses of `evaluate` findings (§6a)
 ```
 
 `index.md`, when present, MAY carry a **system map**: a single fenced Mermaid `flowchart` — one node per
@@ -298,6 +300,32 @@ property-rule = "property " [ "stateful " ] target
 ```
 
 A consumer MUST reject a rule that does not match one of these forms rather than guess its intent.
+
+## 6a. Investigations (OPTIONAL)
+
+`<arch-dir>/investigations/` holds recorded analyses of `evaluate` findings — what a candidate turned out
+to *mean* once someone read the code. They sit in the artifact rather than under `.archagent/` because
+they are durable, human-facing prose about the system, of the same kind as an ADR.
+
+An ADR records a **decision**; an investigation records the **analysis** that may justify one. A finding
+rated `critical` usually should graduate into an ADR, and often into a `check` invariant, which is the
+same path an evaluation finding already takes into enforcement.
+
+Each file is markdown with YAML frontmatter:
+
+| Key | Meaning |
+|---|---|
+| `finding` | the `evaluate` finding id (`sign:owner:hash`), stable across runs |
+| `rating` | `minor` \| `moderate` \| `critical` — a claim about **consequence**, not about how much duplication was found |
+| `by` | who performed the investigation |
+| `date` | when |
+| `evidence` | fingerprint of the finding's subjects and value set at the time, so a later run can tell whether the verdict still describes what it sees |
+
+The body is free-form prose with `file:line` citations. Tools MUST NOT require any particular structure
+below the frontmatter; the reader is a person.
+
+A finding with a matching, non-stale investigation reports the recorded rating instead of asking to be
+investigated again.
 
 ## 7. Conformance
 

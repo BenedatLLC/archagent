@@ -595,7 +595,7 @@ def investigate(
         if not record.is_file():
             console.print(f"[red]No such file:[/] {record}")
             raise typer.Exit(code=1)
-        dest = _record_investigation(config.project_root, match, rating, record.read_text(), by)
+        dest = _record_investigation(config.architecture_dir, match, rating, record.read_text(), by)
         console.print(f"[green]Recorded[/] {rating} investigation of {match.id}")
         console.print(f"  {dest.relative_to(config.project_root)}")
         console.print("[dim]  Commit it: the next run reports this verdict instead of re-inviting the "
@@ -633,8 +633,8 @@ def investigate(
                   "investigation cannot point at a consequence is minor by definition.[/]\n")
 
 
-def _record_investigation(root: Path, match, rating: str, body: str, by: str) -> Path:
-    return _record_inv(root, match.id, rating, body, by, match.subjects, match.values)
+def _record_investigation(arch_dir: Path, match, rating: str, body: str, by: str) -> Path:
+    return _record_inv(arch_dir, match.id, rating, body, by, match.subjects, match.values)
 
 
 _BRIEF_QUESTIONS = [

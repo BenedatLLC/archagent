@@ -304,9 +304,12 @@ the evidence argues for:
   prints a brief — seven questions modelled on a worked example, the files to start from, and the
   minor/moderate/critical scale — rather than pretending to answer them.
 - [x] **Investigation write-back** — `archagent investigate <id> --record <file.md> --rating
-  minor|moderate|critical --by NAME`. Investigations land in the **target repository** under
-  `.archagent/investigations/`, as markdown meant to be committed: they are findings about that codebase,
-  useful to whoever works on it next, and prose with citations diffs sensibly. A finding with a recorded
+  minor|moderate|critical --by NAME`. Investigations land in the **architecture artifact** under
+  `<arch-dir>/investigations/` (ADL-SPEC §6a), as markdown meant to be committed. They belong with the
+  architecture documents rather than under `.archagent/`, which is configuration and generated output: an
+  investigation is durable, human-facing prose about the system, of the same kind as an ADR — the
+  difference being that an ADR records a decision and an investigation records the analysis that may
+  justify one. A finding with a recorded
   investigation reports its verdict instead of re-inviting the work, and drops out of the investigation
   queue. The rating vocabulary is enforced, because a word nothing reads makes the record useless.
   Staleness uses a fingerprint wider than the finding id — the id keys on owner and value set, so a

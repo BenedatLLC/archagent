@@ -6,9 +6,15 @@ down what they found. That work is expensive and it must not evaporate — the n
 verdict rather than re-inviting the same investigation, and the next person should start from the write-up
 rather than from nothing.
 
-**Investigations live in the target repository**, under `.archagent/investigations/`, and are meant to be
-committed. They are findings about *that* codebase, useful to whoever works on it next, and they are
-markdown because the content is prose with citations — something a person reads and a diff shows sensibly.
+**Investigations live in the architecture artifact**, under `<arch-dir>/investigations/`, and are meant to
+be committed. They belong with the architecture documents rather than under `.archagent/`, which holds
+configuration and generated output: an investigation is durable, human-facing prose about the system, of
+the same kind as an ADR. The distinction from an ADR is that an ADR records a *decision* while an
+investigation records an *analysis* — one that may lead to a decision, and a confirmed critical one
+usually should, graduating into an ADR and often a `check` invariant.
+
+The location follows the configured `architecture_dir`, so a project keeping its artifact at
+`docs/architecture` gets `docs/architecture/investigations/`.
 
 **A rating is a claim about consequence, not about counts.** The scale is deliberately about what happens,
 not how much duplication there is:
@@ -31,7 +37,7 @@ from datetime import date
 from pathlib import Path
 
 RATINGS = ("minor", "moderate", "critical")
-STORE = ".archagent/investigations"
+STORE = "investigations"      # relative to the configured architecture directory
 _FRONTMATTER = re.compile(r"\A---\s*\n(.*?)\n---\s*\n", re.DOTALL)
 
 
@@ -81,16 +87,16 @@ def _slug(finding_id: str) -> str:
     return re.sub(r"[^A-Za-z0-9._-]+", "-", finding_id).strip("-")[:120]
 
 
-def path_for(root: Path, finding_id: str) -> Path:
-    return root / STORE / f"{_slug(finding_id)}.md"
+def path_for(arch_dir: Path, finding_id: str) -> Path:
+    return arch_dir / STORE / f"{_slug(finding_id)}.md"
 
 
-def record(root: Path, finding_id: str, rating: str, body: str, by: str = "",
+def record(arch_dir: Path, finding_id: str, rating: str, body: str, by: str = "",
            subjects: list[str] | None = None, values: list[str] | None = None) -> Path:
     """Write an investigation. Refuses an unknown rating rather than storing a word nothing reads."""
     if rating not in RATINGS:
         raise ValueError(f"rating must be one of {', '.join(RATINGS)}; got {rating!r}")
-    dest = path_for(root, finding_id)
+    dest = path_for(arch_dir, finding_id)
     dest.parent.mkdir(parents=True, exist_ok=True)
     head = (f"---\nfinding: {finding_id}\nrating: {rating}\nby: {by or '(unrecorded)'}\n"
             f"date: {date.today().isoformat()}\n"
@@ -99,9 +105,9 @@ def record(root: Path, finding_id: str, rating: str, body: str, by: str = "",
     return dest
 
 
-def load(root: Path, finding_id: str, subjects: list[str] | None = None,
+def load(arch_dir: Path, finding_id: str, subjects: list[str] | None = None,
          values: list[str] | None = None) -> Investigation | None:
-    p = path_for(root, finding_id)
+    p = path_for(arch_dir, finding_id)
     if not p.is_file():
         return None
     text = p.read_text(errors="replace")
@@ -122,8 +128,8 @@ def load(root: Path, finding_id: str, subjects: list[str] | None = None,
     return inv
 
 
-def load_all(root: Path) -> list[Investigation]:
-    d = root / STORE
+def load_all(arch_dir: Path) -> list[Investigation]:
+    d = arch_dir / STORE
     if not d.is_dir():
         return []
     out = []

@@ -68,6 +68,7 @@ shared source of truth that both humans and agents read and write:
 | `invariants.md` | hot | the **single source of truth** for checkable rules (the table archagent parses) |
 | `subsystems/<name>.md` | cold (on demand) | one doc per subsystem, the narrative architecture across the six dimensions |
 | `decisions/NNNN-*.md` | cold | ADRs — the *why* behind decisions, and the rejected alternatives |
+| `investigations/*.md` | cold | what an `evaluate` finding turned out to mean once someone read the code, with a minor/moderate/critical rating |
 | `index.md` | hot | catalog of the docs |
 | `log.md` | — | append-only, chronological change log (grep/tail friendly) |
 | `deployment.md` | cold | deployment view (services/runtimes/infra) + configuration (the `**Config:**` env-key manifest) |
@@ -289,7 +290,7 @@ CLI:
   concept is, how many times it is declared, whether the copies have drifted, whether any code path
   actually misbehaves, and whether it fails loudly or silently. `evaluate`'s severity counts files and
   commits; a **minor / moderate / critical** rating requires reading the code. `--record <file.md>
-  --rating <level>` stores the result under `.archagent/investigations/` in the repo, so the next run
+  --rating <level>` stores the result in the artifact under `<arch-dir>/investigations/`, so the next run
   reports the verdict instead of asking again.
 - `archagent history-profile` — learn how *this* repo words its bug-fix commits (`Fixed #123` vs
   `fix(scope):` vs free-form), which the history signals above rely on. Prints what it inferred; `--write`
