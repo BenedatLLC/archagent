@@ -393,15 +393,26 @@ is a later consideration. Items below are in build order.
   `examples/sample_py`, which is an invariants-only fixture: 0.39 overall, gate failed, perfect drift
   against 0.17 specificity.
 - [ ] **The rubric, judged half** (§9). 1–5 against anchored descriptors with a cited `file:line` behind
-  every score. Gated on the calibration of §11 — an uncalibrated judged score is a number of unknown
-  meaning.
+  every score. Gated on the calibration of §11, whose machinery now exists but holds no labels: an
+  uncalibrated judged score is a number of unknown meaning, and the agreement rate is what changes that.
 - [ ] **End-to-end self-evaluation** (§8). `scripts/selfeval.py run` is stubbed with an explicit refusal.
   Steps 2 and 5 need a coding agent invoked non-interactively, which would make archagent an agent
   *caller* rather than an agent *callee* — a different kind of dependency from anything it ships today.
   Three questions first: which agent, how it is pinned, and how much of a score is agent variance. Until a
   repeat run on identical inputs establishes that noise floor, comparing two scorecards is reading tea
   leaves. Scoring an artifact you produced by hand already works.
-- [ ] **Human spot-check and calibration** (§11). A small stratified sample of findings and rubric scores,
+- [~] **Human spot-check and calibration** (§11) — **shipped, unused.** `scripts/spotcheck.py
+  generate|ingest|report` plus `tests/spotcheck.py`. The three properties that decide whether labels are
+  worth collecting are implemented and tested: the tool's severity/confidence/recommendation go to a side
+  file the reviewer never opens (in the same file they would anchor the verdict, and the exercise would
+  measure agreement with our own prior); the worksheet is an offline markdown file with a lenient parser,
+  because thirty items is a week of spare moments; and labels persist under a revision-independent key so
+  a re-run only asks about what is new. Changing a recorded verdict **requires a note** and the prior one
+  is kept — otherwise labels drift toward whatever the tool currently claims and the calibration they feed
+  becomes circular. `unsure` is excluded from the precision denominator rather than counted as a
+  dismissal. Intervals are Wilson, which stays inside [0,1] at these sample sizes.
+  **No labels have been collected yet** — the round trip was exercised with throwaway answers and the
+  store cleared. Real calibration needs a reviewer who did not build the checks. A small stratified sample of findings and rubric scores,
   reviewed by a person with the tool's own severity/confidence **withheld** until after the verdict, so the
   exercise measures agreement with reality rather than with our prior. The point is not volume — nobody is
   labelling 78 hotspot findings — but the agreement rate between person and model judge, which is what
