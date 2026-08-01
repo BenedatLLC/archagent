@@ -180,3 +180,22 @@ def test_a_written_flagged_set_round_trips(tmp_path):
     path = tmp_path / "flagged.json"
     write_flagged(path, {"files": ["a.py"], "cutoff": "2025-08-01"})
     assert read_flagged(path)["files"] == ["a.py"]
+
+
+# --- power ------------------------------------------------------------------------------------
+
+def test_run_ones_sample_size_could_not_have_seen_a_real_effect():
+    """The check that should have run before run 1: at 10 flagged files against 12 controls, even a
+    genuine 1.5x effect is missed almost every time. The null result carried no information."""
+    from defect_study import detection_rate
+    assert detection_rate(n_flagged=10, n_control=12, base_rate=0.4, true_rr=1.5, trials=60) < 0.35
+
+
+def test_a_large_sample_does_see_the_same_effect():
+    from defect_study import detection_rate
+    assert detection_rate(n_flagged=120, n_control=240, base_rate=0.4, true_rr=1.5, trials=60) > 0.6
+
+
+def test_power_is_near_the_false_positive_rate_when_there_is_no_effect():
+    from defect_study import detection_rate
+    assert detection_rate(n_flagged=120, n_control=240, base_rate=0.4, true_rr=1.0, trials=60) < 0.2

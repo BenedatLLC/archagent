@@ -261,6 +261,69 @@ def read_flagged(path: Path) -> dict:
     return json.loads(path.read_text())
 
 
+def pool_across_repos(loaded: list[tuple[dict, "Outcomes"]]) -> Result:
+    """A pooled estimate over several repositories, stratifying on **repository x churn decile**.
+
+    NOT pre-registered (§7.1 fixes one primary test per check), so this is exploratory and cannot be
+    reported as the study's answer. It is here because the alternative — eyeballing four separate
+    underpowered intervals and forming an impression — is worse, not because it upgrades the evidence.
+
+    Stratifying on the pair matters: repositories differ in how often they commit fixes at all, and
+    pooling raw counts would let the busiest repository decide the result.
+    """
+    strata: list[Stratum] = []
+    for flagged, outcomes in loaded:
+        churn = {f: c for f, c in flagged["churn_at_cutoff"].items() if f not in outcomes.deleted}
+        deciles = churn_deciles(churn)
+        strata += build_strata(outcomes.defects, deciles, set(flagged["flagged_change_prone"]))
+    used = [s.decile for s in strata if s.usable]
+    return Result(
+        label="EXPLORATORY pooled across repositories (repo x decile strata)",
+        rate_ratio=rate_ratio(strata), interval=bootstrap_interval(strata),
+        flagged_n=sum(len(s.flagged) for s in strata if s.usable),
+        unflagged_n=sum(len(s.unflagged) for s in strata if s.usable),
+        strata_used=sorted(used), strata_dropped=[s.decile for s in strata if not s.usable],
+    )
+
+
+# --- power ---------------------------------------------------------------------------------
+
+def detection_rate(n_flagged: int, n_control: int, base_rate: float, true_rr: float,
+                   strata: int = 3, trials: int = 200, seed: int = 5) -> float:
+    """Share of simulated studies whose interval excludes 1, at a known effect size.
+
+    Uses the same estimator and interval as the real analysis, so the answer is about *this* design rather
+    than a textbook approximation. Counts are Poisson, which is the usual model for defect-fix events per
+    file over a fixed window.
+
+    Run 1 needed this beforehand and did not have it: 10 flagged files against 12 controls cannot see a
+    1.5x effect, and that was knowable without looking at a single outcome.
+    """
+    rng = random.Random(seed)
+
+    def poisson(mean: float) -> int:
+        # Knuth: fine for the small means defect counts actually have
+        limit, k, prod = 2.718281828459045 ** -mean, 0, 1.0
+        while True:
+            prod *= rng.random()
+            if prod <= limit:
+                return k
+            k += 1
+
+    detected = 0
+    for _ in range(trials):
+        sim = [
+            Stratum(decile=d,
+                    flagged=[poisson(base_rate * true_rr) for _ in range(n_flagged)],
+                    unflagged=[poisson(base_rate) for _ in range(n_control)])
+            for d in range(strata)
+        ]
+        ci = bootstrap_interval(sim, draws=300, seed=rng.randrange(1 << 30))
+        if ci and ci[0] > 1.0 and ci[0] != ci[1]:
+            detected += 1
+    return detected / trials
+
+
 # --- driving it against a repository -------------------------------------------------------
 #
 # Kept separate from the arithmetic above so the statistics can be tested on synthetic data where the

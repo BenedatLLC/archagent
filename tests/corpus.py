@@ -71,12 +71,19 @@ def ensure_clone(entry: dict) -> Path:
 
 
 def warm_clone(clone: Path, rev: str) -> None:
-    """Walk the history once so the lazy tree fetches happen outside any measured run."""
+    """Walk the history once from `rev` so the lazy tree fetches happen outside any measured run.
+
+    Warming at one revision is not enough for the defect study, which walks 3000 commits back from a
+    cutoff a year earlier than `head` — on a busy repository that is a different set of trees, and the
+    miner times out again. So the marker records *which* revisions have been warmed.
+    """
     marker = clone / ".archagent-warmed"
-    if marker.exists():
+    done = set(marker.read_text().split()) if marker.exists() else set()
+    sha = _git(clone, "rev-parse", rev, check=False)
+    if sha in done:
         return
     _git(clone, "log", "--no-merges", "--name-only", "-n", "3000", "--pretty=format:", rev, check=False)
-    marker.write_text(rev + "\n")
+    marker.write_text("\n".join(sorted(done | {sha})) + "\n")
 
 
 def _rev_present(clone: Path, rev: str) -> bool:

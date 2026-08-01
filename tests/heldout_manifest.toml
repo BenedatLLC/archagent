@@ -13,6 +13,19 @@
 #
 # `head` is the end of the outcome window and `cutoff_months` its length, so the window is fixed rather
 # than growing with the calendar — two runs a month apart must produce the same number.
+#
+# MINIMUM POWER, decided in advance (`detection_rate` in tests/defect_study.py simulates this design's own
+# estimator and interval at a known effect size):
+#
+#     flagged / controls      detects a 1.5x effect
+#         10 /  12                    23%     <- run 1 (poetry)
+#         13 /  26                    28%     <- run 1 (scrapy)
+#         30 /  60                    54%
+#         60 / 120                    82%     <- the bar
+#        120 / 240                   100%
+#
+# A repository enters a run only if it is expected to leave >= 60 flagged files and >= 120 controls after
+# stratification. Run 1 shipped without this and its null result carried no information as a result.
 
 cutoff_months = 12
 
@@ -43,3 +56,40 @@ url = "https://github.com/prettier/prettier"
 head = "3.9.6"
 paths = { ts = ["src"] }
 # the non-Python entry
+
+# --- run 2 (2026-08-01) -------------------------------------------------------------------
+#
+# Added because run 1 was underpowered, not because its numbers disappointed — the distinction §7.1 turns
+# on. The sample sizes were visible at the flag step, before any outcome: poetry and scrapy left 10 and 13
+# flagged files after stratification, where the power simulation says ~60 per side is needed to see a
+# 1.5x effect. Run 1 stays on record and is reported alongside; nothing is replaced.
+#
+# Chosen for scored-file count, still with no prior contact, still spanning conventions and languages.
+
+[[repo]]
+name = "pandas"
+url = "https://github.com/pandas-dev/pandas"
+head = "v3.0.5"
+paths = { python = ["pandas"] }
+run = 2
+
+[[repo]]
+name = "ansible"
+url = "https://github.com/ansible/ansible"
+head = "v2.21.2"
+paths = { python = ["lib/ansible"] }
+run = 2
+
+[[repo]]
+name = "homeassistant"
+url = "https://github.com/home-assistant/core"
+head = "2026.7.4"
+paths = { python = ["homeassistant"] }
+run = 2
+
+[[repo]]
+name = "angular"
+url = "https://github.com/angular/angular"
+head = "v22.1.0"
+paths = { ts = ["packages"] }
+run = 2

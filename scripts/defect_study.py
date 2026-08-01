@@ -22,7 +22,8 @@ sys.path.insert(0, str(ROOT / "src"))
 
 import corpus                                              # noqa: E402
 from defect_study import (                                 # noqa: E402
-    analyse_repo, flag_at_cutoff, measure_outcomes, outcome_log, read_flagged, write_flagged,
+    analyse_repo, flag_at_cutoff, measure_outcomes, outcome_log, pool_across_repos, read_flagged,
+    write_flagged,
 )
 
 MANIFEST = ROOT / "tests" / "heldout_manifest.toml"
@@ -56,6 +57,7 @@ def do_flag(entries, months, only):
         # the tree has to match the window: check out the newest commit at or before the cutoff, or the
         # complexity measure describes files that did not exist yet
         rev = _run("git", "-C", str(clone), "rev-list", "-1", f"--before={cutoff}", entry["head"])
+        corpus.warm_clone(clone, rev)   # the cutoff's trees, not just head's
         work = Path("/tmp") / f"defect-{entry['name']}"
         subprocess.run(["git", "-C", str(clone), "worktree", "add", "--detach", "-f", str(work), rev],
                        capture_output=True, check=True)
@@ -96,6 +98,29 @@ def do_outcome(entries, months, only):
               f"predicts={p['predicts']}  [{w['defect_fixing']}/{w['commits']} commits were fixes]")
 
 
+def do_pool(entries):
+    """The exploratory pooled estimate. Recomputes outcomes rather than caching them, so it can never
+    drift out of step with the per-repo results."""
+    from archagent.history import history_profile
+
+    loaded = []
+    for entry in entries:
+        path = RESULTS / f"{entry['name']}.flagged.json"
+        if not path.exists():
+            continue
+        flagged = read_flagged(path)
+        clone = corpus.ensure_clone({**entry, "rev": entry["head"]})
+        profile = history_profile(clone, since=flagged["cutoff"])
+        outcomes = measure_outcomes(outcome_log(clone, flagged["cutoff_rev"], entry["head"]),
+                                    profile.matcher())
+        loaded.append((flagged, outcomes))
+    result = pool_across_repos(loaded)
+    (RESULTS / "pooled.result.json").write_text(json.dumps(result.to_dict(), indent=2) + "\n")
+    print(f"pooled over {len(loaded)} repos: RR={result.to_dict()['rate_ratio']} "
+          f"CI={result.to_dict()['ci95']} flagged={result.flagged_n} controls={result.unflagged_n} "
+          f"predicts={result.predicts}   (EXPLORATORY — not the pre-registered test)")
+
+
 def do_report(entries):
     print(f"{'repo':10} {'RR':>6} {'95% CI':>16} {'flagged':>8} {'controls':>9}  predicts")
     for entry in entries:
@@ -111,11 +136,12 @@ def do_report(entries):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("step", choices=["flag", "outcome", "report"])
+    ap.add_argument("step", choices=["flag", "outcome", "pool", "report"])
     ap.add_argument("--only")
     args = ap.parse_args()
     months, entries = load()
     RESULTS.mkdir(parents=True, exist_ok=True)
     {"flag": lambda: do_flag(entries, months, args.only),
      "outcome": lambda: do_outcome(entries, months, args.only),
+     "pool": lambda: do_pool(entries),
      "report": lambda: do_report(entries)}[args.step]()

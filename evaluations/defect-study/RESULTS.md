@@ -1,67 +1,121 @@
-# Held-out defect study — run 1 (2026-08-01)
+# Held-out defect study — results
 
-The analysis pre-registered in `docs/designs/evaluating-archagent.md` §7.1, run for the first time.
-**This record is permanent.** A held-out study whose disappointing runs quietly disappear is not held out,
-so run 1 stays here whatever later runs say.
+The analysis pre-registered in `docs/designs/evaluating-archagent.md` §7.1. **Every run stays on this
+page**, including the ones that said nothing: a held-out study whose disappointing runs quietly disappear
+is not held out.
 
-## Result
+---
 
-| repo | scored files | flagged | RR | 95% CI | strata used | predicts |
-|---|---|---|---|---|---|---|
-| poetry | 112 | 17 | 0.99 | [0.44, 2.40] | 7, 8 | no |
-| scrapy | 137 | 13 | 0.95 | [0.41, 2.30] | 7, 8, 9 | no |
-| flask | 22 | 1 | — | — | none usable | excluded, see below |
-| prettier | — | — | — | — | — | not run, see below |
+## Run 2 (2026-08-01) — one powered repository passes, one does not
 
-**No evidence either way — and that is a statement about the study, not about Check A.** Both intervals
-comfortably contain 1, but they also contain a doubling and a halving. An interval that wide cannot
-distinguish "no effect" from "a large effect we lacked the data to see". Nothing here licenses a claim in
-either direction, and in particular it does **not** license dropping the complexity axis.
+| repo | scored | flagged | controls | RR | 95% CI | powered? | predicts |
+|---|---|---|---|---|---|---|---|
+| **homeassistant** | 1749 | 143 | 375 | **2.05** | **[1.55, 2.67]** | **yes** | **yes** |
+| **angular** | 794 | 63 | 173 | 1.47 | [0.98, 2.18] | **yes** | no (just) |
+| ansible | 395 | 51 | 67 | 1.18 | [0.63, 2.13] | no | no |
+| pandas | 230 | 27 | 41 | 1.15 | [0.59, 2.72] | no | no |
+| scrapy (run 1) | 137 | 13 | 26 | 0.95 | [0.41, 2.30] | no | no |
+| poetry (run 1) | 112 | 17→10 | 12 | 0.99 | [0.44, 2.40] | no | no |
+| flask (run 1) | 22 | 1 | — | — | — | no | excluded at the flag step |
+| prettier | — | — | — | — | — | — | history walk failed |
 
-Secondary (exploratory, per §7.1 — not a basis for any claim): counting *all* commits rather than
-defect-fixing ones gives RR 1.44 [0.85, 2.30] for poetry and 1.18 [0.86, 1.67] for scrapy. Consistent with
-flagged files simply being busier, which is what the stratification is supposed to remove and what a larger
-sample would settle.
+*Powered* means ≥60 flagged and ≥120 controls after stratification, the bar fixed in
+`tests/heldout_manifest.toml` before run 2 from a simulation of this design's own estimator (10 v 12
+detects a real 1.5× effect 23% of the time; 60 v 120 detects it 82%).
 
-## Why it is underpowered, and what that says about the design
+**Two repositories met the bar. One passes the pre-registered test, one does not, and the more
+interesting difference is between their specificity checks.**
 
-After stratification, poetry compares **10 flagged files against 12 controls** and scrapy 13 against 26.
-Two causes, both structural rather than accidental:
+### The check that decides whether to believe either of them
 
-1. **Only the top deciles are usable.** Check A requires top-quartile churn, so no flagged file exists in
-   deciles 0–6 and those strata drop out. This is correct — within the top deciles the flagged/unflagged
-   split is driven by the *complexity* axis, which is exactly the question worth asking. But it means the
-   analysis only ever uses the top ~30% of files.
-2. **The repositories are too small.** 112 and 137 scored files leave ~11–14 files per decile, of which the
-   controls in a usable stratum number a dozen at best.
+The obvious objection is that stratification failed and we are looking at residual churn. Comparing the
+primary outcome against *all* commits answers it directly — and the two powered repositories answer it
+differently:
 
-The binding selection criterion is therefore **scored files, not years of history** — which the
-pre-registration missed. Flask is a mature project with thousands of commits and 22 scored files in
-`src/flask`; every one of its strata fell below the five-control minimum.
+| repo | defect fixes (primary) | all commits (secondary) | specific to defects? |
+|---|---|---|---|
+| homeassistant | **2.05** [1.55, 2.67] | 1.28 [1.00, 1.62] | **yes** — fixes far outrun general activity |
+| angular | 1.47 [0.98, 2.18] | 1.39 [1.11, 1.72] | **no** — the two move together |
 
-## Deviations from the pre-registration, and their honesty status
+Home-assistant is the result the design was hoping to be able to distinguish: after stratification its
+flagged files receive only slightly more commits of *any* kind than their decile peers, but roughly twice
+the defect fixes. Churn is absorbed and something else is left over.
 
-- **Flask excluded for power.** Caught at the *flag* step, before any outcome was computed: 22 scored
-  files cannot support decile stratification. Determinable without seeing a single outcome, so this is a
-  power criterion rather than a result-driven exclusion.
-- **Poetry and scrapy were not.** Their thinness was equally visible at the flag step and I did not act on
-  it until after seeing the outcomes. Recording that plainly: had these come out strongly positive, the
-  same sample sizes would have been just as inadequate, and it would have been correspondingly tempting not
-  to notice.
-- **Prettier not run.** The history walk failed at the cutoff and the harness refused to record a flagged
-  set rather than record an empty one — the guard added after the same failure was silently recorded as
-  litellm's corpus baseline. Needs a longer walk budget or a warmed clone; it is not an exclusion.
+Angular's flagged files receive about 1.4× everything — commits and fixes alike. That is the pattern you
+would expect if the flagged set is simply a bit busier than its stratum and nothing more specific is
+happening. Angular's primary result would have been reported as a near-miss on the interval alone; the
+secondary comparison is what says it is a *different* near-miss from home-assistant's pass.
 
-## What run 2 needs
+### What this licenses, and what it does not
 
-Larger held-out repositories, so that a usable stratum holds hundreds of files rather than a dozen.
-**Run 1 is not deleted or replaced** — §7.1's rule against swapping a held-out set exists precisely for
-the situation where the first numbers disappoint, and the distinction being drawn here is that the sample
-was too small to answer the question, which was visible before the answer was.
+The pre-registered rule is per repository. **One of two adequately-powered repositories passes it**, with a
+clean specificity check; the other misses, without one. That is real evidence — the first about
+archagent's output that does not depend on our own judgement — and it is suggestive rather than
+established.
 
-Candidates with no prior contact and enough scored files: `ansible/ansible`, `home-assistant/core`,
-`pandas-dev/pandas` (Python), `elastic/kibana` (TypeScript). Adding them makes run 2 an *additional* set
-reported alongside run 1, not a substitute for it.
+Three limits worth stating plainly:
 
-A power calculation should also be part of the manifest rather than discovered afterwards: given a target
-effect size, how many files per stratum are needed?
+1. **Two powered repositories, split.** The other four were too small to see a 2× effect reliably, so their
+   nulls are uninformative rather than contradictory — but they are not corroboration either.
+2. **Home-assistant may be structurally atypical.** `homeassistant/components/*` is thousands of largely
+   independent integration modules. Whether churn and complexity behave there as they would in a codebase
+   with heavy internal coupling is exactly what a third powered repository would settle, and angular's
+   contrary specificity result makes that question sharper rather than softer.
+3. **The pooled estimate is not independent evidence.** RR 1.75 [1.42, 2.15] across seven repositories is
+   exploratory, and 141 of its 304 flagged files are home-assistant's. It is that result diluted, not a
+   replication of it.
+
+### Exploratory (not pre-registered, not a basis for any claim)
+
+- Pooled across repositories, stratified on repo × churn decile: RR 1.75 [1.42, 2.15] (304 flagged, 694
+  controls).
+- Deletion sensitivity on home-assistant: RR 2.03 [1.57, 2.67] with deleted files kept as zero-defect,
+  against 2.05 excluding them — the choice does not drive the result. 518 files were deleted during the
+  window.
+
+---
+
+## Run 1 (2026-08-01) — null, and uninformative
+
+| repo | scored | flagged | RR | 95% CI | predicts |
+|---|---|---|---|---|---|
+| poetry | 112 | 17 | 0.99 | [0.44, 2.40] | no |
+| scrapy | 137 | 13 | 0.95 | [0.41, 2.30] | no |
+| flask | 22 | 1 | — | — | excluded |
+
+Both intervals contained 1 — and also a doubling and a halving. After stratification poetry compared **10
+flagged files against 12 controls**, which the power simulation later showed detects a genuine 1.5× effect
+23% of the time. The run carried no information in either direction.
+
+The binding selection criterion turned out to be **scored files, not years of history**: flask is a mature
+project with thousands of commits and 22 scored files in `src/flask`.
+
+### Deviations, and their honesty status
+
+- **Flask excluded for power**, at the flag step, before any outcome existed. A power judgement made blind.
+- **Poetry and scrapy were not.** Their thinness was equally visible at that step and I acted only after
+  seeing the outcomes. Had they come out strongly positive, the same sample sizes would have been just as
+  inadequate and correspondingly easier not to notice.
+- **Run 2 added repositories rather than replacing any.** §7.1 forbids swapping a held-out set after a run,
+  because that is how a set stops being held out. The distinction relied on here is that the sample was too
+  small to answer the question, which was visible before the answer was — and run 1 remains on this page.
+- **Prettier never ran.** Its history walk failed and the harness refused to record an empty flagged set —
+  the guard added after that same failure was silently recorded as litellm's corpus baseline. Angular hit
+  the identical wall and was fixed rather than dropped: the clone warm-up only covered `head`'s trees,
+  while the flag step walks 3000 commits back from a cutoff a year earlier, so the lazy fetches recurred
+  and the walk timed out. Warming at the cutoff as well fixed it. Prettier is unfinished work, not an
+  exclusion.
+
+---
+
+## Reproducing
+
+```bash
+python scripts/defect_study.py flag       # signals as of the cutoff; writes the flagged set
+python scripts/defect_study.py outcome    # refuses unless the flagged set already exists
+python scripts/defect_study.py pool       # the exploratory pooled estimate
+python scripts/defect_study.py report
+```
+
+Windows are fixed relative to each repository's pinned `head`, not to today, so a rerun next month gives
+the same numbers. The bootstrap seed is fixed for the same reason.
