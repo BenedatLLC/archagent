@@ -209,3 +209,47 @@ def test_a_vague_artifact_still_scores_zero_at_any_size(tmp_path):
     root = _vague(tmp_path)
     assert check_specificity(root, "architecture", 10).score == 0.0
     assert check_specificity(root, "architecture", 10_000).score == 0.0
+
+
+# --- no single kind of claim may carry the score ------------------------------------------------
+
+def _metadata_only(tmp, n=20):
+    """Twenty subsystems annotated with Tier and Service and nothing else: no Covers, no invariants.
+    Cheap to type, and it says nothing about which code belongs where."""
+    files = {**SRC, "architecture/constitution.md": "# C\n", "architecture/index.md": "# I\n",
+             "architecture/invariants.md": "# Invariants\n\nNone.\n"}
+    for i in range(n):
+        files[f"architecture/subsystems/s{i}.md"] = f"# S{i}\n\n**Tier:** domain\n**Service:** api\n"
+    return _repo(tmp, files)
+
+
+def test_metadata_alone_cannot_reach_a_full_score(tmp_path):
+    """The over-weighting this fixes: counting raw markers let one-line annotations carry the score."""
+    c = check_specificity(_metadata_only(tmp_path), "architecture", n_source_files=200)
+    assert c.score <= 0.5, "one kind of claim must not be able to satisfy the target alone"
+    assert "capped" in c.detail
+
+
+def test_a_balanced_artifact_beats_a_metadata_heavy_one(tmp_path):
+    balanced = check_specificity(_good(tmp_path / "b"), "architecture", n_source_files=4)
+    heavy = check_specificity(_metadata_only(tmp_path / "h"), "architecture", n_source_files=4)
+    assert balanced.score > heavy.score
+
+
+def test_config_keys_are_counted_individually(tmp_path):
+    """`**Config:** A, B, C` is three claims — drift reports each key separately. Counting the line once
+    made the granularity depend on how the author punctuated."""
+    from rubric import claim_counts
+    one = _repo(tmp_path / "one", {**SRC, **CORE,
+                                   "architecture/subsystems/a.md": "# A\n\n**Config:** ONE_KEY\n"})
+    many = _repo(tmp_path / "many", {**SRC, **CORE,
+                                     "architecture/subsystems/a.md":
+                                         "# A\n\n**Config:** ONE_KEY, TWO_KEY, THREE_KEY\n"})
+    assert claim_counts(many, "architecture")["metadata"] > claim_counts(one, "architecture")["metadata"]
+
+
+def test_connector_edges_are_counted_individually(tmp_path):
+    from rubric import claim_counts
+    root = _repo(tmp_path, {**SRC, **CORE, "architecture/subsystems/a.md":
+                            "# A\n\n**Connects:** beta via sync-call, gamma via async-event\n"})
+    assert claim_counts(root, "architecture")["metadata"] == 2

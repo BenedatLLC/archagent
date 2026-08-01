@@ -236,28 +236,65 @@ def expected_claims(n_source_files: int) -> int:
     return int(min(MAX_CLAIMS, max(MIN_CLAIMS, scaled)))
 
 
-def check_specificity(root: Path, arch_dir: str, n_source_files: int = 0) -> Check:
-    """How many *falsifiable* claims the artifact makes.
+# One line of metadata is cheap; a `**Covers:**` glob that actually partitions the codebase is not, and
+# an invariant is dearer still. Counting raw marker occurrences let six annotated subsystems contribute
+# 18 of 27 claims — the score was mostly measuring how many one-line annotations someone had typed. So
+# claims are grouped into three kinds and **no kind may satisfy more than half the target**: reaching a
+# full score requires at least two of them.
+CATEGORY_CAP = 0.5
 
-    The counter-criterion to drift. Documents vague enough to be undisprovable score a perfect zero on
-    drift; this is what stops that from looking like success. Counted: Covers globs, typed dependency
-    declarations, and invariant rows — every one of which `drift` or `check` can contradict.
+_TIER_SVC = re.compile(r"\*\*\s*(?:Service|Tier)\s*:?\s*\*\*", re.IGNORECASE)
+_CONNECTS = re.compile(r"^\s*\*\*\s*(?:Connects|Depends-on)\s*:?\s*\*\*\s*[:：]?\s*(.+)$",
+                       re.IGNORECASE | re.MULTILINE)
+_CONFIG = re.compile(r"^\s*\*\*\s*Config\s*:?\s*\*\*\s*[:：]?\s*(.+)$",
+                     re.IGNORECASE | re.MULTILINE)
+
+
+def claim_counts(root: Path, arch_dir: str) -> dict[str, int]:
+    """Falsifiable claims by kind, counted at the granularity each is actually checked at.
+
+    A `**Config:** A, B, C` line is three claims, not one — `drift` reports each key separately. A
+    `**Connects:** a via sync-call, b via async-event` line is two edges. Counting either as one made the
+    granularity depend on how the author happened to punctuate.
     """
     arch = _arch(root, arch_dir)
     if not arch.is_dir():
-        return Check("artifact.specificity", "Artifact makes falsifiable claims", 0.0, "no artifact")
+        return {"covers": 0, "metadata": 0, "invariants": 0}
     text = "\n".join(p.read_text(errors="replace") for p in arch.rglob("*.md"))
-    covers = len(_all_covers(root, arch_dir))
-    typed = len(re.findall(r"\*\*\s*(?:Connects|Depends-on|Service|Tier|Config)\s*:?\s*\*\*", text, re.I))
-    rows = len([ln for ln in (arch / "invariants.md").read_text(errors="replace").splitlines()
+    edges = sum(len([x for x in re.split(r"[,\s]*,[,\s]*", m.group(1)) if x.strip()])
+                for m in _CONNECTS.finditer(text))
+    keys = sum(len([x for x in re.split(r"[,\s]+", m.group(1)) if x.strip()])
+               for m in _CONFIG.finditer(text))
+    inv = arch / "invariants.md"
+    rows = len([ln for ln in inv.read_text(errors="replace").splitlines()
                 if ln.strip().startswith("|") and re.search(r"\|\s*(active|proposed)\s*\|", ln, re.I)]) \
-        if (arch / "invariants.md").is_file() else 0
-    claims = covers + typed + rows
+        if inv.is_file() else 0
+    return {"covers": len(_all_covers(root, arch_dir)),
+            "metadata": len(_TIER_SVC.findall(text)) + edges + keys,
+            "invariants": rows}
+
+
+def check_specificity(root: Path, arch_dir: str, n_source_files: int = 0) -> Check:
+    """How many *falsifiable* claims the artifact makes, against a target scaled to the codebase.
+
+    The counter-criterion to drift. Documents vague enough to be undisprovable score a perfect zero on
+    drift; this is what stops that from looking like success. Counted: Covers globs, typed metadata, and
+    invariant rows — every one of which `drift` or `check` can contradict.
+    """
+    if not _arch(root, arch_dir).is_dir():
+        return Check("artifact.specificity", "Artifact makes falsifiable claims", 0.0, "no artifact")
+    counts = claim_counts(root, arch_dir)
     target = expected_claims(n_source_files)
-    score = min(1.0, claims / target)
-    return Check("artifact.specificity", "Artifact makes falsifiable claims", score,
-                 f"{claims} checkable claim(s) against a target of {target} for {n_source_files} source "
-                 f"file(s): {covers} Covers, {typed} typed metadata, {rows} invariants")
+    cap = max(1, round(target * CATEGORY_CAP))
+    counted = {k: min(v, cap) for k, v in counts.items()}
+    claims = sum(counted.values())
+    capped = [k for k, v in counts.items() if v > cap]
+    detail = (f"{claims} counted claim(s) against a target of {target} for {n_source_files} source "
+              f"file(s): " + ", ".join(f"{k} {counts[k]}" for k in ("covers", "metadata", "invariants")))
+    if capped:
+        detail += f"; capped at {cap} each: {', '.join(capped)}"
+    return Check("artifact.specificity", "Artifact makes falsifiable claims",
+                 min(1.0, claims / target), detail)
 
 
 # --- the tools themselves ------------------------------------------------------------------
