@@ -93,3 +93,24 @@ url = "https://github.com/angular/angular"
 head = "v22.1.0"
 paths = { ts = ["packages"] }
 run = 2
+
+# --- run 3 (2026-08-01) -------------------------------------------------------------------
+#
+# One repository, chosen to answer the specific limitation run 2 left open rather than to add volume.
+#
+# Run 2's pass (home-assistant) is a plugin registry: `homeassistant/components/*` is thousands of largely
+# independent integration modules. Its near-miss (angular) is a coupled framework, and its flagged files
+# showed no specificity to defects. Those differ in two ways at once — architecture and language — so
+# neither explains the other.
+#
+# sympy holds the language fixed (Python, like home-assistant) and changes the architecture: a symbolic
+# mathematics core with deep internal coupling, nothing like a plugin registry.
+#
+# PREDICTION, recorded before running (see RESULTS.md "Run 3" for what each outcome licenses).
+
+[[repo]]
+name = "sympy"
+url = "https://github.com/sympy/sympy"
+head = "1.14.0"
+paths = { python = ["sympy"] }
+run = 3

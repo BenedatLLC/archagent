@@ -6,6 +6,34 @@ is not held out.
 
 ---
 
+## Run 3 (2026-08-01) — PRE-REGISTERED, NOT YET RUN
+
+**Committed before the run.** Recorded this way because the value of saying what an outcome would mean
+collapses once the outcome is known.
+
+**What it tests.** Run 2's pass and near-miss differ in *two* ways at once, so neither explains the other:
+home-assistant is a plugin registry (`homeassistant/components/*`, thousands of largely independent
+modules) written in Python; angular is a deeply coupled framework written in TypeScript. sympy holds the
+language fixed and changes the architecture — a symbolic mathematics core with heavy internal coupling,
+nothing like a plugin registry.
+
+**The question:** does the *specificity* pattern (defect-fix ratio clearly above the all-commits ratio)
+replicate in a coupled Python codebase, or was it a property of home-assistant's plugin structure?
+
+**What each outcome licenses:**
+
+| outcome | reading |
+|---|---|
+| passes, with specificity (defect RR ≫ all-commits RR) | two of three powered repos agree; architecture is not the explanation for home-assistant. The strongest result available from this design. |
+| passes, without specificity (both ratios similar) | the interval is being driven by residual churn the stratification did not absorb. Would call home-assistant's specificity into question too, and send us back to the control design. |
+| fails, without specificity | matches angular. Home-assistant looks like the outlier, and the plugin-registry explanation gains weight. Check A would not be justified as defect prediction. |
+| fails, but with specificity | ambiguous — underpowered for the effect size present. Report and add a fourth. |
+
+**Not conditioned on the result:** run 3 is reported here whatever it says, and run 1 and run 2 stay on
+this page unchanged.
+
+---
+
 ## Run 2 (2026-08-01) — one powered repository passes, one does not
 
 | repo | scored | flagged | controls | RR | 95% CI | powered? | predicts |
