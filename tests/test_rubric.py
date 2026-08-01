@@ -171,3 +171,41 @@ def test_changes_outside_every_subsystem_do_not(tmp_path):
     root = _good(tmp_path)
     c = check_update_captured(root, "architecture", {"src/pkg/a.py", "src/other/new.py"})
     assert c.score == pytest.approx(0.5)
+
+
+# --- the specificity target scales with the codebase -------------------------------------------
+
+def test_the_target_grows_with_the_codebase_but_sublinearly():
+    """A flat constant asks the same of a 20-file project and a 10,000-file monorepo, so it is either
+    trivial for one or negligible for the other. Subsystems aggregate, so the target grows with the
+    square root rather than linearly."""
+    from rubric import expected_claims
+    small, medium, large = expected_claims(20), expected_claims(400), expected_claims(10_000)
+    assert small < medium < large
+    assert large < 500 * small, "linear growth would make a large repo's target absurd"
+
+
+def test_the_target_has_a_floor_for_tiny_and_unknown_repositories():
+    from rubric import expected_claims
+    assert expected_claims(0) == expected_claims(1) >= 8
+
+
+def test_the_target_is_capped():
+    from rubric import expected_claims
+    assert expected_claims(10_000) == expected_claims(200_000)
+
+
+def test_the_same_artifact_scores_lower_against_a_larger_codebase(tmp_path):
+    """The behaviour the scaling exists for: twelve claims is thorough for a handful of files and
+    negligible for thousands."""
+    root = _good(tmp_path)
+    small = check_specificity(root, "architecture", n_source_files=4)
+    large = check_specificity(root, "architecture", n_source_files=5000)
+    assert small.score > large.score
+    assert "target of" in large.detail and "5000 source file" in large.detail
+
+
+def test_a_vague_artifact_still_scores_zero_at_any_size(tmp_path):
+    root = _vague(tmp_path)
+    assert check_specificity(root, "architecture", 10).score == 0.0
+    assert check_specificity(root, "architecture", 10_000).score == 0.0

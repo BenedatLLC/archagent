@@ -401,7 +401,11 @@ self-preference).
   falsifiable-claim count, drift-after-describe, clean command exits (a gate), and how many `evaluate`
   families were active. Needs no agent and no model.
   **Every graded criterion is paired with its counter-criterion**, as §13.3 requires, and the tests build
-  the degenerate artifacts to prove it: one glob claiming the whole codebase scores 1.00 on coverage share
+  the degenerate artifacts to prove it. The specificity target scales with the codebase (√ of the
+  source-file count, floored at 8, capped at 120): a flat constant asked the same of a 20-file project and
+  a 10,000-file monorepo, so it was either trivial for one or negligible for the other. The *shape* is now
+  defensible; the constants are still chosen rather than measured, and calibrating them needs real
+  artifacts of known quality to score. one glob claiming the whole codebase scores 1.00 on coverage share
   and under 0.50 on concentration; documents too vague to contradict score 1.00 on drift and under 0.20 on
   specificity. In both cases the real artifact outscores the gamed one overall. Demonstrated on
   `examples/sample_py`, which is an invariants-only fixture: 0.39 overall, gate failed, perfect drift

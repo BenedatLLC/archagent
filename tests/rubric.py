@@ -20,6 +20,7 @@ A criterion without its pair is a target, not a diagnostic.
 from __future__ import annotations
 
 import json
+import math
 import re
 import subprocess
 from dataclasses import dataclass, field
@@ -208,7 +209,34 @@ def check_drift(root: Path, arch_dir: str) -> Check:
                  f"{total} drift item(s)" + (f" ({worst})" if worst else ""))
 
 
-def check_specificity(root: Path, arch_dir: str) -> Check:
+MIN_CLAIMS = 8          # even a tiny project should make this many checkable statements
+CLAIMS_PER_ROOT_FILE = 2.0
+MAX_CLAIMS = 120        # past this the target stops being a floor test and becomes busywork
+
+
+def expected_claims(n_source_files: int) -> int:
+    """How many falsifiable claims an artifact for a codebase this size ought to make.
+
+    Grows with the **square root** of the file count, not linearly: subsystems aggregate, so describing
+    ten times the code does not take ten times the claims. A flat constant — which this was — asks the
+    same of a 20-file project and a 10,000-file monorepo, so it is either trivial for one or negligible
+    for the other.
+
+        20 files ->   8 claims (the floor)
+       200 files ->  28
+     1,700 files ->  82
+    10,000 files -> 120 (the cap)
+
+    The constants are still chosen rather than measured. What has changed is that the *shape* is now
+    defensible; the calibration is not, and needs real artifacts of known quality to score.
+    """
+    if not n_source_files:
+        return MIN_CLAIMS
+    scaled = round(CLAIMS_PER_ROOT_FILE * math.sqrt(n_source_files))
+    return int(min(MAX_CLAIMS, max(MIN_CLAIMS, scaled)))
+
+
+def check_specificity(root: Path, arch_dir: str, n_source_files: int = 0) -> Check:
     """How many *falsifiable* claims the artifact makes.
 
     The counter-criterion to drift. Documents vague enough to be undisprovable score a perfect zero on
@@ -225,9 +253,11 @@ def check_specificity(root: Path, arch_dir: str) -> Check:
                 if ln.strip().startswith("|") and re.search(r"\|\s*(active|proposed)\s*\|", ln, re.I)]) \
         if (arch / "invariants.md").is_file() else 0
     claims = covers + typed + rows
-    score = min(1.0, claims / 12)      # a dozen checkable claims is a modest artifact, not a rich one
+    target = expected_claims(n_source_files)
+    score = min(1.0, claims / target)
     return Check("artifact.specificity", "Artifact makes falsifiable claims", score,
-                 f"{claims} checkable claim(s): {covers} Covers, {typed} typed metadata, {rows} invariants")
+                 f"{claims} checkable claim(s) against a target of {target} for {n_source_files} source "
+                 f"file(s): {covers} Covers, {typed} typed metadata, {rows} invariants")
 
 
 # --- the tools themselves ------------------------------------------------------------------
@@ -275,7 +305,7 @@ def score_deterministic(root: Path, source_files: set[str], repo: str = "", rev:
     card.add(check_required_documents(root, arch_dir))
     card.add(check_covers_resolve(root, arch_dir, source_files))
     card.add(*check_coverage(root, arch_dir, source_files))
-    card.add(check_specificity(root, arch_dir))
+    card.add(check_specificity(root, arch_dir, len(source_files)))
     card.add(check_drift(root, arch_dir))
     card.add(check_commands_clean(root))
     card.add(check_evaluate_coverage(root))
