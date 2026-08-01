@@ -66,8 +66,52 @@ def ensure_clone(entry: dict) -> Path:
         _git(None, "clone", "--filter=blob:none", "--no-checkout", entry["url"], str(dest))
     if not _rev_present(dest, entry["rev"]):
         _git(dest, "fetch", "--tags", "origin")
+    verify_clone(dest, entry["rev"])
     warm_clone(dest, entry["rev"])
     return dest
+
+
+def verify_clone(clone: Path, rev: str) -> None:
+    """A cached clone is usable only if it can actually walk history *with file names*.
+
+    `HEAD` existing is not enough, and neither is `rev-parse` resolving the revision. A
+    `--filter=blob:none` clone can end up with a **commit-graph that references objects absent from the
+    object database**; git then aborts a walk with exit 128 and "in the commit graph file but not in the
+    object database. This is probably due to repo corruption." Kibana arrived in exactly that state, and
+    because a failed walk had been read as an empty one, it presented as a repository with no history.
+
+    The commit-graph is a derived cache, so the repair is cheap and lossless: delete it and let git read
+    the objects directly. Only if that fails is the clone genuinely broken.
+    """
+    if _walks(clone, rev):
+        return
+    # repair: the graph is a cache, nothing is lost by dropping it
+    info = clone / ".git" / "objects" / "info"
+    targets = [info / "commit-graph"]
+    graphs = info / "commit-graphs"
+    if graphs.is_dir():
+        targets += list(graphs.iterdir())
+    for f in targets:
+        if f.exists():
+            f.chmod(0o644)          # git writes the graph read-only
+            f.unlink()
+    _git(clone, "config", "core.commitGraph", "false", check=False)
+    if _walks(clone, rev):
+        return
+    raise RuntimeError(
+        f"{clone.name}: cannot walk history at {rev} even after dropping the commit-graph. The clone is "
+        f"unusable — delete it and re-clone, or `git fetch --refetch` to repair the object database."
+    )
+
+
+def _walks(clone: Path, rev: str) -> bool:
+    """Can git produce a name-status walk here at all? The same shape of command the checks run."""
+    proc = subprocess.run(
+        ["git", "-C", str(clone), "log", "--no-merges", "--name-status", "-n", "5",
+         "--pretty=format:X", rev],
+        capture_output=True, text=True,
+    )
+    return proc.returncode == 0
 
 
 def warm_clone(clone: Path, rev: str) -> None:

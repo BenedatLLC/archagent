@@ -6,32 +6,67 @@ is not held out.
 
 ---
 
-## Run 4 (2026-08-01) — PRE-REGISTERED, NOT YET RUN
+## Run 4 (2026-08-01) — the language explanation is out too; angular is the outlier
 
-**Committed before the run.**
+**Pre-registered in commit `8f6f726` before the run**, with all four outcomes and what each would license.
 
-**What it tests.** After run 3 the split is no longer architectural — nova is deeply coupled and passes
-like home-assistant. Both passes are Python. The one near-miss lacking specificity, angular, is
-TypeScript, and it is the *only* TypeScript datapoint. Is that a property of the language and its
-ecosystem, or of angular?
+Run 3 killed the architectural explanation. What remained was that both passes were Python and the one
+near-miss lacking specificity, angular, was the only TypeScript datapoint. kibana is TypeScript of a
+different kind — a large application/platform, not a framework.
 
-kibana is TypeScript of a different kind: a large application/platform rather than a framework, a
-different domain, different conventions.
+| repo | language | kind | flagged/controls | RR (defect fixes) | 95% CI | all commits | specific? |
+|---|---|---|---|---|---|---|---|
+| homeassistant | Python | plugin registry | 141 / 375 | 2.05 | [1.55, 2.67] | 1.28 | yes |
+| nova | Python | coupled service | 59 / 82 | 4.45 | [1.63, 16.14] | 1.35 | yes |
+| **kibana** | **TypeScript** | **platform** | **107 / 257** | **4.27** | **[2.05, 11.71]** | **0.99** | **yes** |
+| angular | TypeScript | framework | 63 / 173 | 1.47 | [0.98, 2.18] | 1.39 | no |
 
-**The revised power bar applies** (see the manifest): ≥100 defect-fixing commit-touches on scored files,
-*and* ≥60 flagged / ≥120 controls. Run 3 showed the file-only bar counts the wrong thing.
+**Answer: language is not the explanation either.** kibana passes, and with the cleanest specificity
+signature in the study: its all-commits ratio is **0.99 [0.80, 1.23]** — stratification absorbed churn
+essentially exactly — while its defect-fix ratio is 4.27. Flagged files receive no more commits than their
+decile peers and more than four times the defect fixes.
 
-**What each outcome licenses:**
+It also clears the revised events bar with room to spare: 438 defect-fixing commits in the window, against
+a bar of 100. The deletion sensitivity check holds (3.61 [1.78, 8.87] with deletions kept), on a window
+where 8,645 files were deleted.
 
-| outcome | reading |
-|---|---|
-| passes, with specificity | the signal generalises across languages; angular is the outlier. Check A's defect-prediction claim would stand unqualified. |
-| fails, without specificity | two of two TypeScript repositories lack the signature. The claim gets scoped: *predicts defect activity in Python; not established for TypeScript*. Check A's ranking would need a language caveat in its finding text. |
-| passes, without specificity | the interval is driven by residual churn the stratification did not absorb in TS codebases. Would send us back to the control design before claiming anything about TypeScript. |
-| fails, with specificity | underpowered for the effect present. Report, and the language question stays open. |
+**Standing: three of four adequately-powered repositories pass, all three with the specificity signature,
+across two languages and three architectures.** Angular is now the outlier rather than the representative
+of a category, and why it differs is unexplained. Pooled across all nine repositories (exploratory):
+RR 1.83 [1.51, 2.21].
 
-**Not conditioned on the result:** run 4 is reported whatever it says, and runs 1–3 stay on this page
-unchanged.
+This is the pre-registered "passes, with specificity" outcome, whose recorded reading was: *the signal
+generalises across languages; angular is the outlier; Check A's defect-prediction claim would stand
+unqualified.*
+
+**Scope limit:** kibana's manifest entry is `src` only — 21,180 TypeScript files, the platform core.
+`x-pack` (63,178 files) is excluded. The result speaks to that subtree.
+
+### The infrastructure this run cost, and what it exposed
+
+Kibana failed four times before producing a number, and three of the four were failures that would have
+produced a *plausible wrong answer* rather than an error:
+
+| attempt | symptom | actual cause |
+|---|---|---|
+| flag ×2 | "history walk failed" | 89,382-file worktree checkout from a blobless clone consumed the budget |
+| flag (ad-hoc) | *nearly recorded* | reused a worktree at `cf40a31d` against a window bounded to `2af339dd` — the tree/history mismatch the design warns about, in a shortcut around the harness |
+| outcome ×1 | "a year with 0 commits, 0 fixes" | `outcome_log` returned `""` on git error — the same silent-failure class the miner had on litellm, in code written after fixing that one |
+| outcome ×2 | exit 128 in 84s | **clone corruption**: commit-graph referencing objects absent from the object database |
+
+The last is the root cause and it invalidated two earlier diagnoses: twice I concluded "too slow" and
+raised a timeout, when git was erroring. A 75-second failure against a 3600-second budget said so plainly
+and I read it only on the third look, after capturing stderr instead of inferring from the exit path.
+
+Fixed: `outcome_log` now refuses rather than reporting an empty window; `ensure_clone` validates that a
+cached clone can perform a `--name-status` walk (neither `HEAD` existing nor `rev-parse` resolving detects
+this) and repairs a bad commit-graph by dropping it, which is lossless because the graph is a derived
+cache. After the repair kibana's walk returned exit 0, 29.5 MB, 566 seconds.
+
+**One unresolved oddity, recorded rather than dropped:** during diagnosis `rev-list -1 --before=2025-07-15`
+returned `e128b393` once and `2af339dd` on every subsequent invocation — two commits twelve minutes apart.
+It has been stable across many runs since and the recorded rev is `2af339dd`, but the first reading is
+unexplained, and an unexplained non-reproducibility belongs in a study that rests on reproducibility.
 
 ---
 

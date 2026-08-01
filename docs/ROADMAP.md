@@ -347,12 +347,18 @@ is a later consideration. Items below are in build order.
   **Standing:** two of three powered repositories pass, both with the specificity signature; pooled
   (exploratory) RR 1.77 [1.45, 2.16]. Enough to say the signal predicts defect activity beyond churn in
   the Python repositories tested; not enough to say it of TypeScript.
-- [ ] **Run 4: a second powered TypeScript repository.** The open question is no longer architecture but
-  language — angular is the only TS datapoint and it points the other way. Candidates with no prior
-  contact: kibana, vscode. Prettier is also still unrun.
-- [ ] **State the power bar in events, not files.** Nova cleared the file bar (59 of 60) and still returned
-  an interval of [1.63, 16.14], because its window held only 28 defect-fixing commits. For a count outcome
-  the binding constraint is events; the current bar counts the wrong thing. Compute signals as of T, then ask whether the flagged files
+  **Run 4** (kibana, pre-registered in `8f6f726`) killed the language explanation too: it passes at
+  RR 4.27 [2.05, 11.71] with the cleanest specificity in the study — an all-commits ratio of **0.99**,
+  meaning stratification absorbed churn essentially exactly, against 4.27 on defect fixes. The power bar
+  now counts **events, not files** (nova cleared the file bar within one file and still returned
+  [1.63, 16.14] on 28 events); kibana clears it with 438.
+  **Standing: three of four adequately-powered repositories pass, all with the specificity signature,
+  across two languages and three architectures.** Angular is the outlier and why is unexplained. Pooled
+  (exploratory) RR 1.83 [1.51, 2.21]. Full record: `evaluations/defect-study/RESULTS.md`.
+- [ ] **Explain angular.** It is now the only powered repository without the signature, and its
+  all-commits ratio (1.39) sits close to its defect ratio (1.47) — the pattern of a flagged set that is
+  merely busier. Worth understanding before treating the signal as universal.
+- [ ] **Prettier is still unrun** (it hit the same clone corruption as kibana, before the repair existed). Compute signals as of T, then ask whether the flagged files
   accumulate more **defect-fixing commits** in (T, now] than churn-matched controls — an outcome that does
   not depend on our own labelling, which is the weakness in every quality number we currently have.
   Recognise defect fixes from commit wording (no external service), cross-checked on a couple of repos

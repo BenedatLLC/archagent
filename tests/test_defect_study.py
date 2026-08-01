@@ -199,3 +199,14 @@ def test_a_large_sample_does_see_the_same_effect():
 def test_power_is_near_the_false_positive_rate_when_there_is_no_effect():
     from defect_study import detection_rate
     assert detection_rate(n_flagged=120, n_control=240, base_rate=0.4, true_rr=1.0, trials=60) < 0.2
+
+
+def test_an_empty_outcome_window_is_distinguishable_from_a_failed_walk(monkeypatch, tmp_path):
+    """A failed `git log` returning "" would be read as a year in which nothing was fixed, which yields
+    `predicts=False` for every repository and looks like a clean null. The miner learned this on litellm;
+    the outcome walk learned it on kibana."""
+    import defect_study
+
+    monkeypatch.setattr("archagent.drift._git", lambda *a, **kw: None)
+    with pytest.raises(SystemExit, match="outcome walk failed"):
+        defect_study.outcome_log(tmp_path, "abc1234", "v1.0")

@@ -22,7 +22,7 @@ from pathlib import Path
 
 from .drift import _git
 
-_LOG_TIMEOUT = 300  # the full-history walk on a large repo takes tens of seconds; 30s silently truncated it
+_LOG_TIMEOUT = 900  # kibana's walk needs ~80s warm and far more cold; 30s, then 300s, silently truncated it
 _BOUNDARY = "@@@commit@@@"
 _SUBJ_SEP = "\x1f"  # unit separator between %H and %s, so subjects can't collide with the boundary
 # Conventional Commits: type(optional-scope)!: subject

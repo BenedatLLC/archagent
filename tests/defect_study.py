@@ -389,8 +389,16 @@ def outcome_log(clone: Path, cutoff_rev: str, head: str) -> str:
     the outcome window. `cutoff_rev..head` is exact: everything after the state we measured, nothing else.
     """
     from archagent.drift import _git
-    return _git(clone, "log", "--no-merges", "--name-status", "-M", "--reverse",
-                f"{cutoff_rev}..{head}", f"--pretty=format:{_SEP}%s", timeout=600) or ""
+    out = _git(clone, "log", "--no-merges", "--name-status", "-M", "--reverse",
+               f"{cutoff_rev}..{head}", f"--pretty=format:{_SEP}%s", timeout=3600)
+    if out is None:
+        # The same trap the miner fell into: an empty string here is indistinguishable from an outcome
+        # window with no commits, and a zero-defect window silently produces `predicts=False` for every
+        # repository. Refuse rather than report.
+        raise SystemExit(
+            f"the outcome walk failed for {cutoff_rev[:8]}..{head} (timeout or git error). No result is "
+            f"recorded — a failed walk must never be reported as a window with no defects.")
+    return out
 
 
 def analyse_repo(flagged: dict, outcomes: Outcomes) -> dict:
