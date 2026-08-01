@@ -304,10 +304,15 @@ is a later consideration. Items below are in build order.
 pre-registered runs, 3 of 4 adequately-powered repositories show that flagged files go on to accumulate
 significantly more defect-fixing commits than churn-matched controls, in two languages and three
 architectures (`evaluations/defect-study/RESULTS.md`). Magnitudes are not comparable across repositories
-and small repositories remain unmeasured. L2 has no evidence at all: the rubric, worksheet, label store
-and statistics are built, but **no labels have been collected**, and labels from whoever built the checks
-would recreate the closed loop the design exists to break. That is the binding constraint on everything
-downstream — judged rubric, blind comparison, and any feedback loop — and it needs a person, not code.
+and small repositories remain unmeasured. L2 has no evidence at all. Four pieces are built — the deterministic rubric (works today, no agent
+needed), the spot-check worksheet and label store, the objective half of the blind comparison, and the
+agreement statistics — and every one of them waits on the same thing: **the label store is empty**. Labels
+from whoever built the checks would recreate the closed loop the design exists to break, so this is a
+people problem, not a code problem, and it gates the judged rubric, the judged blind comparison and any
+feedback loop. Two components deliberately refuse to run rather than produce numbers worth less than
+nothing: `selfeval run` (comparing scorecards is meaningless before the agent-variance noise floor is
+known) and `blindcomp` generation (one session writing its own guidance's output and grading it measures
+self-preference).
 
 - [x] **`--until` / `--as-of` plumbing** (design §5) — **shipped.** `mine_cochange` takes `--since` but not `--until`,
   All three paths that read the repository are bounded — the co-change miner, the commit-wording profile

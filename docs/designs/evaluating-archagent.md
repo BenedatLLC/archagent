@@ -66,10 +66,27 @@ ratio tracks how concentrated defect fixes are, partly mechanically — so pass/
 are not effect sizes for the check in general. And every attempt on a *small* repository was underpowered,
 so nothing here speaks to those.
 
-**L2 (the skills) still has none, and the reason is structural.** The machinery is built — deterministic
-rubric, worksheet, label store, agreement statistics — but it holds no labels, and labels produced by the
-person who built the checks would recreate the closed loop §1 opens by criticising. This is the binding
-constraint, and it is a people problem rather than a code problem.
+**L2 (the skills) still has no evidence, and the reason is structural.** Four pieces of machinery are
+built and all of them are waiting on the same thing:
+
+| piece | state |
+|---|---|
+| deterministic rubric (§9) | works today; scores an artifact with no agent and no model |
+| judged rubric (§9) | not built — an uncalibrated judged score is a number of unknown meaning |
+| spot-check worksheet + label store (§11) | works; **holds zero labels** |
+| blind comparison (§10) | objective half works; generation and judged scoring need other sessions |
+
+The binding constraint is the empty label store. Labels produced by whoever built the checks would
+recreate the closed loop §1 opens by criticising, so this is a people problem rather than a code problem —
+and everything downstream (judged rubric, judged blind comparison, any feedback loop of §13) is gated
+behind it.
+
+Two things were deliberately *not* automated, and the reasoning is the same in both cases. `selfeval run`
+refuses rather than invoking an agent, because comparing two scorecards is meaningless until a repeat run
+establishes how much of a difference is agent variance. `blindcomp` refuses to generate its own arms,
+because one session writing its own guidance's output and then grading it measures self-preference. In
+both cases a working-looking implementation was available and would have produced numbers worth less than
+nothing.
 
 **A pattern worth recording, because it recurred five times.** Every serious defect found while building
 this was a *silent* failure — a condition that rendered as a plausible clean result rather than an error:
@@ -644,7 +661,7 @@ Written down because they are easy to forget once numbers exist.
 | 3 | Held-out defect study (§7) | **done, 4 runs** — 3 of 4 powered repositories pass |
 | 4 | Self-evaluation + rubric (§8, §9) | **deterministic half done**; judged half gated on 5; `run` blocked on the agent seam |
 | 5 | Human spot-check and calibration (§11) | **machinery done, no labels collected** |
-| 6 | Blind comparison (§10) | not started — needs 5 first |
+| 6 | Blind comparison (§10) | **objective half done**; generation left to separate sessions; judged half needs 5 |
 | 7 | L3 task benchmark | not designed |
 
 1. **`--until` / as-of plumbing** (§5) — shipped. Three paths into the repository needed bounding, not the
@@ -658,7 +675,10 @@ Written down because they are easy to forget once numbers exist.
    the agent seam. The DeepEval trial of §12 belongs here and has not been run.
 5. **Human spot-check and calibration** (§11) — machinery shipped, **zero labels**. This is the binding
    constraint on the whole L2 half, and it cannot be resolved by the person who built the checks.
-6. **Blind comparison** (§10) — not started; without item 5 its judge would be uncalibrated.
+6. **Blind comparison** (§10) — the objective half is shipped: identical hashed inputs, blinding and
+   shuffling, and scoring against the ground-truth verdicts from the corpus pass. Generation is *not*
+   automated, because one model writing all three arms and then grading them measures self-preference.
+   The judged half still needs item 5.
 7. **L3 task benchmark** — not designed here. Revisit once L1 and L2 have numbers.
 
 ---
