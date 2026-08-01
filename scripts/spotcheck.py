@@ -30,13 +30,13 @@ SHEETS = ROOT / "evaluations" / "spotcheck"
 JUDGED = ("scattered-source-of-truth", "enum-value-escape", "change-prone-file")
 
 
-def collect() -> list[dict]:
+def collect(signs: tuple[str, ...] = JUDGED) -> list[dict]:
     """Findings from every recorded corpus expectation — pinned revisions, so a worksheet is reproducible."""
     items = []
     for path in sorted(CORPUS.glob("*.json")):
         data = json.loads(path.read_text())
         for f in data.get("findings", []):
-            if f["sign"] not in JUDGED:
+            if f["sign"] not in signs:
                 continue
             vals = f.get("values")
             key = finding_key(f["sign"], f["subjects"], vals)
@@ -56,15 +56,16 @@ def collect() -> list[dict]:
     return items
 
 
-def do_generate(cap: int, reviewer: str) -> None:
+def do_generate(cap: int, reviewer: str, signs: tuple[str, ...]) -> None:
     store = LabelStore(LABELS)
-    items = collect()
+    items = collect(signs)
     already = {k for it in items for k in store.load(it["repo"])}
     fresh = [it for it in items if it["key"] not in already]
     print(f"{len(items)} findings across {len({i['repo'] for i in items})} repos; "
           f"{len(items) - len(fresh)} already labelled")
     picked = stratified_sample(fresh, cap=cap)
     sheet, withheld = render_worksheet(picked, reviewer)
+    sheet = sheet.replace("---\n", _checkout_section({i["repo"] for i in picked}) + "\n---\n", 1)
     SHEETS.mkdir(parents=True, exist_ok=True)
     stamp = date.today().isoformat()
     (SHEETS / f"worksheet-{stamp}.md").write_text(sheet)
@@ -72,6 +73,27 @@ def do_generate(cap: int, reviewer: str) -> None:
         json.dumps({"items": {i["key"]: i for i in picked}, "withheld": withheld}, indent=2) + "\n")
     print(f"wrote {SHEETS / f'worksheet-{stamp}.md'} ({len(picked)} items)")
     print("the tool's severity/confidence are in the .withheld.json side file — do not read it first")
+
+
+def _checkout_section(repos: set[str]) -> str:
+    """A reviewer cannot judge `litellm/main.py` without `litellm/main.py` at the pinned revision. The
+    worksheet carries the commands rather than assuming the reader will work them out."""
+    import tomllib
+    manifest = {e["name"]: e for e in
+                tomllib.loads((ROOT / "tests" / "corpus_manifest.toml").read_text())["repo"]}
+    lines = ["", "## Getting the code", "",
+             "Each finding is judged against the repository **at the revision it was found at**. These",
+             "commands put each one in `/tmp`, reusing the cached clones:", "", "```bash"]
+    for name in sorted(repos):
+        e = manifest.get(name)
+        if not e:
+            continue
+        lines.append(f"git -C ~/.cache/archagent/corpus/{name}.git worktree add --detach "
+                     f"/tmp/review-{name} {e['rev']}")
+    lines += ["```", "",
+              "When you are done: `git -C ~/.cache/archagent/corpus/<name>.git worktree remove "
+              "--force /tmp/review-<name>`", ""]
+    return "\n".join(lines)
 
 
 def do_ingest(path: Path, reviewer: str, note: str) -> None:
@@ -114,12 +136,15 @@ def do_report() -> None:
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="cmd", required=True)
-    g = sub.add_parser("generate"); g.add_argument("--cap", type=int, default=30); g.add_argument("--reviewer", default="")
+    g = sub.add_parser("generate"); g.add_argument("--cap", type=int, default=30)
+    g.add_argument("--reviewer", default="")
+    g.add_argument("--signs", default=",".join(JUDGED),
+                   help="comma-separated signs to sample from; defaults to all judged kinds")
     i = sub.add_parser("ingest"); i.add_argument("worksheet"); i.add_argument("--reviewer", default=""); i.add_argument("--note", default="")
     sub.add_parser("report")
     a = ap.parse_args()
     if a.cmd == "generate":
-        do_generate(a.cap, a.reviewer)
+        do_generate(a.cap, a.reviewer, tuple(s.strip() for s in a.signs.split(",") if s.strip()))
     elif a.cmd == "ingest":
         do_ingest(Path(a.worksheet), a.reviewer, a.note)
     else:
