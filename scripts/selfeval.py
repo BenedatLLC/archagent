@@ -1,8 +1,10 @@
 #!/usr/bin/env python
 """End-to-end self-evaluation (`docs/designs/evaluating-archagent.md` §8).
 
-    python scripts/selfeval.py score <path> [--arch-dir architecture]
-    python scripts/selfeval.py run <repo-url> --from <rev> --to <rev>
+    python scripts/selfeval.py score  <path> [--arch-dir architecture]
+    python scripts/selfeval.py brief  <path> [--second-run]     # judged criteria, for a reviewing agent
+    python scripts/selfeval.py judged <path> --review <file.md> [--by NAME]
+    python scripts/selfeval.py run    <repo-url> --from <rev> --to <rev>
 
 `score` works today and needs no agent: it runs the deterministic half of the rubric (§9) against an
 artifact that already exists and writes a scorecard.
@@ -26,6 +28,7 @@ sys.path.insert(0, str(ROOT / "tests"))
 sys.path.insert(0, str(ROOT / "src"))
 
 from rubric import check_update_captured, score_deterministic   # noqa: E402
+from rubric_judged import render_brief, review_from, save as save_review   # noqa: E402
 
 RESULTS = ROOT / "evaluations" / "selfeval"
 
@@ -62,6 +65,33 @@ def do_score(path: Path, arch_dir: str | None, rev: str = "", changed: set[str] 
     return data
 
 
+def do_brief(path: Path, second_run: bool) -> None:
+    root = path.resolve()
+    arch = _arch_dir(root)
+    out = RESULTS / root.name / f"review-brief{'-update' if second_run else ''}.md"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(render_brief(f"{root}/{arch}", root.name, second_run))
+    print(f"wrote {out}")
+    print("Hand this to a reviewer or a separate agent session. Every score needs a file:line citation;")
+    print("uncited scores are discarded rather than averaged in.")
+
+
+def do_judged(path: Path, review: Path, by: str) -> None:
+    root = path.resolve()
+    r = review_from(review.read_text(), root.name, "", by)
+    dest = save_review(RESULTS / root.name / "judged.json", r)
+    print(f"\n{root.name} — judged rubric ({r.judged_by})\n")
+    for cid, s in r.scores.items():
+        if s.get("score") is None:
+            print(f"   —    {cid:24} discarded: {s['discarded']}")
+        else:
+            print(f"  {s['score']}/5   {cid:24} {s['why'][:70]}")
+    print(f"\n  mean: {'n/a' if r.mean is None else round(r.mean, 2)}")
+    print(f"  [uncalibrated] no agreement with a human reviewer has been measured for these criteria,")
+    print(f"  so this number has unknown meaning and gates nothing (design §11, §13.2)")
+    print(f"\n  written to {dest}")
+
+
 def do_run(url: str, rev_from: str, rev_to: str) -> None:
     raise SystemExit(
         "`run` is not implemented: steps 2 and 5 (describe at each revision) need a coding agent invoked\n"
@@ -80,12 +110,19 @@ if __name__ == "__main__":
     sub = ap.add_subparsers(dest="cmd", required=True)
     s = sub.add_parser("score"); s.add_argument("path"); s.add_argument("--arch-dir")
     s.add_argument("--rev", default=""); s.add_argument("--out")
+    b = sub.add_parser("brief"); b.add_argument("path"); b.add_argument("--second-run", action="store_true")
+    j = sub.add_parser("judged"); j.add_argument("path"); j.add_argument("--review", required=True)
+    j.add_argument("--by", default="")
     r = sub.add_parser("run"); r.add_argument("url")
     r.add_argument("--from", dest="rev_from", required=True); r.add_argument("--to", dest="rev_to", required=True)
     args = ap.parse_args()
 
     if args.cmd == "run":
         do_run(args.url, args.rev_from, args.rev_to)
+    if args.cmd == "brief":
+        do_brief(Path(args.path), args.second_run); raise SystemExit(0)
+    if args.cmd == "judged":
+        do_judged(Path(args.path), Path(args.review), args.by); raise SystemExit(0)
     data = do_score(Path(args.path), args.arch_dir, args.rev)
     if args.out:
         out = Path(args.out); out.parent.mkdir(parents=True, exist_ok=True)

@@ -72,7 +72,7 @@ built and all of them are waiting on the same thing:
 | piece | state |
 |---|---|
 | deterministic rubric (§9) | works today; scores an artifact with no agent and no model |
-| judged rubric (§9) | not built — an uncalibrated judged score is a number of unknown meaning |
+| judged rubric (§9) | **criteria + machinery built**, uncalibrated; scores carry the caveat and gate nothing |
 | spot-check worksheet + label store (§11) | works; **holds zero labels** |
 | blind comparison (§10) | objective half works; generation and judged scoring need other sessions |
 

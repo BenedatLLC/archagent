@@ -315,10 +315,22 @@ the evidence argues for:
   Staleness uses a fingerprint wider than the finding id — the id keys on owner and value set, so a
   changed *set of involved files* is invisible to it. When the evidence has moved the old verdict is still
   shown but marked stale, and the question reopens: the verdict was about the finding as it stood.
-- [ ] **Qualitative rubric criteria** (design §9, judged half). Clarity of prose and diagrams, logical
-  strength and business criticality of invariants, completeness and correctness of the documentation —
-  each needing a subagent with specific evaluation instructions, and each needing the same blinded human
-  calibration the findings just received. Without that they are uncalibrated judged scores again.
+- [~] **Qualitative rubric criteria** (design §9, judged half) — **criteria and machinery shipped;
+  uncalibrated.** Seven criteria in `tests/rubric_judged.py`, each with anchored descriptors at 1/3/5
+  rather than a bare scale, because an unanchored 1–5 measures the judge's mood and two runs cannot say
+  why they differ: accuracy, completeness, prose clarity (against `writing-style.md`), diagram clarity,
+  invariant **logical strength** and invariant **business criticality** kept separate (a rule can be
+  airtight and protect nothing, or guard the crown jewels and be trivially evadable), and update quality
+  for the second run. `selfeval brief` writes them for a reviewing session; `selfeval judged` ingests.
+  **A score with no `file:line` citation is discarded, not averaged** — the failure mode here is fluent,
+  confident, unfalsifiable prose, which is what a language model produces most readily, and a demo run
+  correctly threw away a "5/5, the writing is clear and professional". `0` means unsure and is excluded
+  rather than counted as failure. Every stored review carries its own uncalibrated caveat, so a number
+  cannot be quoted apart from it.
+- [ ] **Calibrate the judged criteria** (§11). The findings half of this was done and produced 68%
+  agreement between an independent reviewer and the person who built the checks, with errors in both
+  directions. The equivalent for these criteria needs artifacts of known quality to score, which needs a
+  real `describe` run first. Until then the judged mean gates nothing.
 
 ## Measurement
 
