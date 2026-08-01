@@ -1,0 +1,95 @@
+{
+  "primary": {
+    "label": "check-A primary (defect fixes, deleted excluded)",
+    "rate_ratio": 4.448,
+    "ci95": [
+      1.629,
+      16.138
+    ],
+    "flagged_n": 59,
+    "unflagged_n": 82,
+    "strata_used": [
+      7,
+      8,
+      9
+    ],
+    "strata_dropped": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6
+    ],
+    "degenerate": false,
+    "excluded_deleted": 1,
+    "predicts": true
+  },
+  "secondary": [
+    {
+      "label": "secondary: deletions kept as zero-defect",
+      "rate_ratio": 4.448,
+      "ci95": [
+        1.629,
+        16.138
+      ],
+      "flagged_n": 59,
+      "unflagged_n": 82,
+      "strata_used": [
+        7,
+        8,
+        9
+      ],
+      "strata_dropped": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "degenerate": false,
+      "excluded_deleted": 0,
+      "predicts": true
+    },
+    {
+      "label": "secondary: all commits, not just defect fixes",
+      "rate_ratio": 1.351,
+      "ci95": [
+        0.794,
+        2.209
+      ],
+      "flagged_n": 59,
+      "unflagged_n": 82,
+      "strata_used": [
+        7,
+        8,
+        9
+      ],
+      "strata_dropped": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "degenerate": false,
+      "excluded_deleted": 1,
+      "predicts": false
+    }
+  ],
+  "window": {
+    "commits": 338,
+    "defect_fixing": 28,
+    "files_deleted": 16,
+    "rename_chains_ambiguous": 0
+  },
+  "repo": "nova",
+  "cutoff": "2025-06-16",
+  "head": "33.0.2",
+  "outcome_profile_style": "leading-verb"
+}

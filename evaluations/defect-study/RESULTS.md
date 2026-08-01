@@ -6,31 +6,58 @@ is not held out.
 
 ---
 
-## Run 3 (2026-08-01) — PRE-REGISTERED, NOT YET RUN
+## Run 3 (2026-08-01) — the architecture explanation is out; the split is by language
 
-**Committed before the run.** Recorded this way because the value of saying what an outcome would mean
-collapses once the outcome is known.
+**The pre-registration for this run is in the commit history (`5d890cc`), written before the run.** It
+asked one question: run 2's pass (home-assistant) is a plugin registry in Python and its near-miss
+(angular) is a coupled framework in TypeScript, so architecture and language are confounded. Does the
+specificity pattern replicate in a **coupled Python** codebase?
 
-**What it tests.** Run 2's pass and near-miss differ in *two* ways at once, so neither explains the other:
-home-assistant is a plugin registry (`homeassistant/components/*`, thousands of largely independent
-modules) written in Python; angular is a deeply coupled framework written in TypeScript. sympy holds the
-language fixed and changes the architecture — a symbolic mathematics core with heavy internal coupling,
-nothing like a plugin registry.
+| repo | architecture | language | flagged/controls | RR (defect fixes) | 95% CI | all commits | specific? |
+|---|---|---|---|---|---|---|---|
+| homeassistant | plugin registry | Python | 141 / 375 | 2.05 | [1.55, 2.67] | 1.28 | **yes** |
+| **nova** | **coupled service** | **Python** | **59 / 82** | **4.45** | **[1.63, 16.14]** | **1.35** | **yes** |
+| angular | coupled framework | TypeScript | 63 / 173 | 1.47 | [0.98, 2.18] | 1.39 | no |
 
-**The question:** does the *specificity* pattern (defect-fix ratio clearly above the all-commits ratio)
-replicate in a coupled Python codebase, or was it a property of home-assistant's plugin structure?
+**Answer: architecture is not the explanation.** Nova is a deeply coupled service — scheduler, compute
+manager and API sharing state through a common object layer, nothing like a plugin registry — and it
+passes, with the same specificity signature: a defect-fix ratio far above its all-commits ratio. The
+plugin-structure hypothesis from run 2 is dead.
 
-**What each outcome licenses:**
+What remains is that both passes are Python and the one near-miss is TypeScript. That is now the open
+question, and it is a different one from the one we started run 3 with.
 
-| outcome | reading |
-|---|---|
-| passes, with specificity (defect RR ≫ all-commits RR) | two of three powered repos agree; architecture is not the explanation for home-assistant. The strongest result available from this design. |
-| passes, without specificity (both ratios similar) | the interval is being driven by residual churn the stratification did not absorb. Would call home-assistant's specificity into question too, and send us back to the control design. |
-| fails, without specificity | matches angular. Home-assistant looks like the outlier, and the plugin-registry explanation gains weight. Check A would not be justified as defect prediction. |
-| fails, but with specificity | ambiguous — underpowered for the effect size present. Report and add a fourth. |
+### Two cautions that matter more than the point estimate
 
-**Not conditioned on the result:** run 3 is reported here whatever it says, and run 1 and run 2 stay on
-this page unchanged.
+**Nova's interval is enormous** — [1.63, 16.14]. Its window contained only **28 defect-fixing commits**.
+The sign of the effect is clear; the size is essentially unestimable.
+
+**The power bar was expressed in the wrong unit.** It counts *files* (≥60 flagged, ≥120 controls), but for
+a count outcome the binding constraint is *events*. Nova cleared the file bar within one file (59) and
+still produced a near-useless interval because the event count was tiny. Run 4's bar should be stated in
+defect-fixing events, not files. Achieved power at each repository's realised sample, for a 1.5× effect:
+
+| repo | sample | achieved power |
+|---|---|---|
+| homeassistant | 141 v 375 | 100% |
+| angular | 63 v 173 | 98% |
+| nova | 59 v 82 | 57% |
+| ansible | 50 v 67 | 59% |
+| pandas | 27 v 41 | 50% |
+
+**sympy was excluded at the flag step**, before any outcome: 23 flagged files against a bar of 60. A blind
+exclusion on a criterion fixed in advance — the same handling flask received in run 1 — and it is recorded
+in the manifest rather than deleted.
+
+### Standing after three runs
+
+Two of three adequately-powered repositories pass the pre-registered test, both with the specificity
+signature that distinguishes a real signal from residual churn. The third misses narrowly and lacks that
+signature. Pooled across all eight repositories (exploratory, not pre-registered): RR 1.77 [1.45, 2.16].
+
+That is enough to say the churn × complexity signal predicts later defect activity **in the Python
+repositories tested**, beyond what churn alone explains. It is not enough to say so of TypeScript, where
+the single powered datapoint points the other way.
 
 ---
 

@@ -108,9 +108,20 @@ run = 2
 #
 # PREDICTION, recorded before running (see RESULTS.md "Run 3" for what each outcome licenses).
 
+# sympy was the first choice and was EXCLUDED AT THE FLAG STEP, before any outcome: 23 flagged files
+# against the >=60 the power bar above requires. A blind exclusion on a criterion fixed in advance, the
+# same handling flask got in run 1. Kept here rather than deleted.
+#
+# [[repo]] name = "sympy" url = "https://github.com/sympy/sympy" head = "1.14.0"
+#          paths = { python = ["sympy"] }   -> 23 flagged of 354 scored, underpowered
+#
+# nova replaces it and answers the same pre-registered question: a large, deeply coupled Python service
+# (a scheduler, compute manager and API sharing state through a common object layer), not a plugin
+# registry. Language held fixed against home-assistant; architecture changed.
+
 [[repo]]
-name = "sympy"
-url = "https://github.com/sympy/sympy"
-head = "1.14.0"
-paths = { python = ["sympy"] }
+name = "nova"
+url = "https://github.com/openstack/nova"
+head = "33.0.2"
+paths = { python = ["nova"] }
 run = 3

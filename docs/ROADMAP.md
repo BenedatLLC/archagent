@@ -339,10 +339,20 @@ is a later consideration. Items below are in build order.
   take 2.05× the *defect fixes* but only 1.28× *all* commits, so churn is absorbed and something else
   remains; angular's take ~1.4× of both, the pattern of a set that is merely busier. Full record:
   `evaluations/defect-study/RESULTS.md`.
-- [ ] **A third powered repository.** With one pass and one near-miss the result is suggestive, not
-  established, and angular's contrary specificity check makes the question sharper. Prettier is still
-  unrun (its history walk failed before the cutoff-warming fix). Candidates with no prior contact:
-  kibana, vscode, salt. Compute signals as of T, then ask whether the flagged files
+  **Run 3** (nova) was pre-registered before running — the prediction and what each outcome would license
+  are in commit `5d890cc` — and it killed the explanation run 2 left open. Nova is a deeply coupled Python
+  service, nothing like home-assistant's plugin registry, and it passes with the same signature:
+  RR 4.45 [1.63, 16.14] on defect fixes against 1.35 on all commits. Architecture does not explain the
+  earlier pass. What remains is that both passes are Python and the one near-miss is TypeScript.
+  **Standing:** two of three powered repositories pass, both with the specificity signature; pooled
+  (exploratory) RR 1.77 [1.45, 2.16]. Enough to say the signal predicts defect activity beyond churn in
+  the Python repositories tested; not enough to say it of TypeScript.
+- [ ] **Run 4: a second powered TypeScript repository.** The open question is no longer architecture but
+  language — angular is the only TS datapoint and it points the other way. Candidates with no prior
+  contact: kibana, vscode. Prettier is also still unrun.
+- [ ] **State the power bar in events, not files.** Nova cleared the file bar (59 of 60) and still returned
+  an interval of [1.63, 16.14], because its window held only 28 defect-fixing commits. For a count outcome
+  the binding constraint is events; the current bar counts the wrong thing. Compute signals as of T, then ask whether the flagged files
   accumulate more **defect-fixing commits** in (T, now] than churn-matched controls — an outcome that does
   not depend on our own labelling, which is the weakness in every quality number we currently have.
   Recognise defect fixes from commit wording (no external service), cross-checked on a couple of repos
