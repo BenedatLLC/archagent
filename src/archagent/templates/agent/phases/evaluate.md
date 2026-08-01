@@ -147,6 +147,31 @@ Mined from `git log`; require a git repo (skip with `--no-history`, window with 
   compared against a typed value (TS2367), for string enums, union types and `as const` unions alike, so
   the only real risk there is a value that arrives untyped. Check that before writing it up.
 
+### Severity is mechanical; the rating a reader needs is not
+
+`evaluate`'s `severity` counts files and commits. It says nothing about consequence, and the two come
+apart badly: in the first independent labelling round most enum escapes were minor-to-moderate, and one
+was **critical** — a scattered call-type vocabulary had left a prompt-injection hook comparing against two
+strings that exist in none of the four declarations, so it silently scanned nothing for embedding and
+transcription requests and reported success.
+
+Findings the tool marks `investigate: true` (with a `triage_reason`) are the ones where a consequence is
+plausible enough to be worth the cost of finding out. **Your report must make the next step explicit**,
+naming the command, because a reader who cannot act on a finding will drop it:
+
+> `CallTypes` is declared four times and the copies have drifted. Whether that is currently breaking
+> anything is not established — to find out, run `archagent investigate
+> enum-value-escape:litellm/types/utils.py:e67c8c15`.
+
+Rate a finding **minor / moderate / critical** only once someone has traced the code:
+
+- **minor** — untidy; nothing depends on the duplication, or a typo fails loudly.
+- **moderate** — a real maintenance hazard; the copies can drift and nothing would catch it.
+- **critical** — it already misbehaves, or a plausible edit makes it misbehave *silently*.
+
+Do not assign one of these from the counts. A finding whose investigation cannot point at a consequence is
+minor by definition, and saying so plainly is more useful than hedging.
+
 **Both new signals are low-to-medium confidence by construction and never fail a build.** They are also
 worth cross-reading: a file that appears in *both* — churny and complex, and holding a duplicated decision —
 is usually the strongest root in the whole report, because two independent signals agree on it.

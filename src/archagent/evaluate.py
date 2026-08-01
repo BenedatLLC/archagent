@@ -14,6 +14,7 @@ in later phases.
 
 from __future__ import annotations
 
+import hashlib
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -69,14 +70,71 @@ _COMMENT_STARTS = ("#", "//", "*", '"""', "'''")
 @dataclass
 class Finding:
     sign: str            # stable id, e.g. "god-component"
-    group: str           # "A" | "B" | "C" | "D"
-    severity: str        # "low" | "med" | "high"
+    group: str           # "A" | "B" | "C" | "D" | "E" | "F"
+    severity: str        # "low" | "med" | "high" — *mechanical*, from counts, not from consequence
     title: str           # human-readable sign name
     subjects: list[str]  # subsystems / services / files involved
     detail: str          # the evidence / metric
     recommendation: str
     regime: str = "static"     # "static" | "history"
     confidence: str = "med"    # "low" | "med" | "high"
+    values: list[str] | None = None    # the value set, when the finding is about one
+    # Whether this one looks worth the cost of a full investigation (see `_triage`). Deliberately not a
+    # claim that it *is* serious: the first independent labelling round found a finding dismissed from its
+    # summary alone that turned out to be the strongest in the set, so triage invites a look rather than
+    # settling anything.
+    investigate: bool = False
+    triage_reason: str = ""
+
+    @property
+    def id(self) -> str:
+        """A stable, revision-independent handle, so a report can say which finding to investigate."""
+        return finding_id(self.sign, self.subjects, self.values)
+
+
+def finding_id(sign: str, subjects: list[str], values: list[str] | None = None) -> str:
+    """Keyed on what the finding is *about* — kind, owning file, value set — not on counts that move
+    between runs. Shared with the spot-check label store so a label survives a re-run."""
+    owner = subjects[0] if subjects else ""
+    digest = hashlib.sha1("\x1f".join(sorted(values or [])).encode()).hexdigest()[:8]
+    return f"{sign}:{owner}:{digest}"
+
+
+# --- triage: which findings are worth a full investigation --------------------------------
+#
+# Investigation is expensive — it means reading the code, tracing a failure path, and writing an
+# explanation. Most findings do not warrant it: the first calibration round rated most enum escapes minor
+# to moderate, and exactly one critical, where a scattered vocabulary had silently disabled a security
+# hook for two request categories.
+#
+# These thresholds pick out the shapes where a *consequence* is plausible: a vocabulary spread wide enough
+# to have drifted, or large enough that nobody holds it in their head, or one whose files are actively
+# being fixed. They are heuristics about where to look, not verdicts.
+
+INVESTIGATE_FILES = 5      # spread across this many files and divergence becomes likely
+INVESTIGATE_VALUES = 10    # a vocabulary this large is not held in anyone's head
+INVESTIGATE_FIX_CHURN = 20  # the involved files are actively being repaired
+
+
+def _triage(sign: str, *, files: int = 0, values: int = 0, fix_churn: int = 0,
+            cross_language: bool = False, unwrapped: bool = False,
+            score: float = 0.0) -> tuple[bool, str]:
+    reasons = []
+    if sign == "change-prone-file":
+        if score >= 0.9:
+            reasons.append(f"top of both axes (score {score:.2f})")
+    else:
+        if files >= INVESTIGATE_FILES:
+            reasons.append(f"spread across {files} files")
+        if values >= INVESTIGATE_VALUES:
+            reasons.append(f"{values}-value vocabulary")
+        if fix_churn >= INVESTIGATE_FIX_CHURN:
+            reasons.append(f"{fix_churn} fix-labeled commits across the involved files")
+        if cross_language:
+            reasons.append("crosses a language boundary, where no compiler checks either side")
+        if unwrapped:
+            reasons.append("unwrapped with `.value ==`, which nothing checks in Python")
+    return bool(reasons), "; ".join(reasons)
 
 
 @dataclass
@@ -779,8 +837,9 @@ def _change_prone_files(config: Config, cc, profile: "HistoryProfile", result=No
         # shown whenever a recognizer was learned at all; how much to trust it is the profile's cautions
         fix_note = f", {h.fix_churn} fix-labeled" if profile.fix_patterns else ""
         sev = "high" if h.score >= 0.9 else "med"
+        worth, why = _triage("change-prone-file", score=h.score)
         out.append(Finding(
-            sign="change-prone-file", group="E", severity=sev,
+            sign="change-prone-file", group="E", severity=sev, investigate=worth, triage_reason=why,
             title="Change-prone complex file",
             subjects=[h.path],
             detail=(f"{h.churn} commit(s){fix_note}; mean indent {h.complexity} over {h.loc} lines "
@@ -814,8 +873,11 @@ def _scattered_truth(config: Config, model: _Model, cc, result=None) -> list[Fin
             break
         shown = ", ".join(d.values[:6]) + (f", +{len(d.values) - 6} more" if len(d.values) > 6 else "")
         others = d.reimplementors
+        worth, why = _triage("scattered-source-of-truth", files=len(d.files), values=len(d.values),
+                             fix_churn=d.fix_churn)
         out.append(Finding(
-            sign="scattered-source-of-truth", group="F",
+            sign="scattered-source-of-truth", group="F", values=d.values,
+            investigate=worth, triage_reason=why,
             severity="med" if per_file >= 4 * DECISION_MIN_CHURN else "low",
             title="Scattered single source of truth",
             subjects=[d.owner, *others],
@@ -852,8 +914,11 @@ def _enum_escapes(config: Config, cc, result=None) -> list[Finding]:
         if cross:
             note += (f"; {len(cross)} of them are {_langs(cross)} while {e.enum} is "
                      f"{e.definer_lang} — no import can cross that boundary")
+        worth, why = _triage("enum-value-escape", files=len(e.escapes), values=len(e.values),
+                             fix_churn=e.fix_churn, cross_language=bool(cross), unwrapped=bool(unwrapped))
         out.append(Finding(
-            sign="enum-value-escape", group="F",
+            sign="enum-value-escape", group="F", values=e.values,
+            investigate=worth, triage_reason=why,
             severity="med" if unwrapped or len(e.escapes) >= 3 else "low",
             title=("Enum vocabulary duplicated across a language boundary" if cross and not same
                    else "Enum bypassed by its raw values"),

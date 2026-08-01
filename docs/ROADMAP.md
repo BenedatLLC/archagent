@@ -293,6 +293,25 @@ the evidence argues for:
 - [ ] **More agents / plugin distribution.** Auto-detect additional coding agents; borrow Archy's plugin
   packaging.
 
+## Findings that explain themselves
+
+- [x] **On-demand investigation** — `archagent investigate <finding-id>`. `evaluate`'s severity counts
+  files and commits and says nothing about consequence; the first independent labelling round found most
+  enum escapes minor-to-moderate and one **critical**, where a drifted call-type vocabulary had silently
+  disabled a prompt-injection hook for two request categories. Findings now carry a stable id and a
+  deterministic `investigate` flag with a `triage_reason` (wide spread, large vocabulary, heavy fix churn,
+  a crossed language boundary, or a `.value ==` unwrap), and the CLI names the command to run. The command
+  prints a brief — seven questions modelled on a worked example, the files to start from, and the
+  minor/moderate/critical scale — rather than pretending to answer them.
+- [ ] **Let the investigation write back.** The brief is currently one-way: an agent works through it and
+  the result lives wherever they put it. It should land next to the finding, so a rating survives the run
+  that produced it and a second investigation does not start from nothing. The spot-check label store is
+  the obvious home — same revision-independent key.
+- [ ] **Qualitative rubric criteria** (design §9, judged half). Clarity of prose and diagrams, logical
+  strength and business criticality of invariants, completeness and correctness of the documentation —
+  each needing a subagent with specific evaluation instructions, and each needing the same blinded human
+  calibration the findings just received. Without that they are uncalibrated judged scores again.
+
 ## Measurement
 
 Designed in **`docs/designs/evaluating-archagent.md`**, which separates three things that had been

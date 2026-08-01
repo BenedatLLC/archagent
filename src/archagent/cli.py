@@ -407,9 +407,11 @@ def evaluate(
     if as_json:
         print(json.dumps({
             "findings": [{
+                "id": f.id,
                 "sign": f.sign, "group": f.group, "severity": f.severity, "title": f.title,
                 "subjects": f.subjects, "detail": f.detail, "recommendation": f.recommendation,
-                "regime": f.regime, "confidence": f.confidence,
+                "regime": f.regime, "confidence": f.confidence, "values": f.values,
+                "investigate": f.investigate, "triage_reason": f.triage_reason,
             } for f in findings],
             "tier_declared": result.tier_declared,
             "git_available": result.git_available,
@@ -445,6 +447,9 @@ def evaluate(
             console.print(f"  [{style}]{f.severity.upper():4}[/] {f.title} — {subj}")
             console.print(f"       {f.detail}")
             console.print(f"       [dim]→ {f.recommendation} ({f.confidence} confidence, {f.regime})[/]")
+            if f.investigate:
+                console.print(f"       [bold yellow]?[/] worth investigating — {f.triage_reason}")
+                console.print(f"         [dim]archagent investigate {f.id}[/]")
         console.print("")
 
     if result.history_ran:
@@ -472,6 +477,14 @@ def evaluate(
     if not findings:
         console.print("[green]No system-level smells found in the active signals.[/]")
         return
+    flagged = [f for f in findings if f.investigate]
+    if flagged:
+        console.print(f"[bold]{len(flagged)} finding(s) marked for investigation.[/] Severity above is "
+                      "mechanical — it counts files and commits, not consequences. To find out whether one "
+                      "of these actually breaks something, run:")
+        console.print(f"  [bold]archagent investigate {flagged[0].id}[/]")
+        console.print("[dim]  …which prints a brief for you or your agent to work through. A finding is "
+                      "only minor/moderate/critical once someone has read the code.[/]\n")
     console.print("[dim]These are candidates — run /archagent-evaluate to judge, cluster, and prioritize.[/]")
     if exit_code:
         raise typer.Exit(code=1)
@@ -534,6 +547,87 @@ def scan_invariants_cmd(
         console.print("")
     console.print("[dim]Each is a candidate: classify into the DSL, verify with `check` (+ non-vacuous), and\n"
                   "capture as a prose row (source cited) — promote to an active rule only on a passing check.[/]")
+
+
+@app.command()
+def investigate(
+    finding: str = typer.Argument(..., help="A finding id from `archagent evaluate` (sign:owner:hash)"),
+    project: Path = typer.Option(Path("."), help="Target repo root"),
+    until: str = typer.Option("", help="Ignore commits after this git date (match the run that found it)"),
+) -> None:
+    """Print an investigation brief for one finding — the questions that turn a candidate into a verdict.
+
+    `evaluate`'s severity is mechanical: it counts files and commits. Whether a finding is minor, moderate
+    or critical depends on what it *causes*, which only reading the code can establish. This command does
+    not answer that; it states the questions precisely enough that a person or a coding agent can, and
+    names the files to start from.
+    """
+    config = load_config(project.resolve())
+    result = run_evaluate(config, until=until or None)
+    match = next((f for f in result.findings if f.id == finding), None)
+    if match is None:
+        console.print(f"[red]No finding with id[/] {finding}")
+        marked = [f for f in result.findings if f.investigate]
+        if marked:
+            console.print("\nFindings currently marked for investigation:")
+            for f in marked[:10]:
+                console.print(f"  [dim]{f.id}[/]  {f.title} — {f.subjects[0]}")
+        raise typer.Exit(code=1)
+
+    console.print(f"\n[bold]Investigation brief[/] — {match.title}")
+    console.print(f"[dim]{match.id}[/]\n")
+    console.print(f"[bold]What the scan found[/]\n  {match.detail}\n")
+    if match.triage_reason:
+        console.print(f"[bold]Why it was flagged for investigation[/]\n  {match.triage_reason}\n")
+    console.print("[bold]Files to start from[/]")
+    for s in match.subjects[:12]:
+        console.print(f"  {s}")
+    if len(match.subjects) > 12:
+        console.print(f"  … and {len(match.subjects) - 12} more")
+    console.print("")
+    for n, q in enumerate(_BRIEF_QUESTIONS, 1):
+        console.print(f"[bold]{n}. {q[0]}[/]")
+        console.print(f"   [dim]{q[1]}[/]")
+    console.print("\n[bold]Then rate it[/] — and the rating must follow from what you found, not from the "
+                  "counts above:")
+    for level, meaning in _RATINGS:
+        console.print(f"   [bold]{level:9}[/] {meaning}")
+    console.print("\n[dim]Write the answer as prose with file:line citations. A finding whose "
+                  "investigation cannot point at a consequence is minor by definition.[/]\n")
+
+
+_BRIEF_QUESTIONS = [
+    ("What is this, in the system's own terms?",
+     "Name the concept a reader would recognise — a call type, a provider, a deploy mode — not the value "
+     "set. If you cannot say what decision it drives, that is itself the answer."),
+    ("Where is it declared, and how many times?",
+     "Find every declaration of the same domain: enums, Literal types, TypedDict fields, inline lists. "
+     "Count them. One concept declared four times is the finding."),
+    ("Has it drifted?",
+     "Compare the declarations member by member. Report the counts both ways — values in one and not the "
+     "other. Drift is what turns duplication from untidy into dangerous."),
+    ("Is there a code path where the mismatch changes behaviour?",
+     "This is the question that decides the rating. Trace one concrete path: a value that reaches a "
+     "comparison it can never satisfy, a branch that is unreachable, a default that silently applies. "
+     "Quote the code and cite file:line."),
+    ("If it does misbehave, how does it fail?",
+     "Loudly or silently? A wrong answer an operator sees is far less serious than one that reports "
+     "success — the worst case found so far was a security hook that returned 'clean' having scanned "
+     "nothing."),
+    ("Why was it not caught already?",
+     "Types, tests, linting, review. If a type checker should have caught it, find out why it did not — "
+     "suppressions, `Any`, a config that disables the rule. That explains how it survived and whether "
+     "the fix will hold."),
+    ("Is it one problem or several?",
+     "Value sets can conflate concepts. Say which parts are one decision and which merely share strings; "
+     "a finding that is two-thirds real should be reported as such."),
+]
+
+_RATINGS = [
+    ("minor", "untidy; no behaviour depends on the duplication, or a typo fails loudly"),
+    ("moderate", "a real maintenance hazard — the vocabularies can drift and nothing would catch it"),
+    ("critical", "it already misbehaves, or a plausible edit makes it misbehave silently"),
+]
 
 
 @app.command(name="history-profile")

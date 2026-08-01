@@ -286,3 +286,56 @@ def test_cross_language_escape_is_not_softened_by_the_compiler_note(tmp_path):
     })
     assert "TS2367" not in found[0].recommendation
     assert found[0].confidence == "med"
+
+
+# --- triage: which findings are worth a full investigation -------------------------------------
+
+def test_a_finding_has_a_stable_id_across_runs(tmp_path):
+    """A report has to be able to say *which* finding to investigate, and the handle must survive a
+    re-run — counts move, the finding does not."""
+    cfg = _cfg(tmp_path)
+    _commit(cfg, "init", _decision_files())
+    _churn_the_decision(cfg)
+    first = {f.id for f in evaluate(cfg).findings}
+    _churn_the_decision(cfg, rounds=2)          # more churn, same decision
+    assert first & {f.id for f in evaluate(cfg).findings}
+
+
+def test_triage_flags_a_wide_vocabulary():
+    from archagent.evaluate import _triage
+    worth, why = _triage("enum-value-escape", files=13, values=31, fix_churn=143)
+    assert worth and "13 files" in why and "31-value" in why
+
+
+def test_triage_leaves_a_narrow_finding_alone():
+    """Most findings are minor and should not each cost an investigation."""
+    from archagent.evaluate import _triage
+    assert _triage("enum-value-escape", files=1, values=2, fix_churn=0)[0] is False
+
+
+def test_triage_flags_a_cross_language_escape_however_small():
+    """Nothing checks either side of a language boundary, so even a small vocabulary can drift silently."""
+    from archagent.evaluate import _triage
+    worth, why = _triage("enum-value-escape", files=1, values=2, cross_language=True)
+    assert worth and "language boundary" in why
+
+
+def test_triage_flags_the_python_unwrap():
+    from archagent.evaluate import _triage
+    assert _triage("enum-value-escape", files=1, values=2, unwrapped=True)[0] is True
+
+
+def test_a_hotspot_is_only_investigated_at_the_top_of_both_axes():
+    from archagent.evaluate import _triage
+    assert _triage("change-prone-file", score=0.95)[0] is True
+    assert _triage("change-prone-file", score=0.80)[0] is False
+
+
+def test_triage_reaches_the_finding(tmp_path):
+    cfg = _cfg(tmp_path)
+    cfg.languages = ["python", "ts"]
+    found = _escape_finding(cfg, {
+        "src/api/state.py": STATE_ENUM,
+        "src/web/panel.tsx": _escaper(["summarized", "sem-search", "research"]),
+    })
+    assert found[0].investigate and "language boundary" in found[0].triage_reason
