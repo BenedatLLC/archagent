@@ -124,11 +124,14 @@ def do_report() -> None:
     if not labels:
         raise SystemExit("no labels yet — run `generate`, fill the worksheet, then `ingest`")
     print(f"{len(labels)} label(s) by {', '.join(sorted({l.reviewer for l in labels}))}\n")
-    print(f"{'signal':30} {'n':>4} {'confirmed':>10} {'precision':>10}  95% CI      unsure")
+    print(f"{'signal':28} {'n':>3} {'conf':>5} {'part':>5} {'dism':>5} "
+          f"{'strict':>7} {'95% CI':>14} {'lenient':>8} {'95% CI':>14}")
     for sign, s in precision_by_sign(labels).items():
-        p = "n/a" if s["precision"] is None else f"{s['precision']:.0%}"
-        print(f"{sign:30} {s['n']:>4} {s['confirmed']:>10} {p:>10}  "
-              f"[{s['ci95'][0]:.2f}, {s['ci95'][1]:.2f}]  {s['unsure']}")
+        st = "n/a" if s["precision_strict"] is None else f"{s['precision_strict']:.0%}"
+        le = "n/a" if s["precision_lenient"] is None else f"{s['precision_lenient']:.0%}"
+        print(f"{sign:28} {s['n']:>3} {s['confirmed']:>5} {s['partial']:>5} {s['dismissed']:>5} "
+              f"{st:>7} [{s['ci95_strict'][0]:.2f}, {s['ci95_strict'][1]:.2f}] {le:>8} "
+              f"[{s['ci95_lenient'][0]:.2f}, {s['ci95_lenient'][1]:.2f}]")
     print("\nIntervals are Wilson, which stays inside [0,1] at these sample sizes.")
     print("Precision here is by a human reviewer; agreement with a model judge needs judge verdicts too.")
 

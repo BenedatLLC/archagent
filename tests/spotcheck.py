@@ -31,7 +31,12 @@ from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 
-VERDICTS = ("confirm", "dismiss", "unsure")
+# "partial" was not anticipated and a reviewer reached for it unprompted on 3 of 19 items, meaning "there
+# is something real here, but not the thing the finding claims" — e.g. the escape exists but from a
+# different enum than the one named. That is a distinct and useful verdict: counting it as confirm
+# overstates precision, counting it as dismiss throws away a real defect, and dropping it (which the
+# original parser did, silently) loses the most informative labels in the set.
+VERDICTS = ("confirm", "dismiss", "partial", "unsure")
 SCORE_VERDICTS = ("agree", "too-high", "too-low", "unsure")
 
 
@@ -225,7 +230,10 @@ def parse_worksheet(text: str) -> dict[str, dict]:
         verdicts = _ANSWER.findall(block)
         whys = _WHY.findall(block)
         raw = (verdicts[0] if verdicts else "").strip().lower()
+        # "partial confirm" must be read before "confirm" or the prefix match would take the wrong one
         verdict = next((v for v in (*VERDICTS, *SCORE_VERDICTS) if raw.startswith(v)), "")
+        if not verdict and "partial" in raw:
+            verdict = "partial"
         if not verdict:
             continue                       # unanswered items are skipped, never guessed at
         out[key] = {"verdict": verdict, "why": (whys[0].strip() if whys else "")}
@@ -251,13 +259,22 @@ def precision_by_sign(labels: list[Label]) -> dict[str, dict]:
     counted either way — it is missing data, not a dismissal."""
     out: dict[str, dict] = {}
     for sign in sorted({l.sign for l in labels}):
-        rated = [l for l in labels if l.sign == sign and l.verdict in ("confirm", "dismiss")]
+        mine = [l for l in labels if l.sign == sign]
+        rated = [l for l in mine if l.verdict in ("confirm", "dismiss", "partial")]
         confirmed = sum(1 for l in rated if l.verdict == "confirm")
-        lo, hi = wilson(confirmed, len(rated))
-        out[sign] = {"n": len(rated), "confirmed": confirmed,
-                     "precision": (confirmed / len(rated)) if rated else None,
-                     "ci95": [round(lo, 3), round(hi, 3)],
-                     "unsure": sum(1 for l in labels if l.sign == sign and l.verdict == "unsure")}
+        partial = sum(1 for l in rated if l.verdict == "partial")
+        strict_lo, strict_hi = wilson(confirmed, len(rated))
+        lenient_lo, lenient_hi = wilson(confirmed + partial, len(rated))
+        out[sign] = {
+            "n": len(rated), "confirmed": confirmed, "partial": partial,
+            "dismissed": sum(1 for l in rated if l.verdict == "dismiss"),
+            # strict counts only full confirmations; lenient credits partials, where something real was
+            # found but not what the finding claimed. Reporting one number would hide the difference.
+            "precision_strict": (confirmed / len(rated)) if rated else None,
+            "precision_lenient": ((confirmed + partial) / len(rated)) if rated else None,
+            "ci95_strict": [round(strict_lo, 3), round(strict_hi, 3)],
+            "ci95_lenient": [round(lenient_lo, 3), round(lenient_hi, 3)],
+            "unsure": sum(1 for l in mine if l.verdict == "unsure")}
     return out
 
 

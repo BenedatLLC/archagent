@@ -168,7 +168,7 @@ def test_precision_excludes_unsure_from_the_denominator():
               Label("k2", "r", "sX", "dismiss", "", "jf", "d"),
               Label("k3", "r", "sX", "unsure", "", "jf", "d")]
     out = precision_by_sign(labels)["sX"]
-    assert out["n"] == 2 and out["precision"] == pytest.approx(0.5) and out["unsure"] == 1
+    assert out["n"] == 2 and out["precision_strict"] == pytest.approx(0.5) and out["unsure"] == 1
 
 
 def test_agreement_reports_the_direction_of_disagreement():
@@ -181,3 +181,31 @@ def test_agreement_reports_the_direction_of_disagreement():
 
 def test_agreement_ignores_items_only_one_side_rated():
     assert agreement({"a": "confirm"}, {"b": "confirm"})["n"] == 0
+
+
+# --- partial, the verdict a reviewer reached for unprompted ------------------------------------
+
+def test_partial_confirm_is_recognised():
+    """A reviewer used "partial confirm" on 3 of 10 enum items to mean "something real is here, but not
+    what the finding claims". The original parser dropped unrecognised verdicts silently, so the most
+    informative labels in the round were nearly lost."""
+    sheet, _ = render_worksheet([_item("k1")])
+    filled = sheet.replace("verdict:\nwhy:", "verdict: partial confirm\nwhy: right escape, wrong enum", 1)
+    assert parse_worksheet(filled)["k1"]["verdict"] == "partial"
+
+
+def test_partial_is_not_swallowed_by_the_confirm_prefix():
+    sheet, _ = render_worksheet([_item("k1")])
+    for phrasing in ("partial", "Partial confirm", "partially confirmed"):
+        filled = sheet.replace("verdict:\nwhy:", f"verdict: {phrasing}\nwhy: x", 1)
+        assert parse_worksheet(filled)["k1"]["verdict"] == "partial", phrasing
+
+
+def test_precision_is_reported_strictly_and_leniently():
+    """One number would hide a signal that is usually pointing at something true while mis-attributing it."""
+    labels = [Label(f"k{i}", "r", "sX", v, "", "jf", "d") for i, v in
+              enumerate(["confirm", "confirm", "partial", "dismiss"])]
+    out = precision_by_sign(labels)["sX"]
+    assert out["precision_strict"] == pytest.approx(0.5)
+    assert out["precision_lenient"] == pytest.approx(0.75)
+    assert (out["confirmed"], out["partial"], out["dismissed"]) == (2, 1, 1)
