@@ -70,6 +70,67 @@ unexplained, and an unexplained non-reproducibility belongs in a study that rest
 
 ---
 
+## Follow-ups (2026-08-01): prettier, and why angular differs
+
+### prettier — runs now, but underpowered
+
+The clone validation added in run 4 repaired prettier's commit-graph and it completed:
+RR 0.93 [0.39, 3.21], all-commits 1.07. It clears the *events* bar (134) but not the *file* bar
+(22 flagged, 38 controls, against ≥60/≥120), and the revised bar requires both. So it is recorded, not
+counted — the same standing as ansible and pandas.
+
+### Testing the maintenance-mode hypothesis for angular
+
+The proposal: angular's null reflects a project in maintenance rather than active development, so there is
+less for a file-level signal to predict. Checkable, so it was checked.
+
+| repo | fix % of commits | files with ≥1 fix | share of fixes in the top 10% of files | fixes per scored file |
+|---|---|---|---|---|
+| kibana | 3.1% | 5% | 100% | 0.06 |
+| nova | 8.3% | 4% | 100% | 0.06 |
+| ansible | 14.5% | 12% | 86% | 0.13 |
+| pandas | 11.4% | 17% | 77% | 0.28 |
+| prettier | 10.2% | 28% | 63% | 0.59 |
+| **angular** | **15.5%** | **33%** | **60%** | **0.69** |
+| homeassistant | 12.6% | 37% | 56% | 0.76 |
+
+**Partially supported, but it does not explain the null.** Angular does have the highest fix share of any
+repository here — 15.5% of its commits are defect fixes, which is what a maintenance-heavy phase looks
+like. But it is not quiet: 4,055 commits in the outcome window is an active project.
+
+And the consequence the hypothesis predicts does not appear. If angular's fixes were spread too thin for a
+file-level signal to find, its distribution would look flat — but **home-assistant's is flatter still**
+(37% of files fixed, 56% concentration) and home-assistant passes at 2.05. Two repositories with nearly
+identical defect distributions, opposite results. Whatever distinguishes angular, it is not how widely its
+fixes are spread.
+
+### What the table does explain — and it tempers the headline numbers
+
+Reading down it, **the size of the rate ratio tracks how concentrated defect fixes are**, which is partly
+mechanical:
+
+| | fixes concentrated | RR |
+|---|---|---|
+| kibana, nova | 4–5% of files carry them, top decile holds 100% | 4.27, 4.45 |
+| ansible, pandas | 12–17% | 1.18, 1.15 |
+| prettier, angular, homeassistant | 28–37% | 0.93, 1.47, 2.05 |
+
+When only 5% of files receive any fix, correctly identifying them is high-leverage and the achievable
+ratio is large. When a third of files receive one, the ceiling on any ratio is far lower. So **the
+cross-repository spread in RR — 0.93 to 4.45 — is substantially about defect concentration, not about how
+well the signal works.** Kibana's 4.27 and home-assistant's 2.05 are not straightforwardly comparable as
+"how good the check is here".
+
+This does not undercut the pass/fail conclusions, which are within-repository comparisons against matched
+controls. It does mean the *magnitudes* should not be quoted as effect sizes for the check in general, and
+home-assistant's 2.05 against a flat distribution is arguably the more impressive of the two passes.
+
+Angular remains unexplained. The next thing worth checking is whether its flagged set is unusual — for
+instance whether its complexity axis selects test-adjacent or generated-ish files that its own fix traffic
+avoids.
+
+---
+
 ## Run 3 (2026-08-01) — the architecture explanation is out; the split is by language
 
 **The pre-registration for this run is in the commit history (`5d890cc`), written before the run.** It

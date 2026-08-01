@@ -355,10 +355,18 @@ is a later consideration. Items below are in build order.
   **Standing: three of four adequately-powered repositories pass, all with the specificity signature,
   across two languages and three architectures.** Angular is the outlier and why is unexplained. Pooled
   (exploratory) RR 1.83 [1.51, 2.21]. Full record: `evaluations/defect-study/RESULTS.md`.
-- [ ] **Explain angular.** It is now the only powered repository without the signature, and its
-  all-commits ratio (1.39) sits close to its defect ratio (1.47) — the pattern of a flagged set that is
-  merely busier. Worth understanding before treating the signal as universal.
-- [ ] **Prettier is still unrun** (it hit the same clone corruption as kibana, before the repair existed). Compute signals as of T, then ask whether the flagged files
+- [x] **Prettier** — the clone validation repaired it and it ran: RR 0.93 [0.39, 3.21]. Clears the events
+  bar (134) but not the file bar (22 flagged), so recorded, not counted.
+- [ ] **Explain angular.** The maintenance-mode hypothesis was tested and only partly holds: angular does
+  have the highest defect-fix share of any repository here (15.5% of commits), but it is not quiet (4,055
+  commits in the window), and home-assistant has an *even flatter* defect distribution (37% of files fixed
+  vs angular's 33%) while passing at 2.05. Whatever distinguishes angular, it is not how widely fixes are
+  spread. Next: check whether its flagged set is unusual in composition.
+- [ ] **Report effect sizes with the concentration caveat.** Across repositories the rate ratio tracks how
+  concentrated defect fixes are — 4–5% of files carrying fixes gives RR ~4.3–4.5 (kibana, nova), 28–37%
+  gives 0.93–2.05. That is partly mechanical: a ratio has more room when fixes are rare. Pass/fail is a
+  within-repository comparison and stands, but the magnitudes are not comparable across repositories and
+  should not be quoted as the check's effect size in general. Compute signals as of T, then ask whether the flagged files
   accumulate more **defect-fixing commits** in (T, now] than churn-matched controls — an outcome that does
   not depend on our own labelling, which is the weakness in every quality number we currently have.
   Recognise defect fixes from commit wording (no external service), cross-checked on a couple of repos
