@@ -370,6 +370,8 @@ archagent/
 ├── README.md                 this file
 ├── pyproject.toml            package metadata + dependencies (uv)
 ├── docs/
+│   ├── architecture/         archagent's own artifact — it describes itself (archagent.toml points here)
+│   ├── designs/              one design doc per feature, with `status:` frontmatter
 │   ├── ROADMAP.md            planned future work, grouped by theme (checkable)
 │   ├── ADL-SPEC.md           the architecture-artifact format, as a standards-style spec
 │   └── RELEASING.md          how to cut a new release to PyPI

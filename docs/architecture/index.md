@@ -1,5 +1,8 @@
 # Architecture index
 
+This artifact lives at `docs/architecture/` rather than the default `architecture/`; `archagent.toml`
+records that with `architecture_dir`. Every tool resolves the location from there.
+
 | Document | What it holds |
 |---|---|
 | `constitution.md` | how this repo works; the layering and the deterministic-code rule |

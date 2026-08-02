@@ -1,5 +1,6 @@
 [project]
 languages = ["python"]
+architecture_dir = "docs/architecture"
 
 [python]
 root_package = "archagent"

@@ -224,3 +224,6 @@ __marimo__/
 # editor swap files
 *.swp
 *.swo
+
+# editor state (Obsidian vault metadata, created when reviewing worksheets)
+.obsidian/
