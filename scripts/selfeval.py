@@ -70,7 +70,8 @@ def do_brief(path: Path, second_run: bool) -> None:
     arch = _arch_dir(root)
     out = RESULTS / root.name / f"review-brief{'-update' if second_run else ''}.md"
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(render_brief(f"{root}/{arch}", root.name, second_run))
+    # repo-relative, not absolute: the brief is committed and read by someone on another machine
+    out.write_text(render_brief(arch, root.name, second_run))
     print(f"wrote {out}")
     print("Hand this to a reviewer or a separate agent session. Every score needs a file:line citation;")
     print("uncited scores are discarded rather than averaged in.")

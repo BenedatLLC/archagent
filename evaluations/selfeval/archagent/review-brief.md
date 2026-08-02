@@ -1,6 +1,6 @@
 # Architecture artifact review — archagent
 
-Artifact: `/Users/jfischer/code/archagent/architecture`
+Artifact: `docs/architecture/` (relative to the repository root)
 
 Score each criterion 1–5 against the anchors given. **A score with no citation is discarded**,
 so name the file and line you judged from — the failure mode here is fluent, confident prose

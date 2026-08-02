@@ -159,7 +159,7 @@ def render_brief(artifact_path: str, repo: str, second_run: bool = False) -> str
     lines = [
         f"# Architecture artifact review — {repo}",
         "",
-        f"Artifact: `{artifact_path}`",
+        f"Artifact: `{artifact_path}/` (relative to the repository root)",
         "",
         "Score each criterion 1–5 against the anchors given. **A score with no citation is discarded**,",
         "so name the file and line you judged from — the failure mode here is fluent, confident prose",

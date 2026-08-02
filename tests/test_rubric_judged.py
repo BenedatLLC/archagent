@@ -100,3 +100,11 @@ def test_a_review_with_nothing_usable_has_no_mean():
     """"Could not be scored" and "scored badly" are different claims."""
     r = review_from(_filled(prose=(5, "no citation", "vibes")), "demo", "v1", "judge")
     assert r.mean is None
+
+
+def test_the_brief_names_the_artifact_relative_to_the_repo():
+    """The brief is committed and read on another machine, so an absolute path from whoever generated it
+    is noise at best and wrong at worst."""
+    brief = render_brief("docs/architecture", "archagent")
+    assert "docs/architecture/" in brief
+    assert "/Users/" not in brief and "/home/" not in brief
