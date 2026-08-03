@@ -351,12 +351,19 @@ the evidence argues for:
   A requirement nobody verifies stops happening quietly. Also: the rubric now invokes the checkout being
   scored rather than whatever `archagent` is on `PATH`, after a stale global install failed the
   `tools.clean` gate and was read as an artifact defect.
-- [ ] **Artifact follow-ups from that review** — issues
-  [#4](https://github.com/BenedatLLC/archagent/issues/4) decorative diagram captions,
-  [#5](https://github.com/BenedatLLC/archagent/issues/5) abstractions named before they are grounded,
-  [#6](https://github.com/BenedatLLC/archagent/issues/6) invariants forbidding single edges rather than
-  classes of edge (`import typer` evades all three CLI-isolation rules). The `describe` prompt was
-  corrected for all three so new artifacts do not inherit them; the existing documents were not.
+- [x] **Artifact follow-ups from that review** — all three closed, and the outcomes differed sharply.
+  [#5](https://github.com/BenedatLLC/archagent/issues/5) (abstractions named before grounding) held on all
+  three counts and was fixed with worked examples: BND-001 traced through the whole invariant pipeline,
+  groups A–F enumerated, and what a scanner actually returns rather than what it extracts.
+  [#4](https://github.com/BenedatLLC/archagent/issues/4) (decorative captions) did not hold — all five
+  captions already stated takeaways and the "missing" state diagram already existed; the real gap was
+  `drift`, the central check, having no diagram at all.
+  [#6](https://github.com/BenedatLLC/archagent/issues/6) held and produced the most: five new rules
+  (STR-002…STR-006), each verified by planting a violation rather than by passing on a clean tree.
+  `import typer` in a domain module left BND-001 passing, and two claims the artifact made about its own
+  DSL were untested guesses — "only `drift.py` may invoke `git`" is expressible (`ast-grep` matches AST
+  nodes, not comments), and the allow-list the issue assumed was missing is just `forbid-pattern
+  from .$M import $$$ in <module>`.
 - [ ] **Calibrate the judged criteria** (§11). The findings half of this was done and produced 68%
   agreement between an independent reviewer and the person who built the checks, with errors in both
   directions. The equivalent for these criteria needs artifacts of known quality to score, which needs a
