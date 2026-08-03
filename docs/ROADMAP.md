@@ -37,6 +37,22 @@ Rationale and design detail for most items live in `~/research/architecture-agen
 
 ## Releases
 
+- **0.3.0** (2026-08-03) — **Two new `evaluate` signal groups.** Group **E** `change-prone-file` (per-file
+  churn × indentation complexity, both as within-repo percentiles) and group **F** `scattered-source-of-truth`
+  (one decision branched on across files) + `enum-value-escape` (an enum bypassed by its raw member
+  strings — a pure code scan that needs no git). Ranked by a **learned per-repo bug-fix commit
+  recognizer** (`archagent history-profile`) rather than a hard-coded `fix(...)` pattern, which finds zero
+  of Django's ~16,000 fix commits.
+  **`archagent investigate <finding-id>`** turns a candidate into a verdict: it prints the questions that
+  decide whether a finding matters, and `--record --rating minor|moderate|critical` stores the answer in
+  the artifact under `<arch-dir>/investigations/` so the next run reports it instead of asking again
+  (ADL-SPEC §6a).
+  **`--until` / `--as-of <tag>`** on `evaluate` and `drift` bound history to a past revision, so a run can
+  be reproduced as of a commit; the run warns if the checked-out tree is newer than the window.
+  **Drift correctness:** a `**Covers:**` glob is no longer reported as a missing file, a reference to code
+  in a language archagent does not analyse is no longer reported as deleted, and a wrapped `**Config:**`
+  manifest is read whole instead of to its first line. **`evaluate --json`** now carries the signs each
+  inactive family stands for, so a consumer can check the coverage report against the findings list.
 - **0.2.0** (2026-07-21) — **Configurable architecture-docs location:** `init --arch-dir docs/architecture`
   (+ interactive discovery of `docs/`/`design/`/`spec/` dirs, `--yes` to skip prompts); recorded as
   `[project] architecture_dir` and honored by drift/evaluate/check/gen, wiring, and `upgrade`. **Phase 3
