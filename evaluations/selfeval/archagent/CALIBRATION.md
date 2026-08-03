@@ -88,6 +88,35 @@ about `architecture_dir` — configuration trivia as the first thing a reader me
 of what the tool does, no reading order, and no account of how ADRs relate to invariants. All three are
 now in the index and the config note has moved to the bottom.
 
+## Postscript (2026-08-02): the qualitative findings, once acted on
+
+The organisational criticisms were treated as sound because they needed no citation to verify, and the
+generation prompts and `index.md` were corrected on that basis. Working through the two filed as issues
+sharpened the picture, and it cuts the same way as everything above.
+
+**#5 (abstractions named before grounding) held on all three counts.** `evaluate.md` used "groups A–F" in
+its opening sentence, its CLI flag and its report without ever enumerating them; `extraction.md` said what
+each scanner extracts but never what one returns; `invariant-pipeline.md` had no worked example. All three
+are fixed with concrete instances rather than more prose. Worth noting against my own reliability: two of
+the examples I first wrote were *also* wrong when checked — `read_config_keys` returns a bare `set[str]`
+with no file map, and `Route` carries the source file rather than a handler. Writing a grounded example is
+where the checking happens; that is the argument for grounding them.
+
+**#4 (decorative captions) did not hold.** All five existing captions already state a takeaway rather than
+naming the diagram, and the finding-lifecycle state diagram it called missing was already in `evaluate.md`.
+The one real gap was the one the review misdescribed: it reported `drift.md` as having a decorative
+dependency graph, and `drift.md` had no diagram at all.
+
+So the pattern extends past the citations. The review's *scores* on the artifact-readable criteria were
+defensible, and its *specific claims about which file contained what* were unchecked whether or not they
+carried a resolvable citation — including in the criteria that scored well. Resolving citations catches
+the invented path; it does not catch a true path attached to a false claim about its contents, and the
+`diagrams` criterion is where that showed up.
+
+The one incidental find: writing the drift caption surfaced a hardcoded `architecture/` in the drift
+header, printing a path that exists on no repo configuring `architecture_dir`. Neither the review nor any
+check found it. Describing a thing carefully still finds more than grading it does.
+
 ## What this says about the scores
 
 **Nothing yet.** 3.0 is one review by one reviewer whose evidence was wrong in every instance it was
