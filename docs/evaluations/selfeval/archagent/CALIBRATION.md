@@ -155,7 +155,7 @@ a ranking.
 checked. That is not agreement data; it is a demonstration that the rubric could not previously tell a
 grounded review from an ungrounded one. The criteria remain uncalibrated and gate nothing (§13.2).
 
-The findings calibration (`evaluations/labels/CALIBRATION.md`) reached 68% agreement and concluded *a
+The findings calibration (`docs/evaluations/labels/CALIBRATION.md`) reached 68% agreement and concluded *a
 verdict reached from the finding's summary is not a verdict*. The same rule turns out to hold one level
 up: **a score reached from the documents alone is not a score.** Four of six criteria here are answerable
 from the artifact text, and those scored 3–4 with no fabricated citations. The two that require opening

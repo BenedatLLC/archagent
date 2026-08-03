@@ -25,6 +25,29 @@ artifact. The archagent test suite does not read it — all tests pass with the 
 | [`selfeval/obstudio/README.md`](selfeval/obstudio/README.md) | Judged rubric, round 2 setup: a Go-majority repo neither of us wrote, and the three archagent bugs running on it exposed. |
 | [`spotcheck/worksheet-2026-08-01-item-12-explanation.md`](spotcheck/worksheet-2026-08-01-item-12-explanation.md) | The worked example of what a finding write-up should look like — litellm's drifted `CallTypes` vocabulary leaving a security hook scanning nothing and reporting success. |
 
+## What lives where
+
+**Code and conclusions here; measurements there.** The rule is one question:
+
+> Does this file change when **archagent** changes, or when the **target repo** changes?
+
+A regression baseline changes when the tool's behaviour changes — it is an assertion about archagent, so
+it belongs beside archagent. A flagged-file set changes when litellm gets a new commit — it is a
+measurement of someone else's repository, so it belongs in the data repo.
+
+| Kind | Where | Why |
+|---|---|---|
+| Harness modules (`tests/rubric.py`, `rubric_judged.py`, `defect_study.py`, `corpus.py`, `spotcheck.py`, `blindcomp.py`) | archagent | code |
+| Runner CLIs (`scripts/*.py`) | archagent | code |
+| The reviewer brief a judge fills in (`render_brief`) | archagent | it is the instrument, generated fresh per run |
+| Manifests pinning what to run (`tests/*_manifest.toml`, `blindcomp_truth.toml`) | archagent | inputs, versioned with the code that reads them |
+| **Regression baselines** (`tests/corpus/*.json`, `tests/golden/*.json`) | archagent | the awkward case: they *are* recorded `evaluate` output, but their job is "fail if archagent's behaviour changes". They move when the tool moves. |
+| These write-ups | archagent | conclusions, useless without the reasoning around them |
+| Flagged sets, outcome measurements, labels, worksheets, completed reviews, generated artifact snapshots, scorecards | archagent-evaluations | measurements of target repositories |
+
+Nothing evaluation-related ships in the wheel: neither `scripts/` nor the harness modules are installed by
+`pip install archagent`.
+
 ## Where scripts write
 
 `scripts/selfeval.py`, `defect_study.py`, `spotcheck.py` and `blindcomp.py` resolve their output root in

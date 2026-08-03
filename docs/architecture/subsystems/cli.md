@@ -27,6 +27,11 @@ until `investigate` and `history-profile` were added, and nothing checks a numbe
 twice, as text and as JSON, from the same object (`cli.py:375`). Adding a field to a finding does not
 touch the command.
 
+**The JSON is a superset of the text, not a parallel format.** `--json` emits every field the rendered
+report shows and some it does not — each inactive family carries the `signs` it stands for
+(`cli.py:423`), so an agent can check the coverage report against the findings list rather than reading
+prose. The text view collapses that to a label because a person reading a terminal does not need it.
+
 **Findings carry their own next step.** A finding marked `investigate` prints the exact command that acts
 on it (`cli.py:441`). A reader who cannot act on a finding drops it.
 
