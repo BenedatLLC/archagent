@@ -173,7 +173,7 @@ def test_a_failed_git_walk_is_reported_not_silently_empty(tmp_path, monkeypatch)
     result = evaluate(cfg)
     assert result.mining_failed
     assert "history walk FAILED" in result.history_cautions[0]
-    assert any("history walk failed" in reason for _, reason in result.inactive)
+    assert any("history walk failed" in i.reason for i in result.inactive)
 
 
 def test_a_healthy_walk_is_not_flagged_as_failed(tmp_path):

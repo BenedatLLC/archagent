@@ -34,7 +34,7 @@ def _of(result, sign):
 # --- Coverage of the evaluation itself (inactive families) --------------------------------
 
 def _has_inactive(result, needle):
-    return any(needle in fam for fam, _ in result.inactive)
+    return any(needle in i.family for i in result.inactive)
 
 
 def test_missing_metadata_reported_as_inactive(tmp_path):
@@ -48,7 +48,7 @@ def test_missing_metadata_reported_as_inactive(tmp_path):
     assert _has_inactive(r, "data & source-of-truth")   # needs >=2 Service:
     assert _has_inactive(r, "layering")                 # needs >=2 Tier:
     assert _has_inactive(r, "connector topology")       # needs Connects:
-    assert any("Service" in why for _, why in r.inactive)
+    assert any("Service" in i.reason for i in r.inactive)
 
 
 def test_full_metadata_activates_families(tmp_path):
@@ -359,3 +359,36 @@ def test_clean_project_has_no_findings(tmp_path):
     _sub(cfg, "a", "# A\n\n**Covers:** `src/pkg/a.py`\n")
     _sub(cfg, "b", "# B\n\n**Covers:** `src/pkg/b.py`\n")
     assert evaluate(cfg).findings == []
+
+
+def test_no_inactive_family_may_claim_a_sign_that_was_reported(tmp_path):
+    """The invariant the coverage report exists to hold.
+
+    Its job is to stop "no findings" being read as "clean". The inverse — naming a family inactive while
+    that family produced a finding — defeats it just as thoroughly, and happened: the git-history entry
+    claimed all of F under `--no-history` while `enum-value-escape`, a pure code scan, had fired in the
+    same run. The old assertions were substring matches on the label ("git history"), which passed both
+    before and after the fix, so they could not have caught it. This checks the property instead.
+    """
+    cfg = _cfg(tmp_path)
+    _src(cfg, "pkg/e.py", 'from enum import Enum\n\n\nclass Status(Enum):\n'
+                          '    ACTIVE = "active"\n    PAUSED = "paused"\n    DONE = "done"\n')
+    for n in "abcd":
+        _src(cfg, f"pkg/{n}.py", 'def f(s):\n    if s == "active": return 1\n'
+                                 '    if s == "paused": return 2\n    if s == "done": return 3\n')
+    _sub(cfg, "a", "# a\n\n**Covers:** `src/pkg/*.py`\n**Tier:** domain\n")
+    for history in (False, True):
+        r = evaluate(cfg, history=history)
+        reported = {f.sign for f in r.findings}
+        for entry in r.inactive:
+            overlap = reported & set(entry.signs)
+            assert not overlap, (
+                f"{entry.family!r} is reported inactive but these signs were reported: {sorted(overlap)}")
+
+
+def test_a_degraded_family_lists_no_signs(tmp_path):
+    """"E — bug-fix weighting" means change-prone-file is ranked on total churn, not that it did not run.
+    Listing its sign would make the check above fail — correctly, because the label would then be
+    claiming more than it means."""
+    from archagent.evaluate import Inactive
+    assert Inactive("E — bug-fix weighting", "no convention learned").signs == ()

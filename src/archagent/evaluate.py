@@ -17,6 +17,7 @@ from __future__ import annotations
 import hashlib
 import re
 from dataclasses import dataclass, field
+from typing import NamedTuple
 from pathlib import Path
 
 from .cochange import mine_cochange, tree_newer_than
@@ -147,7 +148,7 @@ class EvaluationResult:
     history_analyzed: int = 0  # commits mined for co-change (0 = regime B not run)
     # Coverage of the evaluation itself: which signal families were INACTIVE and why (a group that emits
     # zero findings for lack of metadata is indistinguishable, from the count alone, from a clean one).
-    inactive: list[tuple[str, str]] = field(default_factory=list)  # (family label, reason)
+    inactive: list["Inactive"] = field(default_factory=list)
     # History hygiene (regime B): so a reader knows whether to trust the co-change signals.
     history_ran: bool = False
     commits_seen: int = 0          # non-merge commits in the window
@@ -345,45 +346,74 @@ _BULK_PCT_WARN = 25  # skipping this share of commits as bulk means the history 
 _CONVENTIONAL_WARN = 50  # below this share of conventional subjects, history discipline is mixed
 
 
-def _coverage(model: _Model, result: "EvaluationResult", history_requested: bool) -> list[tuple[str, str]]:
+class Inactive(NamedTuple):
+    """A signal family that could not run, and **exactly which signs it stands for**.
+
+    `signs` exists so the claim is checkable. The label is prose, and prose drifted: the git-history
+    entry once named the whole of family F while `enum-value-escape` — a pure code scan — had produced a
+    finding in the same run. A coverage report that disagrees with the findings list defeats its own
+    purpose, which is to stop "no findings" being read as "clean". A test now asserts that no sign listed
+    here appears among the findings, so the contradiction cannot come back in a new spelling.
+
+    `signs` is deliberately empty where a family is *degraded* rather than absent — "E — bug-fix
+    weighting" still emits `change-prone-file`, ranked on total churn instead of fix-churn.
+    """
+    family: str
+    reason: str
+    signs: tuple[str, ...] = ()
+
+
+def _coverage(model: _Model, result: "EvaluationResult", history_requested: bool) -> list[Inactive]:
     """Which signal families produced no findings because their required metadata is absent — reported so
     'zero findings' is never silently read as 'clean here'. Only inactive families are returned."""
-    inactive: list[tuple[str, str]] = []
+    inactive: list[Inactive] = []
     services = {s for s in model.service.values() if s}
     tiers = {t for t in model.tier.values() if t}
 
     if len(services) < 2:
         reason = (f"needs **Service:** on ≥2 subsystems ({len(services)} declared) — data ownership, "
                   "distributed-monolith, and cross-service tracing are all skipped")
-        inactive.append(("A — data & source-of-truth / cross-service", reason))
+        inactive.append(Inactive("A — data & source-of-truth / cross-service", reason,
+                             ("duplicated-source-of-truth", "shared-persistency",
+                              "service-intimacy", "shared-library")))
     if len(tiers) < 2:
-        inactive.append(("B — layering (leaky abstraction)",
-                         f"needs **Tier:** on ≥2 subsystems ({len(tiers)} declared)"))
+        inactive.append(Inactive("B — layering (leaky abstraction)",
+                                 f"needs **Tier:** on ≥2 subsystems ({len(tiers)} declared)",
+                                 ("layer-inversion", "layer-skip")))
     if not model.connectors:
-        inactive.append(("B/C — connector topology",
-                         "no **Connects:** declared (some service edges are still inferred from code)"))
+        inactive.append(Inactive("B/C — connector topology",
+                                 "no **Connects:** declared (some service edges are still inferred "
+                                 "from code)",
+                                 ("distributed-monolith", "extraneous-adjacent-connector")))
     # Not all of F: `enum-value-escape` is a pure code scan and runs with no git at all (see the call
     # site above). Naming the whole family inactive contradicted the run's own findings — a --no-history
     # run could report an enum escape and, in the same output, say F had been skipped. A coverage report
     # that disagrees with the findings list is worse than none, since its entire job is to stop "no
     # findings" reading as "clean".
     _HIST = "B/E and F's scattered-source-of-truth half — git history"
+    _HIST_SIGNS = ("implicit-coupling", "unstable-interface", "change-prone-file",
+                   "scattered-source-of-truth")   # note: NOT enum-value-escape
     if not history_requested:
-        inactive.append((_HIST, "skipped (--no-history); the enum-escape check still ran"))
+        inactive.append(Inactive(_HIST, "skipped (--no-history); the enum-escape check still ran",
+                                 _HIST_SIGNS))
     elif not result.git_available:
-        inactive.append((_HIST, "git not available; the enum-escape check still ran"))
+        inactive.append(Inactive(_HIST, "git not available; the enum-escape check still ran",
+                                 _HIST_SIGNS))
     else:
         if getattr(result, "mining_failed", False):
-            inactive.append((_HIST, "the history walk failed; see the caution above"))
+            inactive.append(Inactive(_HIST, "the history walk failed; see the caution above",
+                                     _HIST_SIGNS))
         elif result.history_analyzed == 0:
-            inactive.append(("B — subsystem co-change",
-                             "no commits mapped to subsystems (declare **Covers:** so files map to "
-                             "subsystems); the per-file history checks still ran"))
+            inactive.append(Inactive("B — subsystem co-change",
+                                     "no commits mapped to subsystems (declare **Covers:** so files "
+                                     "map to subsystems); the per-file history checks still ran",
+                                     ("implicit-coupling", "unstable-interface")))
         prof = result.history_profile
         if prof is not None and not prof.usable:
-            inactive.append(("E — bug-fix weighting",
-                             "no usable bug-fix commit convention was learned for this repo — "
-                             "change-prone files are ranked on total churn only"))
+            # degraded, not absent: change-prone-file still fires, so it lists no signs
+            inactive.append(Inactive("E — bug-fix weighting",
+                                     "no usable bug-fix commit convention was learned for this repo — "
+                                     "change-prone files are ranked on total churn only"))
     return inactive
 
 

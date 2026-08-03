@@ -34,6 +34,12 @@ That last one is easy to get wrong. The coverage report used to name `B/E/F — 
 under `--no-history`, so a run could report an enum escape and, in the same output, say the family it
 came from had been skipped. Corrected: the label now names B, E and *F's history-ranked half* only.
 
+**And the claim is now machine-checkable.** Each `Inactive` entry carries the `signs` it stands for, not
+just a prose label, and a test asserts no reported sign appears in an inactive entry. The previous tests
+matched the substring `"git history"`, which the buggy and the fixed label both contain — they passed
+either way and could not have caught it. `signs` is empty where a family is *degraded* rather than
+absent: `E — bug-fix weighting` still emits `change-prone-file`, ranked on total churn.
+
 **Churn** means one thing throughout: the number of commits touching a file in the analysed window.
 *Fix-churn* is the subset of those commits the recogniser labelled as bug fixes. Both are compared as
 percentiles within the repository, never as absolute counts — a hundred commits is a lot in one project

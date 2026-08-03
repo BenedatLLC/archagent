@@ -58,7 +58,7 @@ def project(result) -> dict:
             }
             for f in result.findings
         ],
-        "inactive": [fam for fam, _ in result.inactive],
+        "inactive": [i.family for i in result.inactive],
         "truncated": [[fam, shown, found] for fam, shown, found in result.truncated],
         "history": {
             "commits_seen": result.commits_seen,

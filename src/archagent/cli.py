@@ -420,7 +420,8 @@ def evaluate(
             "tier_declared": result.tier_declared,
             "git_available": result.git_available,
             "history_analyzed": result.history_analyzed,
-            "inactive": [{"family": fam, "reason": why} for fam, why in result.inactive],
+            "inactive": [{"family": i.family, "reason": i.reason, "signs": list(i.signs)}
+                         for i in result.inactive],
             "truncated": [{"family": fam, "shown": n, "found": m} for fam, n, m in result.truncated],
             "history": {
                 "ran": result.history_ran,
@@ -479,7 +480,7 @@ def evaluate(
     if result.inactive:
         console.print("[bold]Inactive signals[/] — produced no findings for lack of metadata (not proof of "
                       "health here):")
-        for fam, why in result.inactive:
+        for fam, why, _signs in result.inactive:
             console.print(f"  [dim]{fam}[/] — {why}")
         console.print("")
 
