@@ -1,0 +1,71 @@
+{
+  "repo": "archagent",
+  "rev": "71ec378",
+  "deterministic_score": 1.0,
+  "gates_failed": [],
+  "checks": [
+    {
+      "id": "adl.required",
+      "label": "Required ADL documents present",
+      "gate": true,
+      "score": 1.0,
+      "detail": "3 core documents + 8 subsystem doc(s)"
+    },
+    {
+      "id": "adl.covers",
+      "label": "Covers globs resolve",
+      "gate": false,
+      "score": 1.0,
+      "detail": "28/28 resolve"
+    },
+    {
+      "id": "coverage.share",
+      "label": "Source files covered",
+      "gate": false,
+      "score": 1.0,
+      "detail": "27/27 files claimed by 8 subsystem(s)"
+    },
+    {
+      "id": "coverage.concentration",
+      "label": "Coverage is spread across subsystems",
+      "gate": false,
+      "score": 1.0,
+      "detail": "largest subsystem holds 30% of claimed files across 8 subsystem(s)"
+    },
+    {
+      "id": "artifact.specificity",
+      "label": "Artifact makes falsifiable claims",
+      "gate": false,
+      "score": 1.0,
+      "detail": "15 counted claim(s) against a target of 10 for 27 source file(s): covers 28, metadata 37, invariants 10; capped at 5 each: covers, metadata, invariants"
+    },
+    {
+      "id": "artifact.orientation",
+      "label": "Artifact is enterable",
+      "gate": false,
+      "score": 1.0,
+      "detail": "system map and an entry narrative present"
+    },
+    {
+      "id": "consistency.drift",
+      "label": "Artifact agrees with the code",
+      "gate": false,
+      "score": 1.0,
+      "detail": "0 drift item(s)"
+    },
+    {
+      "id": "tools.clean",
+      "label": "Commands run without error",
+      "gate": true,
+      "score": 1.0,
+      "detail": "all clean"
+    },
+    {
+      "id": "evaluate.coverage",
+      "label": "Evaluate signal families active",
+      "gate": false,
+      "score": 1.0,
+      "detail": "0 family/families inactive for missing metadata; not applicable here: A (single-process repo, no services to declare), E (learned from history, not declarable)"
+    }
+  ]
+}

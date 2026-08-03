@@ -19,6 +19,7 @@ reading tea leaves. The seam is marked rather than faked.
 """
 import argparse
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -65,11 +66,28 @@ def do_score(path: Path, arch_dir: str | None, rev: str = "", changed: set[str] 
     return data
 
 
-def do_brief(path: Path, second_run: bool) -> None:
+def _is_completed(path: Path) -> bool:
+    """Has someone filled this brief in? A blank template has `score:` with nothing after it."""
+    return path.is_file() and bool(re.search(r"^\s*score\s*:\s*\d", path.read_text(errors="replace"),
+                                             re.MULTILINE))
+
+
+def do_brief(path: Path, second_run: bool, force: bool = False) -> None:
     root = path.resolve()
     arch = _arch_dir(root)
     out = RESULTS / root.name / f"review-brief{'-update' if second_run else ''}.md"
     out.parent.mkdir(parents=True, exist_ok=True)
+    # A completed review is hours of a reviewer's work and the only copy of the primary evidence; this
+    # command silently overwrote one, and the loss was invisible because a blank brief looks like a
+    # freshly generated brief. Refuse rather than clobber.
+    if _is_completed(out) and not force:
+        raise SystemExit(
+            f"{out} contains a completed review (it has filled-in scores).\n"
+            f"Writing a blank brief over it would destroy the only copy.\n\n"
+            f"Either archive it first:\n"
+            f"    git mv {out.relative_to(ROOT)} "
+            f"{out.with_name('review-<date>-completed.md').relative_to(ROOT)}\n"
+            f"or pass --force if you are certain it is recoverable from git.")
     # repo-relative, not absolute: the brief is committed and read by someone on another machine
     out.write_text(render_brief(arch, root.name, second_run))
     print(f"wrote {out}")
@@ -120,6 +138,7 @@ if __name__ == "__main__":
     s = sub.add_parser("score"); s.add_argument("path"); s.add_argument("--arch-dir")
     s.add_argument("--rev", default=""); s.add_argument("--out")
     b = sub.add_parser("brief"); b.add_argument("path"); b.add_argument("--second-run", action="store_true")
+    b.add_argument("--force", action="store_true", help="overwrite a completed review")
     j = sub.add_parser("judged"); j.add_argument("path"); j.add_argument("--review", required=True)
     j.add_argument("--by", default="")
     r = sub.add_parser("run"); r.add_argument("url")
@@ -129,7 +148,7 @@ if __name__ == "__main__":
     if args.cmd == "run":
         do_run(args.url, args.rev_from, args.rev_to)
     if args.cmd == "brief":
-        do_brief(Path(args.path), args.second_run); raise SystemExit(0)
+        do_brief(Path(args.path), args.second_run, args.force); raise SystemExit(0)
     if args.cmd == "judged":
         do_judged(Path(args.path), Path(args.review), args.by); raise SystemExit(0)
     data = do_score(Path(args.path), args.arch_dir, args.rev)

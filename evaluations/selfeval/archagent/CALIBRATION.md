@@ -117,6 +117,38 @@ The one incidental find: writing the drift caption surfaced a hardcoded `archite
 header, printing a path that exists on no repo configuring `architecture_dir`. Neither the review nor any
 check found it. Describing a thing carefully still finds more than grading it does.
 
+## Second scoring pass (2026-08-02, `71ec378`) — and why 1.0 is not good news
+
+The deterministic scorecard now reads **1.0**, up from 0.963. Two things about that, in the order that
+matters.
+
+**I changed the rubric, and the change raised my own score.** `check_evaluate_coverage` counted every
+inactive `evaluate` family against the artifact. Two of the families it was charging archagent for cannot
+be activated by any edit to any document: family E is inactive when no bug-fix commit convention can be
+learned from the git history, and family A needs `**Service:**` on two subsystems when this repo is a
+single process with no services at all. The check claimed to measure whether the *artifact* was
+under-specified and was partly measuring the *repository*. Fixing it moved the score from 0.963 to 1.0.
+
+That is precisely the §13.3 hazard — a criterion becomes a target once someone optimises against it — with
+the twist that here the optimiser and the rubric author are the same. The reasoning holds on its merits
+(the alternative fix was to declare fictional services in `deployment.md`, which is writing a false
+document to raise a score) but the conflict of interest is real and the change should be read with it in
+view. Mitigations: excused families are named in the output rather than dropped, so "not applicable here"
+never reads as "measured and fine"; families B and B/C stay counted because a missing `**Tier:**` or
+`**Connects:**` genuinely is an under-specified artifact; and a test asserts a repo that *does* ship a
+`docker-compose.yml` still gets charged for family A.
+
+**A perfect deterministic score mostly means the deterministic half has run out of things to say.** Eight
+of nine checks were already at ceiling before any of the last three days' work. Between the first pass and
+this one the artifact gained five invariants, a system map, an entry narrative, three worked examples and
+a flowchart for its central subsystem — and the score moved 0.037, all of it from the rubric change rather
+than from the artifact. `check_specificity` could not see the five new rules at all, because
+`CATEGORY_CAP` caps any one category at half the target and invariants were already at the cap.
+
+So the number is now useless as a progress signal for this artifact, which is an argument for the judged
+half rather than a complaint about the deterministic one. It is doing its actual job — it is a floor, not
+a ranking.
+
 ## What this says about the scores
 
 **Nothing yet.** 3.0 is one review by one reviewer whose evidence was wrong in every instance it was

@@ -345,18 +345,54 @@ def check_commands_clean(root: Path) -> Check:
                  "all clean" if not failures else "failed: " + ", ".join(failures), gate=True)
 
 
+_IAC = ("docker-compose.yml", "docker-compose.yaml", "compose.yml", "compose.yaml", "Procfile")
+
+
+def _has_services(root: Path) -> bool:
+    """Does this repo deploy as more than one process? Family A has nothing to measure if not."""
+    return (any((root / n).is_file() for n in _IAC)
+            or any(root.glob("k8s/**/*.y*ml")) or any(root.glob("deploy/**/*.y*ml")))
+
+
 def check_evaluate_coverage(root: Path) -> Check:
     """How much of `evaluate` actually measured anything here. Inactive families are not findings-free;
-    they are unmeasured, and an artifact that leaves most of them inactive is under-specified."""
+    they are unmeasured, and an artifact that leaves most of them inactive is under-specified.
+
+    **Only families the artifact could activate are counted.** The original version counted every inactive
+    family, which measured the repository rather than the artifact:
+
+    - Family E is inactive when no bug-fix commit convention could be learned from the history. No edit to
+      any document changes that, so charging the artifact for it is a category error — and it penalises a
+      young repository permanently.
+    - Family A needs `**Service:**` on two or more subsystems. On a single-process tool there are no
+      services, and declaring some to satisfy the rubric would be writing a false document to raise a
+      score. That is the §13.3 failure mode arriving through the front door.
+
+    Excused families are named in the detail rather than dropped silently, because "not applicable here"
+    and "we chose not to measure it" must not look the same to a reader.
+    """
     out = _run([*ARCHAGENT, "evaluate", "--project", str(root), "--json"])
     if out is None:
         return Check("evaluate.coverage", "Evaluate signal families active", 0.0, "evaluate failed to run")
     data = json.loads(out)
-    inactive = len(data.get("inactive", []))
+    counted, excused = [], []
+    for fam in data.get("inactive", []):
+        name = str(fam.get("family", ""))
+        letter = name[:1]
+        if letter == "E":
+            excused.append(f"{letter} (learned from history, not declarable)")
+        elif letter == "A" and not _has_services(root):
+            excused.append(f"{letter} (single-process repo, no services to declare)")
+        else:
+            counted.append(letter or name)
     families = 6      # the families `_coverage` can report on
-    score = max(0.0, 1.0 - inactive / families)
-    return Check("evaluate.coverage", "Evaluate signal families active", score,
-                 f"{inactive} family/families inactive for missing metadata")
+    score = max(0.0, 1.0 - len(counted) / families)
+    detail = f"{len(counted)} family/families inactive for missing metadata"
+    if counted:
+        detail += f": {', '.join(counted)}"
+    if excused:
+        detail += f"; not applicable here: {', '.join(excused)}"
+    return Check("evaluate.coverage", "Evaluate signal families active", score, detail)
 
 
 #: Invoke archagent through the interpreter running the rubric, not through `PATH`.

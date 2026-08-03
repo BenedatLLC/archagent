@@ -15,6 +15,7 @@ from rubric import (
     check_covers_resolve,
     check_coverage,
     check_drift,
+    check_evaluate_coverage,
     check_orientation,
     check_required_documents,
     check_specificity,
@@ -108,6 +109,32 @@ def test_a_real_artifact_makes_falsifiable_claims(tmp_path):
 
 
 # --- ADL conformance ------------------------------------------------------------------------
+
+# --- evaluate coverage counts only what the artifact controls ----------------------------------------
+
+def test_a_single_process_repo_is_not_charged_for_having_no_services(tmp_path):
+    """Family A needs `**Service:**` on two subsystems. A CLI has none, and declaring some to satisfy the
+    rubric would mean writing a false document to raise a score — the §13.3 failure mode by the front
+    door. The excuse is named in the detail so it cannot be confused with not measuring."""
+    root = _repo(tmp_path, {**SRC, **CORE, "architecture/subsystems/a.md": "# A\n\n**Covers:** `src/**`\n"})
+    c = check_evaluate_coverage(root)
+    assert "no services to declare" in c.detail and "not declarable" in c.detail
+    # B and B/C stay counted — a missing **Tier:**/**Connects:** really is an under-specified artifact
+    assert c.detail.startswith("2 family/families")
+
+
+def test_a_repo_that_does_deploy_services_is_still_charged(tmp_path):
+    """The excuse is about the repo having nothing to declare, not about family A being optional."""
+    plain = check_evaluate_coverage(
+        _repo(tmp_path / "plain", {**SRC, **CORE,
+                                   "architecture/subsystems/a.md": "# A\n\n**Covers:** `src/**`\n"}))
+    deployed = check_evaluate_coverage(
+        _repo(tmp_path / "deployed", {**SRC, **CORE,
+                                      "architecture/subsystems/a.md": "# A\n\n**Covers:** `src/**`\n",
+                                      "docker-compose.yml": "services:\n  web:\n    image: nginx\n"}))
+    assert deployed.score < plain.score
+    assert "no services to declare" not in deployed.detail
+
 
 # --- orientation ------------------------------------------------------------------------------------
 
