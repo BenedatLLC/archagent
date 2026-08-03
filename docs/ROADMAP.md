@@ -336,6 +336,27 @@ the evidence argues for:
   correctly threw away a "5/5, the writing is clear and professional". `0` means unsure and is excluded
   rather than counted as failure. Every stored review carries its own uncalibrated caveat, so a number
   cannot be quoted apart from it.
+  **First real review (2026-08-02) broke the instrument three ways** — `evaluations/selfeval/archagent/CALIBRATION.md`.
+  Fields were read to end-of-line, so a review whose evidence sat indented under `why:` lost five of six
+  scores to the citation rule and reported the sixth as the artifact's score. The citation rule checked
+  that a `file:line` was *present*, which a fabricated one satisfies equally — four of that review's
+  citations pointed at nothing, including line 1593 of a 248-line file. And a mean over the fragment that
+  survived was indistinguishable from a mean over the whole. All three fixed: fields run to the next key,
+  `unresolved_citations` resolves every citation against the tree, and the record carries
+  `scored`/`answered`. The finding that matters most: the four criteria answerable from the artifact text
+  scored 3–4 cleanly, while the two requiring the code to be opened were the two that were fabricated.
+- [x] **Orientation check** (design §9, deterministic half). `check_orientation` requires the index to
+  carry a system map and prose before its catalog. Both were already mandated — `describe` step 8(b)
+  and the shipped `index.md` markers — and archagent's own artifact had neither while every check passed.
+  A requirement nobody verifies stops happening quietly. Also: the rubric now invokes the checkout being
+  scored rather than whatever `archagent` is on `PATH`, after a stale global install failed the
+  `tools.clean` gate and was read as an artifact defect.
+- [ ] **Artifact follow-ups from that review** — issues
+  [#4](https://github.com/BenedatLLC/archagent/issues/4) decorative diagram captions,
+  [#5](https://github.com/BenedatLLC/archagent/issues/5) abstractions named before they are grounded,
+  [#6](https://github.com/BenedatLLC/archagent/issues/6) invariants forbidding single edges rather than
+  classes of edge (`import typer` evades all three CLI-isolation rules). The `describe` prompt was
+  corrected for all three so new artifacts do not inherit them; the existing documents were not.
 - [ ] **Calibrate the judged criteria** (§11). The findings half of this was done and produced 68%
   agreement between an independent reviewer and the person who built the checks, with errors in both
   directions. The equivalent for these criteria needs artifacts of known quality to score, which needs a

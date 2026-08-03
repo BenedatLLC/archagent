@@ -23,6 +23,7 @@ import json
 import math
 import re
 import subprocess
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -197,7 +198,7 @@ def _covered_per_subsystem(root: Path, arch_dir: str) -> dict[str, set[str]]:
 
 def check_drift(root: Path, arch_dir: str) -> Check:
     """A fresh artifact that already disagrees with the code is a describe bug."""
-    out = _run(["archagent", "drift", "--project", str(root), "--json"])
+    out = _run([*ARCHAGENT, "drift", "--project", str(root), "--json"])
     if out is None:
         return Check("consistency.drift", "Artifact agrees with the code", 0.0, "drift failed to run")
     data = json.loads(out)
@@ -297,19 +298,48 @@ def check_specificity(root: Path, arch_dir: str, n_source_files: int = 0) -> Che
                  min(1.0, claims / target), detail)
 
 
+def check_orientation(root: Path, arch_dir: str) -> Check:
+    """Can a newcomer enter the artifact at all: a system map, and prose before the catalog.
+
+    Both are already required — `describe` step 8(b) mandates the Mermaid flowchart and ships an
+    `index.md` with the markers pre-placed. archagent's own artifact had neither, and every check passed,
+    because nothing looked. A mandated step with no verification is a step that silently stops happening.
+
+    The map is the one part scored strictly, since `archagent graph --write` generates it from metadata
+    already gathered — there is no excuse for its absence and no judgement involved in seeing it.
+    """
+    index = _arch(root, arch_dir) / "index.md"
+    if not index.is_file():
+        return Check("artifact.orientation", "Artifact is enterable", 0.0, "no index.md")
+    text = index.read_text(errors="replace")
+    body = re.split(r"^\s*\|", text, maxsplit=1, flags=re.MULTILINE)[0]
+    # diagram source is not prose: a flowchart above the table would otherwise satisfy both halves at once
+    body = re.sub(r"```.*?```", "", body, flags=re.DOTALL)
+    have = {
+        "system map": "```mermaid" in text,
+        # a heading, then the table, tells a reader nothing about what they are looking at
+        "prose before the catalog": len([ln for ln in body.splitlines()
+                                         if ln.strip() and not ln.startswith(("#", "<!--", "-", "*"))]) >= 3,
+    }
+    missing = [k for k, ok in have.items() if not ok]
+    return Check("artifact.orientation", "Artifact is enterable", sum(have.values()) / len(have),
+                 "system map and an entry narrative present" if not missing
+                 else "missing: " + ", ".join(missing))
+
+
 # --- the tools themselves ------------------------------------------------------------------
 
 def check_commands_clean(root: Path) -> Check:
     """Every command exits cleanly and prints no traceback. Cheap, and it catches the case where a
     scorecard would otherwise be assembled from broken runs."""
     failures = []
-    for cmd in (["archagent", "evaluate", "--project", str(root), "--json"],
-                ["archagent", "drift", "--project", str(root), "--json"],
-                ["archagent", "lint-docs", "--project", str(root)]):
+    for cmd in ([*ARCHAGENT, "evaluate", "--project", str(root), "--json"],
+                [*ARCHAGENT, "drift", "--project", str(root), "--json"],
+                [*ARCHAGENT, "lint-docs", "--project", str(root)]):
         proc = subprocess.run(cmd, capture_output=True, text=True)
         blob = proc.stdout + proc.stderr
         if proc.returncode != 0 or _TRACEBACK.search(blob):
-            failures.append(f"{cmd[1]} (rc={proc.returncode})")
+            failures.append(f"{cmd[len(ARCHAGENT)]} (rc={proc.returncode})")
     score = 1.0 - len(failures) / 3
     return Check("tools.clean", "Commands run without error", score,
                  "all clean" if not failures else "failed: " + ", ".join(failures), gate=True)
@@ -318,7 +348,7 @@ def check_commands_clean(root: Path) -> Check:
 def check_evaluate_coverage(root: Path) -> Check:
     """How much of `evaluate` actually measured anything here. Inactive families are not findings-free;
     they are unmeasured, and an artifact that leaves most of them inactive is under-specified."""
-    out = _run(["archagent", "evaluate", "--project", str(root), "--json"])
+    out = _run([*ARCHAGENT, "evaluate", "--project", str(root), "--json"])
     if out is None:
         return Check("evaluate.coverage", "Evaluate signal families active", 0.0, "evaluate failed to run")
     data = json.loads(out)
@@ -327,6 +357,16 @@ def check_evaluate_coverage(root: Path) -> Check:
     score = max(0.0, 1.0 - inactive / families)
     return Check("evaluate.coverage", "Evaluate signal families active", score,
                  f"{inactive} family/families inactive for missing metadata")
+
+
+#: Invoke archagent through the interpreter running the rubric, not through `PATH`.
+#:
+#: A bare `archagent` resolves to whatever is first on `PATH`, which on a machine with a global install
+#: is not the checkout being scored. That produced a failed `tools.clean` gate here — an older
+#: `~/.local/bin/archagent` with no `lint-docs` command — reported as a defect in the artifact. The
+#: version scored has to be the version under evaluation, or the scorecard is about someone else's tool.
+_VENV_SCRIPT = Path(sys.executable).with_name("archagent")
+ARCHAGENT = [str(_VENV_SCRIPT)] if _VENV_SCRIPT.is_file() else ["archagent"]
 
 
 def _run(cmd: list[str]) -> str | None:
@@ -343,6 +383,7 @@ def score_deterministic(root: Path, source_files: set[str], repo: str = "", rev:
     card.add(check_covers_resolve(root, arch_dir, source_files))
     card.add(*check_coverage(root, arch_dir, source_files))
     card.add(check_specificity(root, arch_dir, len(source_files)))
+    card.add(check_orientation(root, arch_dir))
     card.add(check_drift(root, arch_dir))
     card.add(check_commands_clean(root))
     card.add(check_evaluate_coverage(root))

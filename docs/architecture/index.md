@@ -14,6 +14,49 @@ behind it, enforced by `archagent check`. Some ADR conclusions are enforced by a
 most are not, because most are not expressible as a rule — `invariants.md` names the ones deliberately
 left unwritten and why.
 
+## System map
+
+Generated from each subsystem's `**Connects:**` metadata by `archagent graph --write`; it is the
+declared structure, so a disagreement with the code is drift and worth chasing.
+
+**What to notice:** `cli` reaches everything and nothing reaches back — that is ADR 0001, the rule that
+`cli` is the only output layer. And `drift` and `extraction` point at each other. That is the recorded
+cycle in ADR 0003: `drift` needs the scanners, `invscan.py` needs `drift`'s git plumbing, and the fix is
+to pull the plumbing into a leaf module both can import.
+
+<!-- archagent:graph -->
+```mermaid
+flowchart LR
+    cli["cli<br/><i>ui</i>"]
+    config["config<br/><i>infra</i>"]
+    drift["drift<br/><i>domain</i>"]
+    evaluate["evaluate<br/><i>domain</i>"]
+    extraction["extraction<br/><i>infra</i>"]
+    invariant_pipeline["invariant-pipeline<br/><i>domain</i>"]
+    reporting["reporting<br/><i>domain</i>"]
+    scaffolding["scaffolding<br/><i>infra</i>"]
+
+    cli -->|import| config
+    cli -->|import| drift
+    cli -->|import| evaluate
+    cli -->|import| extraction
+    cli -->|import| invariant_pipeline
+    cli -->|import| reporting
+    cli -->|import| scaffolding
+    drift -->|import| config
+    drift -->|import| extraction
+    evaluate -->|import| config
+    evaluate -->|import| drift
+    evaluate -->|import| extraction
+    extraction -->|import| config
+    extraction -->|import| drift
+    invariant_pipeline -->|import| config
+    reporting -->|import| config
+    reporting -->|import| drift
+    reporting -->|import| extraction
+```
+<!-- /archagent:graph -->
+
 | Document | What it holds |
 |---|---|
 | `constitution.md` | how this repo works; the layering and the deterministic-code rule |

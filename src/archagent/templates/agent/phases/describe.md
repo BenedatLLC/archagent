@@ -46,7 +46,12 @@ the user first, and never overwrite their existing content.
    - JS/TS: modules, imports, React component boundaries.
 3. **Per subsystem**, write `architecture/subsystems/<name>.md` across the six dimensions: process
    topology & components · key abstractions/patterns · state & tiering · lifecycles (Mermaid
-   `stateDiagram` + caption) · key flows (Mermaid `sequenceDiagram` + caption) · invariants. Cite real
+   `stateDiagram` + caption) · key flows (Mermaid `sequenceDiagram` + caption) · invariants. **A caption
+   states what to notice, not what the diagram is.** "Figure 2: the request flow" tells the reader nothing
+   they can't see; "notice that validation happens after the cache write, so a rejected request can still
+   populate the cache" is why the diagram is there. A diagram that only restates the prose beside it should
+   be cut. Likewise, **ground every abstraction in a concrete instance the first time you name it** — a
+   term introduced and defined three paragraphs later costs the reader the whole intervening passage. Cite real
    files. Record provenance (doc vs code) and mark anything unverified. Fill the doc's metadata lines —
    `**Covers:**`, `**Connects:**` (subsystems this one connects to, each typed by connector kind — `import`
    / `sync-call` / `async-event` / `shared-data` / `pipe`), and where they apply `**Service:**` (deployment
@@ -107,12 +112,17 @@ the user first, and never overwrite their existing content.
    always show `layer-skip`, and flat peer capabilities under one orchestrator show skips whenever the
    orchestrator calls a capability directly — both are correct. Consider modelling flat peer subsystems as a
    single `domain` tier rather than forcing a strict `ui → app → domain → infra` ladder.
-8. **Index + log.** Refresh `architecture/index.md` and append a line to `architecture/log.md`:
+8. **Index + log.** Refresh `architecture/index.md` and append a line to `architecture/log.md`. The index
+   is where a newcomer lands, so it must orient before it catalogs — open with what the system *is*, what
+   to read first, and how ADRs relate to invariants (an ADR is prose explaining *why* and binds nobody; an
+   invariant row is a mechanical rule `check` enforces). Configuration notes go at the bottom, not the top.
    - (a) List each subsystem with a one-line purpose.
    - (b) **Add or refresh a single Mermaid `flowchart` at the top** — one node per subsystem, one edge per
      declared `**Connects:**` line labeled by connector kind. This is mechanical given the metadata gathered
      in step 3; `archagent graph --write` generates it for you from the docs (keep it between the
-     `<!-- archagent:graph -->` markers so re-runs replace it in place).
+     `<!-- archagent:graph -->` markers so re-runs replace it in place). **Do not skip this** — it is the
+     only picture of the whole system, and an artifact without it makes the reader reassemble the map from
+     eight separate documents.
    - (c) List the ADRs under `decisions/`.
    - (d) **State current coverage** (e.g. "N of M packages documented") so partial progress is visible in
      the artifact itself. Run `archagent status` for the count.

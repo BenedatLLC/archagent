@@ -1,6 +1,13 @@
 # Architecture Index
 
-Catalog of the architecture docs. Update this whenever you add or rename a doc.
+_Open with two or three sentences on what this system **is** and what it does — a reader who has never
+seen the repo lands here first, and a catalog answers no question they are asking yet. Then say what to
+read first and in what order. Keep configuration notes at the bottom of this file._
+
+_Say once, here, how the two kinds of rule relate: an **ADR** in `decisions/` is prose recording *why* the
+structure is as it is and binds nobody; a row in `invariants.md` is a **mechanical** rule with a checker
+behind it, enforced by `archagent check`. Some ADR conclusions are backed by an invariant; most are not,
+because most are not expressible as a rule._
 
 ## System map
 <!-- archagent:graph -->

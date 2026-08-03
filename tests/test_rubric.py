@@ -15,6 +15,7 @@ from rubric import (
     check_covers_resolve,
     check_coverage,
     check_drift,
+    check_orientation,
     check_required_documents,
     check_specificity,
     check_update_captured,
@@ -107,6 +108,45 @@ def test_a_real_artifact_makes_falsifiable_claims(tmp_path):
 
 
 # --- ADL conformance ------------------------------------------------------------------------
+
+# --- orientation ------------------------------------------------------------------------------------
+
+def test_an_index_that_is_only_a_catalog_scores_badly_on_orientation(tmp_path):
+    """`describe` step 8(b) mandates the system map and the shipped template pre-places its markers.
+    archagent's own artifact had neither map nor entry prose, and every check passed — nothing looked."""
+    root = _repo(tmp_path, {**SRC, **CORE})
+    assert check_orientation(root, "architecture").score == 0.0
+
+
+def test_an_index_that_orients_before_it_catalogs_passes(tmp_path):
+    root = _repo(tmp_path, {**SRC, **CORE})
+    (root / "architecture/index.md").write_text(
+        "# Index\n\nThis is a widget service. It accepts orders and settles them nightly.\n"
+        "Read `constitution.md` first, then `subsystems/alpha.md`.\n"
+        "An ADR records why; an invariant row is enforced by `check`.\n\n"
+        "```mermaid\nflowchart LR\n  a --> b\n```\n\n| Document | What |\n|---|---|\n| x | y |\n")
+    assert check_orientation(root, "architecture").score == 1.0
+
+
+def test_prose_after_the_catalog_does_not_count_as_orientation(tmp_path):
+    """A reader meets the table first, so notes below it arrive too late to orient anyone."""
+    root = _repo(tmp_path, {**SRC, **CORE})
+    (root / "architecture/index.md").write_text(
+        "# Index\n\n```mermaid\nflowchart LR\n  a --> b\n```\n\n| Document | What |\n|---|---|\n| x | y |\n"
+        "\nThis is a widget service.\nIt accepts orders.\nIt settles them nightly.\n")
+    c = check_orientation(root, "architecture")
+    assert c.score == 0.5 and "prose before the catalog" in c.detail
+
+
+def test_diagram_source_is_not_counted_as_entry_prose(tmp_path):
+    """Otherwise one flowchart above the table satisfies both halves at once, and the map alone tells a
+    reader what connects to what but never what the system is for."""
+    root = _repo(tmp_path, {**SRC, **CORE})
+    (root / "architecture/index.md").write_text(
+        "# Index\n\n```mermaid\nflowchart LR\n  a --> b\n  b --> c\n  c --> d\n```\n\n"
+        "| Document | What |\n|---|---|\n| x | y |\n")
+    assert check_orientation(root, "architecture").score == 0.5
+
 
 def test_a_missing_artifact_fails_the_gate(tmp_path):
     root = _repo(tmp_path, SRC)

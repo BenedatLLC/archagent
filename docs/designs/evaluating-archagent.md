@@ -88,6 +88,37 @@ because one session writing its own guidance's output and then grading it measur
 both cases a working-looking implementation was available and would have produced numbers worth less than
 nothing.
 
+**Update (2026-08-02): the first judged review arrived, and the rubric could not read it.** Details in
+`evaluations/selfeval/archagent/CALIBRATION.md`; three findings belong in this design.
+
+*A field parser is part of the instrument.* `parse_brief` read each field to end-of-line. The reviewer put
+a summary after `why:` and the claim-by-claim evidence beneath it, so the citation rule saw a bare sentence
+and discarded five of six scores as unevidenced — rejecting the most thoroughly cited review received *for
+having no citations*, and reporting the surviving sixth as the artifact's score. Add to the silent-failure
+list below.
+
+*The citation rule was checking form, not truth* (§9). "A `file:line` is present" is satisfied exactly as
+well by an invented one, and four of the review's citations pointed at nothing: a line 1593 in a 248-line
+file, an ADR filename that has never existed. Citations are now resolved against the tree. This does not
+catch a citation that resolves but does not support its claim, and nothing mechanical will.
+
+*The strongest result is about which criteria are safe to judge.* The four criteria answerable from the
+artifact text scored 3–4 with no fabricated citations. The two requiring the code to be opened — `accuracy`
+and `completeness` — are the two that were fabricated, and the two lowest scores. §11 concluded that a
+verdict reached from a finding's summary is not a verdict; the same holds one level up. **Criteria that
+require leaving the artifact need either a reviewer who demonstrably left it, or a mechanical substitute.**
+`check_orientation` is the first such substitute: `describe` step 8(b) has always mandated a system map,
+the shipped `index.md` pre-places its markers, and archagent's own artifact had neither — with every
+deterministic check passing, because nothing looked. A mandated step with no verification is a step that
+silently stops happening, which is the §13.3 gaming argument arriving by accident rather than by intent.
+
+The qualitative findings that survived independent of the fabricated evidence are filed as issues
+[#4](https://github.com/BenedatLLC/archagent/issues/4) (decorative diagram captions),
+[#5](https://github.com/BenedatLLC/archagent/issues/5) (abstractions named before they are grounded) and
+[#6](https://github.com/BenedatLLC/archagent/issues/6) (invariants forbidding single edges rather than
+classes of edge). The generation prompts were corrected for all three so future artifacts do not inherit
+them; the existing documents were not.
+
 **A pattern worth recording, because it recurred five times.** Every serious defect found while building
 this was a *silent* failure — a condition that rendered as a plausible clean result rather than an error:
 a timed-out history walk read as a repository with no commits; an outcome walk read as a year with no
@@ -409,9 +440,18 @@ score. The judged half covers what matters most and cannot be automated.
   was truncated.
 - For the update run: what fraction of files changed between `rev1` and `rev2` fall inside a subsystem
   whose document was also updated.
+- **Orientation:** the index carries a system map and prose before its catalog. Both are already mandated
+  by the `describe` prompt, which is exactly why this check exists — a requirement nobody verifies stops
+  happening quietly (§1a).
+- Every command is invoked through the checkout being scored, not through `PATH`. A global install
+  shadowing the venv once failed the `tools.clean` gate with a missing subcommand and reported it as a
+  defect in the artifact.
 
-**Judged criteria** (scored 1–5 by a subagent against anchored descriptors, each score requiring a cited
-`file:line` as evidence):
+**Judged criteria** (scored 1–5 by a subagent against anchored descriptors, each score requiring a
+`file:line` citation that **resolves** — the path must exist and the line must be inside it. A well-formed
+citation is not a true one, and fabricated citations are the specific failure mode: an artifact review is
+mostly unfalsifiable prose. A criterion whose citations all fail to resolve is discarded like an uncited
+one; an ambiguous bare basename resolves if any candidate supports it, since vagueness is not fabrication):
 
 - *Accuracy* — does the document describe the system that is actually there? Spot-check claims against code.
 - *Completeness* — are the major subsystems present, and is anything significant missing?
