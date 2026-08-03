@@ -35,9 +35,9 @@ cases forced this, both found on a Go-majority repository: a wildcard **Covers:*
 nothing because Go is not analysed. Saying "this names code that no longer exists" about a file sitting
 in the tree is worse than saying nothing.
 
-(Written without a sample filename on purpose — an illustrative `pkg/thing.go` in prose is
-indistinguishable from a real reference, and this check flagged exactly that when the paragraph first
-used one.)
+(Written without a sample filename on purpose. A made-up path in backticks is indistinguishable from a
+real citation, so this check flags it — twice, while this paragraph was being written, including once in
+the sentence explaining the problem.)
 
 **Every git-reading path takes `until`.** Three of them needed it and only two were obvious: the miner, the
 staleness comparison, and — the one that was missed — the commit-wording profile, which would otherwise
