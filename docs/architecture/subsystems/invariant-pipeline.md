@@ -21,6 +21,43 @@ A four-stage pipeline, one module per stage:
 | `generate.py` | emit `.archagent/generated/` configs for import-linter, dependency-cruiser, ast-grep |
 | `check.py` | run each checker, map results back to invariant IDs, decide pass/warn/fail |
 
+## One rule, end to end
+
+Everything below is easier to read against a real example. This is BND-001, the first row of this repo's
+own `invariants.md`, at each stage of the pipeline.
+
+**1. What a person writes** — one row in the table, and nothing else:
+
+| ID | Type | Tier | Applies-to | Rule | Severity | Why | Status |
+|----|------|------|-----------|------|----------|-----|--------|
+| BND-001 | BOUNDARY | structural | python | `forbid archagent.evaluate -> archagent.cli` | error | [0001](../decisions/0001-cli-is-the-only-output-layer.md) | active |
+
+**2. What `rules.py` makes of the `Rule` cell.** `forbid a -> b` is the whole BOUNDARY grammar: a source
+module, an arrow, one or more forbidden targets. It becomes a typed object naming `archagent.evaluate` as
+the source and `archagent.cli` as forbidden.
+
+**3. What `generate.py` emits** into `.archagent/generated/.importlinter` — an import-linter contract,
+named after the ID so the result can be traced back:
+
+```ini
+[importlinter:contract:bnd-001]
+name = BND-001
+type = forbidden
+allow_indirect_imports = True
+source_modules =
+    archagent.evaluate
+forbidden_modules =
+    archagent.cli
+```
+
+**4. What `check.py` does with the result.** import-linter reports a broken contract by *its* name;
+`check.py` maps that back to `BND-001`, applies the row's `Severity` of `error`, and fails the run. The
+`Why` column is what turns the failure into something actionable — the reader is sent to ADR 0001, which
+explains that `cli` is the only output layer, rather than being told an import is forbidden for no
+visible reason.
+
+Adding `from .cli import console` to `evaluate.py` to print a progress bar is the commit this rejects.
+
 ## Key abstractions
 
 **Compile, do not reimplement.** archagent never analyses imports itself; it writes an import-linter

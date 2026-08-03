@@ -38,7 +38,29 @@ Reads the git object store and the working tree. Writes nothing.
 
 ## Lifecycles / key flows
 
-No lifecycle. The flow is a fan-out: parse the artifact's metadata lines, glob the code they claim, compare.
+No lifecycle — `find_drift` is one pass with no states. The flow is a fan-out from a single parse:
+
+```mermaid
+flowchart TB
+    D["artifact *.md"] --> M["parse metadata lines<br/>Covers, Connects, Config, Services"]
+    S["source files"] --> G["resolve globs and backtick refs"]
+    M --> G
+    G --> A["absence<br/>declared, not in the tree"]
+    G --> V["divergence<br/>in the tree, claimed by no Covers"]
+    G --> T["staleness<br/>covered file committed after its doc"]
+    M --> C{"was anything<br/>declared?"}
+    C -->|no| Q["check does not run"]
+    C -->|yes| X["scan the code and<br/>difference the two sets"]
+    X --> R["config keys, services,<br/>routes, connector kinds"]
+```
+
+_Every result is a set difference in one of two directions — declared-but-absent, or present-but-undeclared
+— which is why `drift` needs no model and cannot be argued with. **The branch on the right is the one to
+notice:** the config, services and route checks only run when the artifact declares something to compare
+against (`drift.py:157`, `:166`). Say nothing about configuration and the configuration check reports
+nothing, which reads identically to agreement. A silent drift report can mean the documents are accurate
+or that they are too empty to contradict, and nothing in the output distinguishes those — which is exactly
+why the evaluation rubric pairs a drift score with a specificity score rather than quoting drift alone._
 
 ## Invariants
 

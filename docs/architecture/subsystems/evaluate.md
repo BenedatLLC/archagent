@@ -7,7 +7,32 @@
 ## Purpose
 
 Asks whether the architecture is *healthy*, as distinct from whether it matches the docs. Produces
-candidate signals grouped A–F, which a person or an agent then judges.
+**candidate signals** — a signal is a measurement that *might* indicate a problem, never a verdict — which
+a person or an agent then judges. `--group` filters them.
+
+## The six groups
+
+The letters appear throughout this document, the CLI and the report, so they are worth having up front.
+Each is a family of signals sharing an evidence source.
+
+| Group | Evidence it reads | Signals |
+|---|---|---|
+| A | declared data ownership | `duplicated-source-of-truth`, `shared-persistency`, `service-intimacy`, `shared-library` |
+| B | the import/connector graph and git co-change | `layer-inversion`, `layer-skip`, `unstable-dependency`, `unstable-interface`, `implicit-coupling`, `extraneous-adjacent-connector` |
+| C | subsystem shape | `god-component`, `cycle-*`, `distributed-monolith` |
+| D | deployment and observability scans | `hardcoded-endpoint`, `no-request-tracing`, `trace-chain-gap` |
+| E | git history per file | `change-prone-file` |
+| F | duplicated decisions in source | `scattered-source-of-truth`, `enum-value-escape` |
+
+A, C and D are computed from the artifact and the code alone. E and F need git history, and B is mixed —
+its layering signals are static while `implicit-coupling` and `unstable-interface` come from co-change. So
+`--no-history` reports `B/E/F — git history: skipped` (`evaluate.py:366`) rather than naming two groups,
+and every `--until` concern below is about those same three.
+
+**Churn** means one thing throughout: the number of commits touching a file in the analysed window.
+*Fix-churn* is the subset of those commits the recogniser labelled as bug fixes. Both are compared as
+percentiles within the repository, never as absolute counts — a hundred commits is a lot in one project
+and a quiet month in another.
 
 ## Topology and components
 

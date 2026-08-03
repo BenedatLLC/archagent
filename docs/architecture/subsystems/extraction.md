@@ -20,6 +20,34 @@ returns data; none of them judges.
 | `invscan.py` | invariants already *stated* in prose or asserts, as candidates |
 | `mdutil.py` | markdown helpers (fence stripping, empty-value detection) |
 
+## What a scanner actually returns
+
+"Extracts environment keys" describes a shape, not a result. Three scanners, each shown as the code it
+reads and the fact it hands back:
+
+**`configscan`** — given `os.getenv("DATABASE_URL", "sqlite://")` anywhere in the source set,
+`read_config_keys` returns the bare set `{"DATABASE_URL", ...}`. Deliberately a set of names and not a
+map to locations: its only consumer compares it against `declared_config_keys`, the keys named under
+`**Config:**` in `deployment.md`. A key read but never declared is drift; a key declared but never read is
+dead configuration.
+
+**`webapi`** — given `@app.get("/orders/{order_id}")`, `extract_routes` returns
+`Route(method="GET", path="orders/{}")`, keeping the original string in `raw` and the file in `source`.
+The normalisation is the interesting part: parameter names are erased and surrounding slashes stripped
+*because* the comparison is against an OpenAPI spec or another framework's spelling of the same route,
+and `/orders/{id}` and `/orders/{order_id}` are the same endpoint. Only `method` and `path` take part in
+equality (`webapi.py:38-44`).
+
+**`invscan`** — given `assert user.is_authenticated, "only signed-in users may post"`, it returns a
+`Candidate` carrying that message, `path:line`, `kind="marker"`, `confidence="high"`, and a coarse guess
+at which DSL tier it belongs in. In code it matches only explicit `INVARIANT`/`@invariant` markers and
+assertion messages; the noisier `kind="modal"` pass — "must never", "only X may" — runs over documents
+only, because modal words in code are too common to be worth surfacing. Even so these are *candidates* a
+person classifies and verifies, never facts.
+
+The pattern holds for all eight: a file set in, typed facts out, and the value is in what the fact can be
+compared against rather than in the fact itself.
+
 ## Key abstractions
 
 **Regex and AST, never execution.** "Static" here means no import of the target code, so scanning a
@@ -34,8 +62,9 @@ classifies and verifies before promoting.
 
 ## State and tiering
 
-Read-only over the working tree. `mdutil` and `configscan` are leaves; `invscan` and `connscan` import
-`drift` for its file-globbing plumbing.
+Read-only over the working tree. Most of these are leaves; `invscan.py:24` imports `_source_files` from
+`drift`, and that single edge is what closes the `drift ↔ extraction` cycle recorded in ADR 0003.
+`connscan` imports `configscan` alone and is not part of it.
 
 ## Lifecycles / key flows
 

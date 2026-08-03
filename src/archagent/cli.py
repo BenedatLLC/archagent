@@ -275,7 +275,9 @@ def drift(
             raise typer.Exit(code=1)
         return
 
-    console.print("[bold]Architecture drift[/] — architecture/ vs code\n")
+    # the configured directory, not the default name: this header claimed `architecture/` on a repo whose
+    # artifact is at `docs/architecture/`, naming a path the reader could not find
+    console.print(f"[bold]Architecture drift[/] — {config.arch_dir}/ vs code\n")
     if result.dangling:
         console.print(f"[red]Dangling references ({len(result.dangling)})[/] — a doc names code that no longer exists:")
         for doc, ref in result.dangling:
