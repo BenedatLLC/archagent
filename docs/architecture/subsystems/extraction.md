@@ -53,6 +53,11 @@ compared against rather than in the fact itself.
 **Regex and AST, never execution.** "Static" here means no import of the target code, so scanning a
 repository can never run it.
 
+**A wrapped declaration is still one declaration.** `configscan`'s `**Config:**` pattern runs to the next
+blank line or `**Field:**`, not to the end of its first line. A real manifest is a long list of keys and
+whoever writes it wraps it; reading only the first line silently honours part of the declaration and
+reports the rest as undeclared — a confident, wrong finding against a document that does declare them.
+
 **Conservative by design.** `connscan` drops a call whose target it cannot resolve rather than guessing;
 `datamap` requires a real table definition. A scanner that guesses produces findings nobody can act on.
 

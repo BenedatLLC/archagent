@@ -11,13 +11,15 @@ returns data; `cli.py` decides how it is rendered — a Rich table for a person,
 
 ## Topology and components
 
-One [Typer](https://typer.tiangolo.com) application with fourteen commands, each a thin adapter: parse
+One [Typer](https://typer.tiangolo.com) application with fifteen commands, each a thin adapter: parse
 options, call one function, render its result. `__init__.py` exposes `main` as the `archagent` entry point
 and is the only importer of this module.
 
 The commands group by lifecycle stage: `init`/`upgrade` (scaffold), `gen`/`check` (enforce),
-`drift`/`modules`/`status`/`graph`/`lint-docs` (diff and describe), `evaluate`/`investigate`/
-`history-profile` (judge), `install-hook` (automate).
+`drift`/`modules`/`status`/`graph`/`lint-docs` (diff and describe), `scan-invariants` (mine),
+`evaluate`/`investigate`/`history-profile` (judge), `install-hook` (automate), `help` (orient).
+Fifteen in seven groups, and the count is worth stating because it drifted: this document said fourteen
+until `investigate` and `history-profile` were added, and nothing checks a number written in prose.
 
 ## Key abstractions
 

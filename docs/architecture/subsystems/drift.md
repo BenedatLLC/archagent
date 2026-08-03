@@ -28,6 +28,13 @@ these.
 (ADR 0002). Its timeout is a parameter because a single-fact query and a full-history walk have different
 budgets — 30s suits the former, and 30s silently truncated the latter on a large repository.
 
+**A reference that cannot be verified is not a reference that is wrong.** `_resolve_ref` reports a doc
+reference as dangling only after checking the filesystem, not just the configured-language file set. Two
+cases forced this, both found on a Go-majority repository: a `**Covers:** `svc/*.go`` glob fails a literal
+`exists()` and was reported as missing code, and an accurate `main.go` citation resolved to nothing
+because Go is not analysed. Saying "this names code that no longer exists" about a file sitting in the
+tree is worse than saying nothing.
+
 **Every git-reading path takes `until`.** Three of them needed it and only two were obvious: the miner, the
 staleness comparison, and — the one that was missed — the commit-wording profile, which would otherwise
 learn from commits after a cutoff and use them to label commits before it.
