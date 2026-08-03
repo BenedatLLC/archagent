@@ -24,10 +24,15 @@ Each is a family of signals sharing an evidence source.
 | E | git history per file | `change-prone-file` |
 | F | duplicated decisions in source | `scattered-source-of-truth`, `enum-value-escape` |
 
-A, C and D are computed from the artifact and the code alone. E and F need git history, and B is mixed —
-its layering signals are static while `implicit-coupling` and `unstable-interface` come from co-change. So
-`--no-history` reports `B/E/F — git history: skipped` (`evaluate.py:366`) rather than naming two groups,
-and every `--until` concern below is about those same three.
+A, C and D are computed from the artifact and the code alone. E needs git history. **B and F are each
+half-and-half**, which is worth stating precisely because getting it wrong produced a bug: B's layering
+signals are static while `implicit-coupling` and `unstable-interface` come from co-change, and F's
+`scattered-source-of-truth` needs history to rank duplications while `enum-value-escape` is a pure code
+scan that runs with no git at all (`evaluate.py:305-307`).
+
+That last one is easy to get wrong. The coverage report used to name `B/E/F — git history` as inactive
+under `--no-history`, so a run could report an enum escape and, in the same output, say the family it
+came from had been skipped. Corrected: the label now names B, E and *F's history-ranked half* only.
 
 **Churn** means one thing throughout: the number of commits touching a file in the analysed window.
 *Fix-churn* is the subset of those commits the recogniser labelled as bug fixes. Both are compared as

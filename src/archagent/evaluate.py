@@ -362,13 +362,19 @@ def _coverage(model: _Model, result: "EvaluationResult", history_requested: bool
     if not model.connectors:
         inactive.append(("B/C — connector topology",
                          "no **Connects:** declared (some service edges are still inferred from code)"))
+    # Not all of F: `enum-value-escape` is a pure code scan and runs with no git at all (see the call
+    # site above). Naming the whole family inactive contradicted the run's own findings — a --no-history
+    # run could report an enum escape and, in the same output, say F had been skipped. A coverage report
+    # that disagrees with the findings list is worse than none, since its entire job is to stop "no
+    # findings" reading as "clean".
+    _HIST = "B/E and F's scattered-source-of-truth half — git history"
     if not history_requested:
-        inactive.append(("B/E/F — git history", "skipped (--no-history)"))
+        inactive.append((_HIST, "skipped (--no-history); the enum-escape check still ran"))
     elif not result.git_available:
-        inactive.append(("B/E/F — git history", "git not available"))
+        inactive.append((_HIST, "git not available; the enum-escape check still ran"))
     else:
         if getattr(result, "mining_failed", False):
-            inactive.append(("B/E/F — git history", "the history walk failed; see the caution above"))
+            inactive.append((_HIST, "the history walk failed; see the caution above"))
         elif result.history_analyzed == 0:
             inactive.append(("B — subsystem co-change",
                              "no commits mapped to subsystems (declare **Covers:** so files map to "

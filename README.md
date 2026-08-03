@@ -295,16 +295,19 @@ CLI:
   staleness comparison to a past revision (same semantics as `evaluate`, below).
 - `archagent evaluate` — judge the architecture for **system-level** smells (candidates for
   `/archagent-evaluate`): **data & source-of-truth** (shared persistency, duplicated ownership, cross-service
-  data intimacy, shared libraries — from a static datastore→service map via `**Service:**`), God Components,
+  data intimacy, shared libraries — from a static datastore→service map via `**Service:**`; silent on a
+  single-service repo, where none of these can apply), God Components,
   circular subsystem/service dependencies (shape + severity), unstable dependencies (`I = Ce/(Ca+Ce)`,
   `DoUD ≥ 0.30`), leaky abstractions (layer inversion/skip via `**Tier:**`), **distributed monolith** +
   **extraneous adjacent connectors** (from typed `**Connects:**` edges), hard-coded service endpoints, and
-  **cross-boundary observability** (no request tracing across services); plus **git-history** signals —
+  **cross-boundary observability** (no request tracing at all, and gaps in an otherwise-traced chain);
+  plus **git-history** signals —
   **shotgun surgery** / implicit coupling and **unstable interface** (subsystem co-change),
   **change-prone complex files** (per-file churn × indentation complexity, both as within-repo
   percentiles), and **scattered single source of truth** — either inferred (one decision's value set
   branched on across several files, likely owner inferred, ranked by churn) or **declared** (an enum
-  bypassed by comparisons against its raw member strings; the one signal here that needs no git).
+  bypassed by comparisons against its raw member strings; the one signal here that needs no git, so it
+  still runs under `--no-history`).
   `--json`, `--group A|B|C|D|E|F`, `--min-severity`, `--no-history`, `--since`, `--until`, `--as-of`,
   `--exit-code`. `--until` / `--as-of <tag>` bound the history so a run can be reproduced *as of* a past
   revision; they do not check anything out, and the run warns if your tree is newer than the window.

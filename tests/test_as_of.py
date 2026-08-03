@@ -253,3 +253,35 @@ def test_a_wrapped_config_declaration_stops_at_the_blank_line(tmp_path):
     from archagent.configscan import declared_config_keys
     doc = "**Config:** `ALPHA`\n\nNOT_A_KEY prose here.\n"
     assert declared_config_keys(tmp_path, doc) == {"ALPHA"}
+
+
+def test_no_history_does_not_claim_a_family_it_still_reported(tmp_path):
+    """The coverage report exists so "no findings" is never read as "clean". It must not do the reverse
+    either: a --no-history run reports enum escapes (a pure code scan) while calling family F skipped,
+    so the output contradicted its own findings list."""
+    import json
+    import subprocess
+    import sys
+    from pathlib import Path
+    src = tmp_path / "src/pkg"
+    src.mkdir(parents=True)
+    (src / "e.py").write_text('from enum import Enum\n\n\nclass Status(Enum):\n'
+                              '    ACTIVE = "active"\n    PAUSED = "paused"\n    DONE = "done"\n')
+    for n in "abcd":
+        (src / f"{n}.py").write_text('def f(s):\n    if s == "active": return 1\n'
+                                     '    if s == "paused": return 2\n    if s == "done": return 3\n')
+    (tmp_path / "archagent.toml").write_text(
+        '[project]\nlanguages = ["python"]\n\n[python]\nsource_paths = ["src"]\n')
+    arch = tmp_path / "architecture/subsystems"
+    arch.mkdir(parents=True)
+    for name, body in (("constitution.md", "# C\n"), ("index.md", "# I\n"), ("invariants.md", "# Inv\n")):
+        (tmp_path / "architecture" / name).write_text(body)
+    (arch / "a.md").write_text("# A\n\n**Covers:** `src/**/*.py`\n**Tier:** domain\n")
+    exe = Path(sys.executable).with_name("archagent")
+    out = subprocess.run([str(exe), "evaluate", "--project", str(tmp_path), "--no-history", "--json"],
+                         capture_output=True, text=True)
+    data = json.loads(out.stdout)
+    signs = {f["sign"] for f in data["findings"]}
+    assert "enum-value-escape" in signs, "the pure code scan must run without git"
+    for fam, _reason in ((i["family"], i["reason"]) for i in data.get("inactive", [])):
+        assert fam != "B/E/F — git history", "family F was reported inactive while F produced a finding"
