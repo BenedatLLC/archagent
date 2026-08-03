@@ -336,7 +336,7 @@ the evidence argues for:
   correctly threw away a "5/5, the writing is clear and professional". `0` means unsure and is excluded
   rather than counted as failure. Every stored review carries its own uncalibrated caveat, so a number
   cannot be quoted apart from it.
-  **First real review (2026-08-02) broke the instrument three ways** — `evaluations/selfeval/archagent/CALIBRATION.md`.
+  **First real review (2026-08-02) broke the instrument three ways** — `docs/evaluations/selfeval/archagent/CALIBRATION.md`.
   Fields were read to end-of-line, so a review whose evidence sat indented under `why:` lost five of six
   scores to the citation rule and reported the sixth as the artifact's score. The citation rule checked
   that a `file:line` was *present*, which a fabricated one satisfies equally — four of that review's
@@ -379,7 +379,7 @@ is a later consideration. Items below are in build order.
 **Where this stands (2026-08-01).** L1 has evidence that does not depend on our judgement: across four
 pre-registered runs, 3 of 4 adequately-powered repositories show that flagged files go on to accumulate
 significantly more defect-fixing commits than churn-matched controls, in two languages and three
-architectures (`evaluations/defect-study/RESULTS.md`). Magnitudes are not comparable across repositories
+architectures (`docs/evaluations/defect-study/RESULTS.md`). Magnitudes are not comparable across repositories
 and small repositories remain unmeasured. L2 has no evidence at all. Four pieces are built — the deterministic rubric (works today, no agent
 needed), the spot-check worksheet and label store, the objective half of the blind comparison, and the
 agreement statistics — and every one of them waits on the same thing: **the label store is empty**. Labels
@@ -428,7 +428,7 @@ self-preference).
   just misses. The more informative comparison is the specificity check — home-assistant's flagged files
   take 2.05× the *defect fixes* but only 1.28× *all* commits, so churn is absorbed and something else
   remains; angular's take ~1.4× of both, the pattern of a set that is merely busier. Full record:
-  `evaluations/defect-study/RESULTS.md`.
+  `docs/evaluations/defect-study/RESULTS.md`.
   **Run 3** (nova) was pre-registered before running — the prediction and what each outcome would license
   are in commit `5d890cc` — and it killed the explanation run 2 left open. Nova is a deeply coupled Python
   service, nothing like home-assistant's plugin registry, and it passes with the same signature:
@@ -448,7 +448,7 @@ self-preference).
   RR 1.83 [1.51, 2.21]. Magnitudes are not comparable across repositories: the ratio tracks how
   concentrated defect fixes are, so pass/fail stands but the numbers are not effect sizes for the check in
   general. Full record, newest first, with corrections marked in place:
-  `evaluations/defect-study/RESULTS.md`.
+  `docs/evaluations/defect-study/RESULTS.md`.
 - [x] **Prettier** — the clone validation repaired it and it ran: RR 0.93 [0.39, 3.21]. Clears the events
   bar (134) but not the file bar (22 flagged), so recorded, not counted.
 - [x] **Angular explained, and an earlier claim corrected.** Its flagged set is *not* unusual — central

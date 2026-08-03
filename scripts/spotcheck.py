@@ -19,14 +19,16 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tests"))
 sys.path.insert(0, str(ROOT / "src"))
 
+from evalhome import eval_dir   # noqa: E402
+
 from spotcheck import (                                    # noqa: E402
     Label, LabelStore, finding_key, parse_worksheet, precision_by_sign, render_worksheet,
     stratified_sample, values_of,
 )
 
 CORPUS = ROOT / "tests" / "corpus"
-LABELS = ROOT / "evaluations" / "labels"
-SHEETS = ROOT / "evaluations" / "spotcheck"
+LABELS = eval_dir("labels")
+SHEETS = eval_dir("spotcheck")
 JUDGED = ("scattered-source-of-truth", "enum-value-escape", "change-prone-file")
 
 

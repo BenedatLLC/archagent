@@ -24,11 +24,13 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tests"))
 sys.path.insert(0, str(ROOT / "src"))
 
+from evalhome import eval_dir   # noqa: E402
+
 from blindcomp import ARMS, Blinded, blind, build_input, load_truth, score_objective, unblind  # noqa: E402
 
 CORPUS = ROOT / "tests" / "corpus"
 TRUTH = ROOT / "tests" / "blindcomp_truth.toml"
-OUT = ROOT / "evaluations" / "blind-comparison"
+OUT = eval_dir("blind-comparison")
 
 BRIEFS = {
     "A": ("Follow the archagent `evaluate` skill exactly as shipped "

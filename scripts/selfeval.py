@@ -28,10 +28,12 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tests"))
 sys.path.insert(0, str(ROOT / "src"))
 
+from evalhome import eval_dir   # noqa: E402
+
 from rubric import check_update_captured, score_deterministic   # noqa: E402
 from rubric_judged import render_brief, review_from, save as save_review   # noqa: E402
 
-RESULTS = ROOT / "evaluations" / "selfeval"
+RESULTS = eval_dir("selfeval")
 
 
 def _source_files(root: Path) -> set[str]:

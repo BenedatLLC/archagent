@@ -20,6 +20,8 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tests"))
 sys.path.insert(0, str(ROOT / "src"))
 
+from evalhome import eval_dir   # noqa: E402
+
 import corpus                                              # noqa: E402
 from defect_study import (                                 # noqa: E402
     analyse_repo, flag_at_cutoff, measure_outcomes, outcome_log, pool_across_repos, read_flagged,
@@ -27,7 +29,7 @@ from defect_study import (                                 # noqa: E402
 )
 
 MANIFEST = ROOT / "tests" / "heldout_manifest.toml"
-RESULTS = ROOT / "evaluations" / "defect-study"
+RESULTS = eval_dir("defect-study")
 
 
 def load():

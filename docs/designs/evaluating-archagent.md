@@ -59,7 +59,7 @@ defect study ran four times, each pre-registered before running, and three of fo
 repositories show that files flagged as change-prone-and-complex go on to accumulate significantly more
 defect-fixing commits than churn-matched controls — across two languages and three architectures. The
 fourth shows the same effect at reduced magnitude. Full record with every deviation:
-`evaluations/defect-study/RESULTS.md`.
+`docs/evaluations/defect-study/RESULTS.md`.
 
 Two limits on how that may be quoted. Magnitudes are **not comparable across repositories** — the rate
 ratio tracks how concentrated defect fixes are, partly mechanically — so pass/fail stands but the numbers
@@ -89,7 +89,7 @@ both cases a working-looking implementation was available and would have produce
 nothing.
 
 **Update (2026-08-02): the first judged review arrived, and the rubric could not read it.** Details in
-`evaluations/selfeval/archagent/CALIBRATION.md`; three findings belong in this design.
+`docs/evaluations/selfeval/archagent/CALIBRATION.md`; three findings belong in this design.
 
 *A field parser is part of the instrument.* `parse_brief` read each field to end-of-line. The reviewer put
 a summary after `why:` and the claim-by-claim evidence beneath it, so the citation rule saw a bare sentence
@@ -372,7 +372,7 @@ history-only numbers are reported but not pooled.
 **Minimum size.** A repository needs enough *scored files* — not merely enough history — for decile
 stratification to have anything to compare. Run 1 found this the hard way: flask has thousands of commits
 and 22 scored files, and every one of its strata fell below the five-control minimum. See
-`evaluations/defect-study/RESULTS.md`.
+`docs/evaluations/defect-study/RESULTS.md`.
 
 **Repositories.** A held-out set of 3–4, disjoint from every repository used for tuning or regression —
 which rules out Django, LiteLLM, opencode, OpenHands, Datasette, vue-core and my-research-assistant, all of
@@ -404,7 +404,7 @@ A command — `scripts/selfeval.py <repo-url> --from <rev1> --to <rev2>` — run
    reflected in the artifact — new subsystems, removed ones, changed dependencies — or did stale content
    survive?
 
-Output is a scorecard (JSON, plus a readable markdown summary) written under `evaluations/<repo>-<date>/`,
+Output is a scorecard (JSON, plus a readable markdown summary) written under `<eval-home>/selfeval/<repo>/`,
 comparable across runs so a change to a prompt can be shown to help or hurt.
 
 **Persist a trace, not only the scorecard.** Alongside the scores, record what actually happened: which
@@ -531,7 +531,7 @@ details decide whether the labels are worth collecting:
   reconstruct it (the cohesion and stop-value cases), include a few — precision alone never notices a
   check that has quietly stopped finding anything.
 
-**The label store is the durable asset.** `evaluations/labels/<repo>.jsonl`, one record per labelled
+**The label store is the durable asset.** `<eval-home>/labels/<repo>.jsonl`, one record per labelled
 finding, keyed by a **revision-independent identity** (sign + owner path + a hash of the value set) so a
 label survives re-runs and tool changes. Each record keeps the verdict, the reason, who reviewed it, the
 date, and the tool's claim *at the time of labelling*. Re-running asks only about items with no label. If
@@ -732,3 +732,31 @@ Written down because they are easy to forget once numbers exist.
 - **Benchmarking against other tools.** Interesting later; it needs a shared task definition we don't have.
 - **Optimising for a paper.** The evidence should be publishable if we want it to be, but no evaluation is
   chosen because it would look good in one.
+
+---
+
+## 17. Where the data lives (2026-08-02)
+
+Evaluation **data** moved to a separate private repository,
+[BenedatLLC/archagent-evaluations](https://github.com/BenedatLLC/archagent-evaluations); the **write-ups**
+stayed in `docs/evaluations/`. The split is by kind, not by size: a number without its reasoning is
+unreadable, and a write-up separated from its evidence is untrustworthy, so each document states its
+conclusions here and cites the data repo by path.
+
+The reason is trajectory rather than present size. At the move the data was 1.0 MB across 55 files, which
+is nothing; but every defect-study run adds a per-repo flagged-file dump (kibana's is 143 KB) and every
+calibration round adds a whole generated artifact (obstudio's is 20 documents). A tool repository that
+accumulates its own measurement history without bound becomes hard to clone and harder to read.
+
+Two properties make this safe rather than merely tidy:
+
+- **The test suite does not read it.** All 451 tests pass with the data repository absent. Only the
+  regression fixtures under `tests/corpus/` and `tests/golden/` (44 KB, 5 files) are load-bearing, and
+  those are inputs to tests rather than outputs of runs.
+- **Scripts resolve their output root** through `scripts/evalhome.py`: `$ARCHAGENT_EVAL_HOME`, else a
+  sibling `../archagent-evaluations/` checkout, else a gitignored `./evaluations/`. A fresh clone with no
+  data repository still runs, and its output cannot land in git by accident.
+
+It is private because it analyses third-party repositories and frames findings as defects — including a
+security-relevant claim about litellm. Publishing that is a decision to take deliberately, not a
+side effect of where a file sits.
