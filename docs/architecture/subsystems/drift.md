@@ -30,10 +30,14 @@ budgets — 30s suits the former, and 30s silently truncated the latter on a lar
 
 **A reference that cannot be verified is not a reference that is wrong.** `_resolve_ref` reports a doc
 reference as dangling only after checking the filesystem, not just the configured-language file set. Two
-cases forced this, both found on a Go-majority repository: a `**Covers:** `svc/*.go`` glob fails a literal
-`exists()` and was reported as missing code, and an accurate `main.go` citation resolved to nothing
-because Go is not analysed. Saying "this names code that no longer exists" about a file sitting in the
-tree is worse than saying nothing.
+cases forced this, both found on a Go-majority repository: a wildcard **Covers:** glob fails a literal
+`exists()` and was reported as missing code, and an accurate citation of a Go entry point resolved to
+nothing because Go is not analysed. Saying "this names code that no longer exists" about a file sitting
+in the tree is worse than saying nothing.
+
+(Written without a sample filename on purpose — an illustrative `pkg/thing.go` in prose is
+indistinguishable from a real reference, and this check flagged exactly that when the paragraph first
+used one.)
 
 **Every git-reading path takes `until`.** Three of them needed it and only two were obvious: the miner, the
 staleness comparison, and — the one that was missed — the commit-wording profile, which would otherwise
