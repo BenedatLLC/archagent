@@ -34,4 +34,8 @@ None. Loaded once per command.
 
 ## Invariants
 
-- BND-003 — `config` imports no other archagent module, in either direction of the layering.
+- BND-003 — `config` must not import `drift`, `evaluate` or `cli`. Names the critical direction and links
+  the ADR, which is what a reader needs at a failure.
+- STR-005 — `config` contains no relative import at all. The stronger form of the same rule: BND-003
+  forbids three named modules, so a module added next year would not be covered, and the property the
+  paragraph above depends on is "imports nothing internal", not "imports none of these three".

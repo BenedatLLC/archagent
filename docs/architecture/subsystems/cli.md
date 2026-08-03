@@ -58,4 +58,7 @@ modes. The git call is the only external process in this path._
 ## Invariants
 
 - STR-001 — `print()` appears only here.
+- STR-002, STR-003 — and so do `typer` and `rich`. These exist because BND-001, BND-002 and STR-001 all
+  enforce ADR 0001 and all three are evaded by a domain module importing the CLI framework directly:
+  planting `import typer` in `evaluate.py` leaves BND-001 passing.
 - BND-001, BND-002 — nothing below imports this module.

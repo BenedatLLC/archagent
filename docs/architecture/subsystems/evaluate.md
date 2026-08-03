@@ -103,4 +103,10 @@ past-bounded measurement._
 ## Invariants
 
 - BND-001 — does not import the CLI.
-- BND-004 — `hotspots` must not import `dupdecide`; the dependency runs the other way.
+- STR-002, STR-003 — and does not reach the terminal by importing `typer` or `rich` directly, which BND-001
+  alone does not prevent.
+- BND-004 — `hotspots` must not import `dupdecide`; the dependency runs the other way. Planting that
+  import to test the rule produced an immediate circular-import crash at startup, which is what the rule
+  is protecting against.
+- STR-006 — `hotspots` imports nothing internal at all, which is the property BND-004 approximates with
+  one edge.

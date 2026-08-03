@@ -65,5 +65,6 @@ why the evaluation rubric pairs a drift score with a specificity score rather th
 ## Invariants
 
 - BND-002 — does not import the CLI.
-- BND-003 — `config` must never import this, keeping the hub dependency one-way.
-- By convention (not mechanically checked): **`git` is invoked only here.**
+- BND-003, STR-005 — `config` must never import this, keeping the hub dependency one-way.
+- STR-004 — **`git` is invoked only here**, and this is now checked rather than left to review. The
+  pattern is the string literal `"git"`, which matches `drift.py:288` and nothing outside this module.
