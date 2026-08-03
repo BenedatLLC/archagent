@@ -102,6 +102,80 @@ def test_a_review_with_nothing_usable_has_no_mean():
     assert r.mean is None
 
 
+# --- multi-line answers -----------------------------------------------------------------------------
+
+def test_a_field_runs_to_the_next_key_not_to_the_end_of_its_line():
+    """The first real review put a one-line summary after `why:` and the claim-by-claim evidence — with
+    every citation in it — on the lines below. A line-scoped read discarded five of its six scores as
+    uncited, and reported the mean of the sixth as if it were the artifact's score."""
+    text = _filled(accuracy=(2, "See the five claims below.",
+                             "Two of five load-carrying claims are stale.\n"
+                             "  Claim 1 - entry point: PASS\n"
+                             "    cite: src/archagent/__init__.py:22\n"
+                             "  Claim 2 - cycle: FAIL\n"
+                             "    cite: docs/architecture/decisions/0003.md:19"))
+    parsed = parse_brief(text)
+    assert parsed["accuracy"]["score"] == 2
+    assert "Claim 2" in parsed["accuracy"]["why"]
+
+
+def test_an_unrecognised_section_does_not_disturb_the_criteria_around_it():
+    """Reviewers add sections the rubric did not ask for. They are not scores, but they must not swallow
+    the next criterion's fields either."""
+    text = _filled(prose=(4, "docs/architecture/index.md:1", "clear"))
+    text += "\n## structural_observations — Organization\n\nNo entry point.\n"
+    assert parse_brief(text)["prose"]["score"] == 4
+    assert "structural_observations" not in parse_brief(text)
+
+
+# --- citations must resolve -------------------------------------------------------------------------
+
+def test_a_citation_to_a_missing_file_does_not_count(tmp_path):
+    """A well-formed citation is not a true one, and fabricated citations are exactly what this rubric
+    exists to catch — the first review cited an ADR filename that has never existed."""
+    (tmp_path / "real.py").write_text("x = 1\n")
+    parsed = parse_brief(_filled(accuracy=(2, "invented.py:4", "contradicted")), root=tmp_path)
+    assert parsed["accuracy"]["score"] is None
+    assert "no such file" in parsed["accuracy"]["discarded"]
+
+
+def test_a_citation_past_the_end_of_the_file_does_not_count(tmp_path):
+    """`check.py line 1593`, in a 248-line file. It reads as diligence and was invented."""
+    (tmp_path / "check.py").write_text("x = 1\n" * 10)
+    parsed = parse_brief(_filled(accuracy=(2, "check.py:1593", "contradicted")), root=tmp_path)
+    assert parsed["accuracy"]["score"] is None
+
+
+def test_one_bad_citation_among_good_ones_is_flagged_not_fatal(tmp_path):
+    """Miscopying one line number should not void a review that is otherwise grounded — but the reader
+    must still be told which citation failed."""
+    (tmp_path / "real.py").write_text("x = 1\n" * 10)
+    parsed = parse_brief(_filled(accuracy=(3, "real.py:4", "and also invented.py:9")), root=tmp_path)
+    assert parsed["accuracy"]["score"] == 3
+    assert any("invented.py" in u for u in parsed["accuracy"]["unresolved"])
+
+
+def test_citations_are_only_pattern_matched_when_no_root_is_given(tmp_path):
+    parsed = parse_brief(_filled(accuracy=(3, "invented.py:9", "contradicted")))
+    assert parsed["accuracy"]["score"] == 3
+
+
+# --- a mean over a fraction of the review is not a score --------------------------------------------
+
+def test_the_caveat_says_when_the_mean_covers_only_part_of_the_review():
+    """2.0 from one surviving criterion and 2.0 from six read identically, and the first is not a
+    judgement of the artifact at all."""
+    r = review_from(_filled(prose=(5, "no citation", "vibes"),
+                            accuracy=(2, "src/a.py:1", "stale")), "demo", "v1", "judge")
+    assert r.coverage == (1, 2)
+    assert "1 of 2" in r.to_dict()["caveat"]
+
+
+def test_the_brief_states_the_rules_a_reviewer_would_otherwise_violate():
+    brief = render_brief("docs/architecture", "archagent")
+    assert "must exist" in brief and "next `score:`" in brief
+
+
 def test_the_brief_names_the_artifact_relative_to_the_repo():
     """The brief is committed and read on another machine, so an absolute path from whoever generated it
     is noise at best and wrong at worst."""

@@ -79,15 +79,23 @@ def do_brief(path: Path, second_run: bool) -> None:
 
 def do_judged(path: Path, review: Path, by: str) -> None:
     root = path.resolve()
-    r = review_from(review.read_text(), root.name, "", by)
+    # root is passed so citations are resolved against the tree, not merely pattern-matched
+    r = review_from(review.read_text(), root.name, "", by, root=root)
     dest = save_review(RESULTS / root.name / "judged.json", r)
+    kept, answered = r.coverage
     print(f"\n{root.name} — judged rubric ({r.judged_by})\n")
     for cid, s in r.scores.items():
         if s.get("score") is None:
             print(f"   —    {cid:24} discarded: {s['discarded']}")
         else:
-            print(f"  {s['score']}/5   {cid:24} {s['why'][:70]}")
-    print(f"\n  mean: {'n/a' if r.mean is None else round(r.mean, 2)}")
+            print(f"  {s['score']}/5   {cid:24} {s['why'].splitlines()[0][:70]}")
+        for bad in s.get("unresolved", []):
+            print(f"         ! {bad}")
+    print(f"\n  mean: {'n/a' if r.mean is None else round(r.mean, 2)}  "
+          f"(over {kept} of {answered} answered criteria)")
+    if answered and kept < answered:
+        print(f"  NOT A SCORE OF THE ARTIFACT: {answered - kept} of {answered} criteria were discarded, "
+              f"so this mean\n  describes the part that survived, not the artifact")
     print(f"  [uncalibrated] no agreement with a human reviewer has been measured for these criteria,")
     print(f"  so this number has unknown meaning and gates nothing (design §11, §13.2)")
     print(f"\n  written to {dest}")

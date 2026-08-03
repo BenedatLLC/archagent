@@ -30,7 +30,41 @@ from datetime import date
 from pathlib import Path
 
 SCALE = (1, 2, 3, 4, 5)
-_CITATION = re.compile(r"[\w/.-]+\.(?:md|py|ts|tsx|js|jsx|go|rb|java|kt|rs)(?::\d+)?")
+_EXT = r"(?:md|py|ts|tsx|js|jsx|go|rb|java|kt|rs|toml|json|ya?ml)"
+_CITATION = re.compile(
+    rf"[\w/.-]+\.{_EXT}(?:\s*(?::|,?\s+lines?\s+)\s*\d+(?:\s*[-–]\s*\d+)?)?")
+_CITE_PARTS = re.compile(rf"([\w/.-]+\.{_EXT})(?:\s*(?::|,?\s+lines?\s+)\s*(\d+))?")
+
+
+def unresolved_citations(text: str, root: Path) -> list[str]:
+    """Citations in `text` that do not point at anything: a missing file, or a line past its end.
+
+    **A well-formed citation is not a true one.** The original rule asked only that a `file:line` be
+    present, which a fabricated citation satisfies exactly as well as a real one — and fabricated
+    citations are the specific failure this rubric exists to catch, since an artifact review is mostly
+    unfalsifiable prose. The first review received cited `check.py` at line 1593 in a 248-line file, and
+    an ADR under a filename that has never existed. Both read as diligence; both were invented. Checking
+    that the path resolves and the line is in range costs a stat and catches this class outright.
+    """
+    bad = []
+    for m in _CITE_PARTS.finditer(text):
+        raw, line = m.group(1), m.group(2)
+        p = root / raw
+        # A bare basename may match in several places. That is a vague citation, not an invented one, so
+        # it resolves if *any* candidate supports it — this check is for fabrication, and calling
+        # sloppiness fabrication would train reviewers to distrust it.
+        cands = [p] if p.is_file() else [
+            h for h in root.rglob(Path(raw).name)
+            if h.is_file() and not {".git", ".venv", "node_modules"} & set(h.parts)]
+        if not cands:
+            bad.append(f"{m.group(0).strip()} — no such file")
+            continue
+        if not line:
+            continue
+        lengths = [len(c.read_text(errors="replace").splitlines()) for c in cands]
+        if int(line) > max(lengths):
+            bad.append(f"{m.group(0).strip()} — file has {max(lengths)} lines")
+    return bad
 
 
 @dataclass
@@ -165,6 +199,13 @@ def render_brief(artifact_path: str, repo: str, second_run: bool = False) -> str
         "so name the file and line you judged from — the failure mode here is fluent, confident prose",
         "with nothing behind it.",
         "",
+        "**Citations are checked, not just counted.** The path must exist and the line must be within the",
+        "file. A criterion whose citations all fail to resolve is discarded the same way an uncited one is.",
+        "If you are working from memory rather than an open file, say so and score `0` instead.",
+        "",
+        "Write as much as you need under `why:` — it is read to the next `score:`/`evidence:`/`why:` key,",
+        "so indented lists, per-claim breakdowns and multiple citations all survive.",
+        "",
         "Read the code, not only the documents. Several criteria ask whether the documents match the",
         "system, which cannot be answered from the documents alone.",
         "",
@@ -199,36 +240,67 @@ def render_brief(artifact_path: str, repo: str, second_run: bool = False) -> str
     return "\n".join(lines) + "\n"
 
 
-_BLOCK = re.compile(r"^##\s+([a-z_]+)\s+—", re.MULTILINE)
-_FIELD = {k: re.compile(rf"^\s*{k}\s*:\s*(.*)$", re.IGNORECASE | re.MULTILINE)
-          for k in ("score", "evidence", "why")}
+_FIELDS = ("score", "evidence", "why")
+_KEY = re.compile(rf"^[ \t>*-]*({'|'.join(_FIELDS)})\s*:[ \t]*", re.IGNORECASE | re.MULTILINE)
 
 
-def parse_brief(text: str) -> dict[str, dict]:
-    """Read a completed review. Lenient about formatting, strict about the citation rule."""
+def _fields(block: str) -> dict[str, str]:
+    """Pull `score:`/`evidence:`/`why:` out of one criterion's section.
+
+    **Each field runs until the next field key, not to the end of its line.** Reviewers write the
+    reasoning that matters — the claim-by-claim check, the citations backing it — as an indented block
+    under `why:`, and a line-scoped read throws all of it away. That is not a cosmetic loss: the citation
+    rule below then sees a bare summary sentence, finds no `file:line` in it, and discards a score that
+    was in fact cited half a page deep. A whole review can come back "uncited" while being the most
+    thoroughly evidenced one received.
+    """
+    fence = re.search(r"```[^\n]*\n(.*?)```", block, re.DOTALL)
+    body = fence.group(1) if fence else block
+    keys = [(m.group(1).lower(), m.end(), m.start()) for m in _KEY.finditer(body)]
+    got = {k: "" for k in _FIELDS}
+    for i, (name, value_at, _) in enumerate(keys):
+        end = keys[i + 1][2] if i + 1 < len(keys) else len(body)
+        if not got[name]:                      # first occurrence wins
+            got[name] = body[value_at:end].strip()
+    return got
+
+
+def parse_brief(text: str, root: Path | None = None) -> dict[str, dict]:
+    """Read a completed review. Lenient about formatting, strict about the citation rule.
+
+    Pass `root` to check that citations *resolve* — see `unresolved_citations`. Without it the rule
+    only checks that a citation is well formed, which a fabricated one also is.
+    """
     out: dict[str, dict] = {}
     blocks = re.split(r"^##\s+", text, flags=re.MULTILINE)[1:]
     for block in blocks:
         m = re.match(r"([a-z_]+)\s+—", block)
         if not m or m.group(1) not in BY_ID:
             continue
-        got = {k: (rx.findall(block) or [""])[0].strip() for k, rx in _FIELD.items()}
+        got = _fields(block)
         raw = re.sub(r"[^0-9]", "", got["score"].split()[0] if got["score"] else "")
         if not raw:
             continue
         score = int(raw[0])
+        rec = {"score": score, "evidence": got["evidence"], "why": got["why"]}
+        cited = got["evidence"] + " " + got["why"]
         if score == 0:
-            out[m.group(1)] = {"score": None, "evidence": got["evidence"], "why": got["why"],
-                               "discarded": "reviewer marked unsure"}
+            out[m.group(1)] = {**rec, "score": None, "discarded": "reviewer marked unsure"}
             continue
         if score not in SCALE:
             continue
-        if not _CITATION.search(got["evidence"] + " " + got["why"]):
+        if not _CITATION.search(cited):
             # the rule that keeps this from measuring fluency
-            out[m.group(1)] = {"score": None, "evidence": got["evidence"], "why": got["why"],
-                               "discarded": "no file:line citation"}
+            out[m.group(1)] = {**rec, "score": None, "discarded": "no file:line citation"}
             continue
-        out[m.group(1)] = {"score": score, "evidence": got["evidence"], "why": got["why"]}
+        if root is not None:
+            bad = unresolved_citations(cited, root)
+            rec["unresolved"] = bad
+            if bad and len(bad) == len(set(_CITATION.findall(cited))):
+                out[m.group(1)] = {**rec, "score": None,
+                                   "discarded": f"no citation resolves ({'; '.join(bad[:3])})"}
+                continue
+        out[m.group(1)] = rec
     return out
 
 
@@ -251,13 +323,30 @@ class JudgedReview:
     def discarded(self) -> dict[str, str]:
         return {k: v["discarded"] for k, v in self.scores.items() if v.get("discarded")}
 
+    @property
+    def coverage(self) -> tuple[int, int]:
+        """(scores kept, criteria answered) — the denominator the mean is really over."""
+        kept = sum(1 for s in self.scores.values() if s.get("score") is not None)
+        return kept, len(self.scores)
+
+    @property
+    def unresolved(self) -> dict[str, list[str]]:
+        return {k: v["unresolved"] for k, v in self.scores.items() if v.get("unresolved")}
+
     def to_dict(self) -> dict:
+        kept, answered = self.coverage
+        caveat = ("uncalibrated — no agreement with a human reviewer has been measured for these "
+                  "criteria, so this number has unknown meaning and gates nothing")
+        if answered and kept < answered:
+            # a mean over a minority of the review is not a score of the artifact, and read without this
+            # it looks like one — a low number reads as "judged harshly", not "mostly discarded"
+            caveat += (f"; and it averages {kept} of {answered} answered criteria — the rest were "
+                       f"discarded, so it is not a score of the whole artifact")
         return {"repo": self.repo, "rev": self.rev, "judged_by": self.judged_by, "dated": self.dated,
                 "mean": None if self.mean is None else round(self.mean, 2),
-                "calibrated": False,
-                "caveat": ("uncalibrated — no agreement with a human reviewer has been measured for these "
-                           "criteria, so this number has unknown meaning and gates nothing"),
-                "discarded": self.discarded, "scores": self.scores}
+                "scored": kept, "answered": answered,
+                "calibrated": False, "caveat": caveat,
+                "unresolved": self.unresolved, "discarded": self.discarded, "scores": self.scores}
 
 
 def save(path: Path, review: JudgedReview) -> Path:
@@ -266,6 +355,7 @@ def save(path: Path, review: JudgedReview) -> Path:
     return path
 
 
-def review_from(text: str, repo: str, rev: str, judged_by: str) -> JudgedReview:
+def review_from(text: str, repo: str, rev: str, judged_by: str,
+                root: Path | None = None) -> JudgedReview:
     return JudgedReview(repo=repo, rev=rev, judged_by=judged_by or "(unrecorded)",
-                        dated=date.today().isoformat(), scores=parse_brief(text))
+                        dated=date.today().isoformat(), scores=parse_brief(text, root))

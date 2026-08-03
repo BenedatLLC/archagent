@@ -20,9 +20,10 @@ now a recorded structural defect rather than an aesthetic complaint.
 Writing this artifact and running `evaluate` against it made the cost concrete, in a way that reading the
 code had not:
 
-- **A real dependency cycle.** `drift` (domain) imports `extraction` (infra) for the scanners, and
-  `extraction` imports back into `drift` for `_source_files` and `_glob_files` — `invscan.py` and
-  `connscan.py` both do. `evaluate` reports it as `cycle-subsystem: drift ↔ extraction` at high
+- **A real dependency cycle.** `drift` (domain) imports `extraction` (infra) for the scanners
+  (`configscan`, `connscan`, `deployscan`), and `extraction` imports back into `drift` — `invscan.py:24`
+  takes `_source_files`. That one edge closes the loop; `connscan.py` imports only `configscan` and
+  reaches `drift` in neither direction. `evaluate` reports it as `cycle-subsystem: drift ↔ extraction` at high
   confidence, and separately as `layer-inversion: extraction (infra) depends up on drift (domain)`. Two
   findings, one cause.
 - `drift.py` is flagged as a change-prone complex file, alongside `evaluate.py` and `cli.py`.
