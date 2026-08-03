@@ -181,3 +181,75 @@ def test_a_healthy_walk_is_not_flagged_as_failed(tmp_path):
     result = evaluate(cfg)
     assert not result.mining_failed
     assert not any("history walk FAILED" in c for c in result.history_cautions)
+
+
+# --- references that are real but unanalysable (found on signalfx/obstudio) ------------------------
+
+def _repo_with_go(tmp_path):
+    """A repo whose core is Go, with archagent configured for Python only."""
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src/app.py").write_text("x = 1\n")
+    (tmp_path / "svc").mkdir()
+    (tmp_path / "svc/main.go").write_text("package main\n")
+    (tmp_path / "svc/store.go").write_text("package main\n")
+    (tmp_path / "archagent.toml").write_text(
+        '[project]\nlanguages = ["python"]\n\n[python]\nsource_paths = ["src"]\n')
+    arch = tmp_path / "architecture/subsystems"
+    arch.mkdir(parents=True)
+    (tmp_path / "architecture/constitution.md").write_text("# C\n")
+    (tmp_path / "architecture/index.md").write_text("# I\n")
+    (tmp_path / "architecture/invariants.md").write_text("# Inv\n")
+    return tmp_path
+
+
+def test_a_glob_in_backticks_is_not_a_missing_file(tmp_path):
+    """`**Covers:** `svc/*.go`` is a pattern; a literal exists() on it is always false. Every wildcard
+    Covers line in a repo that uses them was reported as naming code that no longer exists."""
+    from archagent.config import load_config
+    from archagent.drift import find_drift
+    root = _repo_with_go(tmp_path)
+    (root / "architecture/subsystems/svc.md").write_text("# svc\n\n**Covers:** `svc/*.go`\n")
+    assert find_drift(load_config(root)).dangling == []
+
+
+def test_a_file_in_an_unanalysed_language_is_not_reported_as_missing(tmp_path):
+    """archagent analyses Python and TS. Citing `main.go` in a Go repo is accurate, and saying it 'no
+    longer exists' is a confident false claim about code sitting in the tree."""
+    from archagent.config import load_config
+    from archagent.drift import find_drift
+    root = _repo_with_go(tmp_path)
+    (root / "architecture/subsystems/svc.md").write_text(
+        "# svc\n\n**Covers:** `src/app.py`\n\nThe entry point is `svc/main.go` and state is `store.go`.\n")
+    assert find_drift(load_config(root)).dangling == []
+
+
+def test_a_genuinely_missing_reference_is_still_reported(tmp_path):
+    """The fixes must not turn the check off."""
+    from archagent.config import load_config
+    from archagent.drift import find_drift
+    root = _repo_with_go(tmp_path)
+    (root / "architecture/subsystems/svc.md").write_text(
+        "# svc\n\n**Covers:** `src/app.py`\n\nSee `svc/deleted.go` and `nope/*.go`.\n")
+    dangling = {ref for _, ref in find_drift(load_config(root)).dangling}
+    assert "svc/deleted.go" in dangling and "nope/*.go" in dangling
+
+
+def test_a_wrapped_config_declaration_is_read_whole(tmp_path):
+    """A manifest of a dozen keys gets wrapped by whoever writes it. Reading only the first line honours
+    half the declaration and reports the rest as undeclared — a confident wrong finding against a document
+    that does declare them. Found on signalfx/obstudio; the same shape as the rubric's line-scoped fields."""
+    from archagent.configscan import declared_config_keys
+    doc = ("# Deployment\n\n"
+           "**Config:** `ALPHA`, `BETA`,\n"
+           "`GAMMA`, `DELTA`,\n"
+           "`EPSILON`\n\n"
+           "Some prose that is not config.\n\n"
+           "**Services:** web\n")
+    keys = declared_config_keys(tmp_path, doc)
+    assert keys == {"ALPHA", "BETA", "GAMMA", "DELTA", "EPSILON"}
+
+
+def test_a_wrapped_config_declaration_stops_at_the_blank_line(tmp_path):
+    from archagent.configscan import declared_config_keys
+    doc = "**Config:** `ALPHA`\n\nNOT_A_KEY prose here.\n"
+    assert declared_config_keys(tmp_path, doc) == {"ALPHA"}

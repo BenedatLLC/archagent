@@ -30,7 +30,13 @@ from datetime import date
 from pathlib import Path
 
 SCALE = (1, 2, 3, 4, 5)
-_EXT = r"(?:md|py|ts|tsx|js|jsx|go|rb|java|kt|rs|toml|json|ya?ml)"
+#: Longest alternative first, and no word character may follow. Python's `|` is first-match, not
+#: longest-match, so `ts|tsx` truncates `LogsTab.tsx` to `LogsTab.ts` and `js|json` truncates
+#: `mcp.json` to `mcp.js` — then the file "does not exist" and a true citation is reported as invented.
+#: Exactly the wrong direction for a check whose whole purpose is calling out fabrication.
+_EXT = ("(?:" + "|".join(sorted(
+    ("md", "py", "ts", "tsx", "js", "jsx", "mjs", "cjs", "go", "rb", "java", "kt", "rs",
+     "toml", "json", "yaml", "yml", "sh", "sql", "tf"), key=len, reverse=True)) + r")(?![\w])")
 _CITATION = re.compile(
     rf"[\w/.-]+\.{_EXT}(?:\s*(?::|,?\s+lines?\s+)\s*\d+(?:\s*[-–]\s*\d+)?)?")
 _CITE_PARTS = re.compile(rf"([\w/.-]+\.{_EXT})(?:\s*(?::|,?\s+lines?\s+)\s*(\d+))?")
@@ -49,6 +55,11 @@ def unresolved_citations(text: str, root: Path) -> list[str]:
     bad = []
     for m in _CITE_PARTS.finditer(text):
         raw, line = m.group(1), m.group(2)
+        # A path outside the repo is not a claim about the repo. `~/.cursor/mcp.json` in a document about
+        # an installer is a real thing at a real location, and resolving it against the checkout would
+        # report it as invented. Only repo-relative citations are checkable here.
+        if raw.startswith(("/", "~", "./..")) or text[max(0, m.start() - 1):m.start()] in ("~", "/"):
+            continue
         p = root / raw
         # A bare basename may match in several places. That is a vague citation, not an invented one, so
         # it resolves if *any* candidate supports it — this check is for fabrication, and calling

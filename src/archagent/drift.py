@@ -18,6 +18,7 @@ import posixpath
 import re
 import subprocess
 from dataclasses import dataclass, field
+from functools import lru_cache
 from pathlib import Path
 
 try:
@@ -224,10 +225,25 @@ def _source_files(config: Config) -> set[str]:
 
 
 def _resolve_ref(ref: str, root: Path, source_files: set[str]) -> str | None:
-    """Return the actual root-relative path a doc reference points to, or None if it doesn't exist."""
+    """Return the actual root-relative path a doc reference points to, or None if it doesn't exist.
+
+    Two things this must not call dangling, both found by running against a repo unlike this one:
+
+    **A glob is not a missing file.** `**Covers:** `observer/internal/otlp/*.go`` puts a pattern in
+    backticks, and a literal `exists()` on `.../*.go` is always false. Every wildcard `Covers` line in a
+    repo that uses them was reported as "a doc names code that no longer exists".
+
+    **A file in a language we do not analyse still exists.** `source_files` holds only the configured
+    languages, so on a Go repo every accurate `main.go` citation resolved to nothing. Saying "no longer
+    exists" about code sitting in the tree is a confident false claim — worse than saying nothing. The
+    filesystem is checked before that verdict is reached.
+    """
     if (root / ref).exists():
         return ref
     r = ref.lstrip("./")
+    if any(ch in r for ch in "*?["):
+        # a pattern: resolved if it matches anything at all, code or not
+        return r if _glob_matches_any(root, r) else None
     if "/" in r:
         for sf in source_files:
             if sf == r or sf.endswith("/" + r):
@@ -236,6 +252,28 @@ def _resolve_ref(ref: str, root: Path, source_files: set[str]) -> str | None:
         for sf in source_files:
             if sf.rsplit("/", 1)[-1] == r:
                 return sf
+    return _find_in_tree(root, r)
+
+
+@lru_cache(maxsize=8)
+def _tree_basenames(root: Path) -> dict[str, str]:
+    """basename -> one root-relative path, over every file archagent can see.
+
+    Used only to decide whether a reference points at something real in an unanalysed language, so one
+    representative path per basename is enough.
+    """
+    out: dict[str, str] = {}
+    for p in root.rglob("*"):
+        if not p.is_file() or _SKIP_DIRS & set(p.parts):
+            continue
+        out.setdefault(p.name, p.relative_to(root).as_posix())
+    return out
+
+
+def _find_in_tree(root: Path, ref: str) -> str | None:
+    hit = _tree_basenames(root).get(ref.rsplit("/", 1)[-1])
+    if hit and (ref == hit or hit.endswith("/" + ref) or "/" not in ref):
+        return hit
     return None
 
 

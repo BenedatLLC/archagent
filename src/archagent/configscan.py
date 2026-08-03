@@ -27,7 +27,15 @@ _ENV_READS = [
 ]
 _ENV_FILE = re.compile(r"^\s*(?:export\s+)?" + _KEY + r"\s*=", re.MULTILINE)
 # require the bold `**Config:**` form so prose / a Mermaid `Configured` node isn't read as a manifest (issue #1)
-_CONFIG_DOC = re.compile(r"^\s*\*\*\s*Config\s*:?\s*\*\*\s*[:：]?\s*(.+)$", re.IGNORECASE | re.MULTILINE)
+#: `**Config:**` runs to the next blank line, not to the end of its first line.
+#:
+#: A real manifest is a long list of keys, and a writer wraps it. Reading only the first line silently
+#: honours part of a declaration: the keys on line one verify, the keys on line two are reported as
+#: "read in code but not declared" — a confident, wrong finding pointing at a document that *does*
+#: declare them. Continuation lines must be indented or plain; a blank line or a new `**Field:**` ends it.
+_CONFIG_DOC = re.compile(
+    r"^\s*\*\*\s*Config\s*:?\s*\*\*\s*[:：]?\s*(.+(?:\n(?!\s*$|\s*\*\*\s*\w+\s*:).+)*)",
+    re.IGNORECASE | re.MULTILINE)
 _MANIFEST_GLOBS = (".env.example", ".env.sample", ".env.template", "*.env.example")
 _CODE_EXTS = (".py", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs")
 

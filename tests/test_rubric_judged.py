@@ -130,6 +130,17 @@ def test_an_unrecognised_section_does_not_disturb_the_criteria_around_it():
 
 # --- citations must resolve -------------------------------------------------------------------------
 
+@pytest.mark.parametrize("name", ["LogsTab.tsx", "mcp.json", "App.jsx", "config.yaml", "run.mjs"])
+def test_a_multi_character_extension_is_not_truncated(tmp_path, name):
+    """Python's `|` is first-match, not longest-match, so `ts|tsx` clipped `LogsTab.tsx` to `LogsTab.ts`
+    and `js|json` clipped `mcp.json` to `mcp.js`. The clipped path then does not exist, so a real citation
+    was reported as invented — the precise opposite of what this check is for."""
+    (tmp_path / name).write_text("x\n")
+    parsed = parse_brief(_filled(accuracy=(3, f"{name}:1", "checked")), root=tmp_path)
+    assert parsed["accuracy"]["score"] == 3
+    assert not parsed["accuracy"]["unresolved"]
+
+
 def test_a_citation_to_a_missing_file_does_not_count(tmp_path):
     """A well-formed citation is not a true one, and fabricated citations are exactly what this rubric
     exists to catch — the first review cited an ADR filename that has never existed."""
@@ -182,3 +193,11 @@ def test_the_brief_names_the_artifact_relative_to_the_repo():
     brief = render_brief("docs/architecture", "archagent")
     assert "docs/architecture/" in brief
     assert "/Users/" not in brief and "/home/" not in brief
+
+
+def test_a_path_outside_the_repo_is_not_judged(tmp_path):
+    """`~/.cursor/mcp.json` in a document about an installer is a real path at a real location. Resolving
+    it against the checkout would report a true citation as invented."""
+    parsed = parse_brief(_filled(accuracy=(3, "~/.cursor/mcp.json", "the installer writes here")),
+                         root=tmp_path)
+    assert parsed["accuracy"]["score"] == 3 and not parsed["accuracy"]["unresolved"]
