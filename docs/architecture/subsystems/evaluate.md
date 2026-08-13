@@ -20,7 +20,7 @@ Each is a family of signals sharing an evidence source.
 | A | declared data ownership | `duplicated-source-of-truth`, `shared-persistency`, `service-intimacy`, `shared-library` |
 | B | the import/connector graph and git co-change | `layer-inversion`, `layer-skip`, `unstable-dependency`, `unstable-interface`, `implicit-coupling`, `extraneous-adjacent-connector` |
 | C | subsystem shape | `god-component`, `cycle-*`, `distributed-monolith` |
-| D | deployment and observability scans | `hardcoded-endpoint`, `no-request-tracing`, `trace-chain-gap` |
+| D | deployment, observability and exposure scans | `hardcoded-endpoint`, `no-request-tracing`, `trace-chain-gap`, `permissive-origin` |
 | E | git history per file | `change-prone-file` |
 | F | duplicated decisions in source | `scattered-source-of-truth`, `enum-value-escape` |
 

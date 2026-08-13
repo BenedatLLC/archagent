@@ -112,6 +112,22 @@ Mined from `git log`; require a git repo (skip with `--no-history`, window with 
   module is a change-magnet," not "these two need a new interface."
 - **Unstable interface** (B) — a widely-depended-on subsystem that keeps changing with its dependents,
   spreading churn. Freeze its contract, or split the volatile part from the stable one.
+- **Permissive cross-origin policy** (group D) — the service sets `Access-Control-Allow-Origin: *`,
+  accepts every WebSocket `Origin`, or configures CORS with a wildcard. Reported `high` when the same
+  component also registers a `POST`/`PUT`/`PATCH`/`DELETE` route, `med` otherwise.
+  **This is a candidate, not a vulnerability report.** Whether it is a defect depends on a threat model
+  archagent does not have. Judge it by asking what is reachable and whether the artifact *says so*:
+  - **Dismiss** when the surface is genuinely public and read-only, or the policy is deliberate and
+    already described in `deployment.md`. Say which.
+  - **Confirm** when the documents describe the system as private, internal, or "local only" while the
+    policy is open. A local developer tool is the sharp case, and the one people get wrong: binding to
+    `127.0.0.1` stops other machines, not other *websites* — any page the developer visits can call a
+    localhost API from their browser. If a state-changing route sits behind it, that includes calling it.
+  - Either way the fix is usually documentation before code: a trust boundary belongs in `deployment.md`
+    next to the ports, saying who may reach each one. An undescribed boundary is the finding even when the
+    policy turns out to be intended.
+  When the route evidence says "matched textually rather than parsed", open the file before you rate it —
+  that path exists because the service is in a language archagent cannot parse.
 - **Change-prone complex file** (group E) — a single *file* that changes constantly **and** is deeply
   nested: the classic sign of an abstraction absorbing special cases it should be delegating. Both axes are
   percentiles within this repo, so it reads "unusually churny and unusually complex *here*". Distinct from

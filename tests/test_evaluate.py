@@ -392,3 +392,39 @@ def test_a_degraded_family_lists_no_signs(tmp_path):
     claiming more than it means."""
     from archagent.evaluate import Inactive
     assert Inactive("E — bug-fix weighting", "no convention learned").signs == ()
+
+
+# --- permissive origin (group D, issue #8) --------------------------------------------------------
+
+def test_a_wide_open_origin_with_a_mutating_route_is_high(tmp_path):
+    """The severity turns on what else is reachable: the same policy in front of a delete route means any
+    page the developer browses can delete their data."""
+    cfg = _cfg(tmp_path)
+    _src(cfg, "pkg/a.py", "x = 1\n")
+    (tmp_path / "src/pkg/api.py").write_text(
+        'app.add_middleware(CORSMiddleware, allow_origins=["*"])\n\n'
+        '@app.delete("/api/data")\ndef clear():\n    pass\n')
+    _sub(cfg, "a", "# a\n\n**Covers:** `src/pkg/*.py`\n**Tier:** domain\n")
+    f = _of(evaluate(cfg, history=False), "permissive-origin")
+    assert len(f) == 1 and f[0].severity == "high" and f[0].group == "D"
+
+
+def test_a_wide_open_origin_with_no_mutating_route_is_med(tmp_path):
+    """A permissive origin is not automatically a defect — a read-only surface is a design choice."""
+    cfg = _cfg(tmp_path)
+    (tmp_path / "src/pkg").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "src/pkg/api.py").write_text(
+        'app.add_middleware(CORSMiddleware, allow_origins=["*"])\n\n'
+        '@app.get("/api/traces")\ndef traces():\n    pass\n')
+    _sub(cfg, "a", "# a\n\n**Covers:** `src/pkg/*.py`\n**Tier:** domain\n")
+    f = _of(evaluate(cfg, history=False), "permissive-origin")
+    assert len(f) == 1 and f[0].severity == "med"
+
+
+def test_a_restricted_origin_produces_no_finding(tmp_path):
+    cfg = _cfg(tmp_path)
+    (tmp_path / "src/pkg").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "src/pkg/api.py").write_text(
+        'app.add_middleware(CORSMiddleware, allow_origins=["https://app.example.com"])\n')
+    _sub(cfg, "a", "# a\n\n**Covers:** `src/pkg/*.py`\n**Tier:** domain\n")
+    assert _of(evaluate(cfg, history=False), "permissive-origin") == []

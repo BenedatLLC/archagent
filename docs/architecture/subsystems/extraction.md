@@ -1,6 +1,6 @@
 # extraction — the static scanners
 
-**Covers:** `src/archagent/configscan.py`, `src/archagent/deployscan.py`, `src/archagent/webapi.py`, `src/archagent/datamap.py`, `src/archagent/connscan.py`, `src/archagent/obsscan.py`, `src/archagent/invscan.py`, `src/archagent/mdutil.py`
+**Covers:** `src/archagent/originscan.py`, `src/archagent/configscan.py`, `src/archagent/deployscan.py`, `src/archagent/webapi.py`, `src/archagent/datamap.py`, `src/archagent/connscan.py`, `src/archagent/obsscan.py`, `src/archagent/invscan.py`, `src/archagent/mdutil.py`
 **Tier:** infra
 **Connects:** config via import, drift via import
 
@@ -17,6 +17,7 @@ returns data; none of them judges.
 | `datamap.py` | table definitions and datastore touch points |
 | `connscan.py` | outbound calls whose target resolves to a known service |
 | `obsscan.py` | tracing / correlation-id instrumentation |
+| `originscan.py` | permissive cross-origin policy, and state-changing route registrations |
 | `invscan.py` | invariants already *stated* in prose or asserts, as candidates |
 | `mdutil.py` | markdown helpers (fence stripping, empty-value detection) |
 
@@ -52,6 +53,12 @@ compared against rather than in the fact itself.
 
 **Regex and AST, never execution.** "Static" here means no import of the target code, so scanning a
 repository can never run it.
+
+**`originscan` is the one scanner not bound to the configured languages.** Every other extractor needs a
+parser and so only sees `languages` from `archagent.toml`; this one is a literal search for a handful of
+spellings that works the same anywhere. It reads Go, which archagent otherwise cannot analyse — which is
+the point, because the finding that prompted it was in Go and a scanner blind to that case would be worth
+nothing. Weaker evidence than a parse, so it is used only to *raise* a finding's severity, never lower it.
 
 **A wrapped declaration is still one declaration.** `configscan`'s `**Config:**` pattern runs to the next
 blank line or `**Field:**`, not to the end of its first line. A real manifest is a long list of keys and

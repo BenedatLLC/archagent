@@ -31,6 +31,8 @@ from .investigations import load as _load_investigation
 from .hotspots import MAX_REPORTED, find_hotspots
 from .mdutil import strip_code_fences
 from .obsscan import scan as _obs_scan
+from .originscan import mutating_routes as _mutating_routes, scan as _origin_scan
+from .webapi import extract_routes
 from .drift import (
     _SYNC_KINDS,
     _connectors,
@@ -52,6 +54,7 @@ IMPACT_MIN = 3          # an interface depended on by >= this many subsystems ha
 UNSTABLE_DEPENDENTS_MIN = 2  # ... and co-changing with >= this many of them => unstable interface
 DECISION_MIN_CHURN = 2  # mean commits per involved file; below this the duplication isn't costing anything
 MAX_DECISIONS = 10      # candidates are for a person to triage, not an inventory to work through
+MAX_ORIGIN_SITES = 6    # one finding lists a few sites; the point is the policy, not the census
 _EPS = 1e-9
 
 _TIER = re.compile(r"^\s*\*\*\s*Tier\s*:?\s*\*\*\s*[:：]?\s*(.+)$", re.IGNORECASE | re.MULTILINE)
@@ -317,6 +320,7 @@ def evaluate(config: Config, history: bool = True, since: str | None = None,
     result.findings += _connector_signals(root, model)
 
     result.findings += _hardcoded_endpoints(config)
+    result.findings += _permissive_origin(config)
     result.findings += _observability(root, model)
 
     _attach_investigations(config.architecture_dir, result)
@@ -1037,6 +1041,58 @@ def _decision_groups(config: Config, model: _Model) -> dict[str, set[str]]:
 
 
 # --- Group D: hard-coded endpoints -------------------------------------------------------
+
+def _permissive_origin(config: Config) -> list[Finding]:
+    """Who besides the intended client may call this service (issue #8).
+
+    Severity is about **what else is reachable**, not about the policy alone. A wide-open origin on a
+    read-only surface is a design choice; the same policy in front of a route that deletes data means any
+    page the developer browses can delete their data. So this reports `high` only when the code also
+    exposes a state-changing route, and `med` otherwise — and it stays a candidate either way, because
+    whether it is a defect depends on a threat model archagent does not have.
+    """
+    root = config.project_root
+    sites = _origin_scan(root)
+    if not sites:
+        return []
+    files = sorted({s.file for s in sites})
+    # Scope the "is anything mutable behind this" question to the components that set the header — a
+    # DELETE route in an unrelated fixture app answers nothing about this service's exposure.
+    scope = tuple(sorted({f.split("/")[0] + "/" for f in files}))
+    routes = extract_routes(root, _source_files(config))
+    mutating = sorted({r.method for r in routes
+                       if r.method in ("POST", "PUT", "PATCH", "DELETE") and r.source.startswith(scope)})
+    textual = [] if mutating else _mutating_routes(root, under=scope)
+    detail = "; ".join(f"{s.where} — {s.detail}" for s in sites[:MAX_ORIGIN_SITES])
+    if len(sites) > MAX_ORIGIN_SITES:
+        detail += f" (+{len(sites) - MAX_ORIGIN_SITES} more)"
+    if mutating:
+        sev, conf = "high", "med"
+        why = (f"the service also exposes state-changing routes ({', '.join(mutating)}), so any page the "
+               f"user browses can call them cross-origin")
+    elif textual:
+        sev, conf = "high", "low"
+        why = (f"a state-changing route appears at {textual[0]}"
+               + (f" (+{len(textual) - 1} more)" if len(textual) > 1 else "")
+               + " — matched textually rather than parsed, because it is in a language archagent does "
+                 "not analyse, so confirm it before acting")
+    else:
+        sev, conf = "med", "low"
+        why = ("no state-changing route was found, so on the available evidence the exposure is "
+               "read-only — routes in languages archagent does not parse would not be seen")
+    return [Finding(
+        sign="permissive-origin", group="D", severity=sev,
+        title="Any origin may call this service",
+        subjects=files,
+        detail=f"{len(sites)} site(s): {detail}",
+        recommendation=(
+            f"{why[0].upper() + why[1:]}. Decide whether that is intended and say so in `deployment.md` — a trust "
+            "boundary belongs in the deployment view next to the ports. If it is not intended, restrict "
+            "the allowed origins; if it is, record why, because 'binds to localhost' is not a "
+            "restriction: a browser on any site can reach 127.0.0.1."),
+        confidence=conf,
+    )]
+
 
 def _hardcoded_endpoints(config: Config) -> list[Finding]:
     root = config.project_root

@@ -300,8 +300,11 @@ CLI:
   circular subsystem/service dependencies (shape + severity), unstable dependencies (`I = Ce/(Ca+Ce)`,
   `DoUD ≥ 0.30`), leaky abstractions (layer inversion/skip via `**Tier:**`), **distributed monolith** +
   **extraneous adjacent connectors** (from typed `**Connects:**` edges), hard-coded service endpoints, and
-  **cross-boundary observability** (no request tracing at all, and gaps in an otherwise-traced chain);
-  plus **git-history** signals —
+  **cross-boundary observability** (no request tracing at all, and gaps in an otherwise-traced chain),
+  and a **permissive cross-origin policy** (`Access-Control-Allow-Origin: *`, an unconditional WebSocket
+  `CheckOrigin`, wildcard CORS middleware) — rated high only when the same service also registers a
+  state-changing route, because "binds to localhost" is not a restriction: a browser on any site can reach
+  `127.0.0.1`. This one scans every language, not just the configured ones; plus **git-history** signals —
   **shotgun surgery** / implicit coupling and **unstable interface** (subsystem co-change),
   **change-prone complex files** (per-file churn × indentation complexity, both as within-repo
   percentiles), and **scattered single source of truth** — either inferred (one decision's value set
