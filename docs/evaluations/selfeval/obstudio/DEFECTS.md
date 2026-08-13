@@ -64,6 +64,30 @@ had scrolled through. That is the point. **A citation range is a claim about wha
 nothing checks the boundary. The cheap partial defence is to prefer a whole-symbol or whole-block citation
 over a hand-typed line range, since a range's edges are exactly where an unexamined counterexample sits.
 
+## Found by the blind judge, after the human review (all verified against the code)
+
+4. **SKILL-002 is marked `active` / "Currently held" and is false.** Four per-skill scripts hold real
+   logic with no `references/scripts/` counterpart: `scan_python_otel_topology.py` (83 lines),
+   `validate_gap_closure.py` (712), `validate_reader_report.py` (599), `validate_configure_output.py`
+   (1222) — ~2,616 lines. I read `observe_report.py`, a genuine 32-line shim, and generalised to all of
+   them. Python, which archagent analyses: the most checkable claim in the table, asserted instead.
+5. **CLI-001 is false.** `api/handler.go:41`, `:72`, `:73` construct `validator.NewStore`,
+   `validator.NewService`, `dashboards.NewResolver` — so `cmd` is not the only composition point.
+6. **"64 Go files under `observer/`"** (stated twice) — `observer/` has 57. 64 is the repo-wide count
+   including the `evals/` fixtures this artifact explicitly puts out of scope, so the number contradicts
+   its own scoping.
+7. **`Store` is not "one `sync.Mutex`"** — `store.go:313-332` has `mu sync.RWMutex` plus `subMu`,
+   `invalidateMu`, `changeMu`.
+8. **CORS is wide open and undescribed.** `Access-Control-Allow-Origin: *` (`api/handler.go:283`) with an
+   unconditional WebSocket `CheckOrigin` (`websocket.go:21`) means any page the developer browses can read
+   their telemetry and call `DELETE /api/data`. The artifact leans on "local by default, which is the
+   product"; local is not unreachable. No invariant covers it and the "deliberately not written" section
+   does not name it. **The strongest finding of the round, and neither the human nor I found it.**
+9. **The validator state diagram is wrong.** `idle → running: Run() or telemetry changed`,
+   `running → cancelled: new telemetry arrives mid-run` and `cancelled → running` do not exist:
+   `MarkTelemetryChanged` (`manager.go:68`) only marks the store stale, runs begin on an explicit
+   `Service.Run`, cancellation reaches `cancelActiveRun` only via `Reset`, and nothing auto-restarts.
+
 ## Status
 
 | # | Where | Severity | Fixed |
@@ -71,3 +95,12 @@ over a hand-typed line range, since a range's edges are exactly where an unexami
 | 1 | `deployment.md:6` | minor — wrong pointer, right prose | no |
 | 2 | `mcp-server.md` | moderate — false claim behind a true sentence | no |
 | 3 | `observer-http.md:100` (HTTP-001) | moderate — false invariant, range hides the counterexample | no |
+| 4 | `invariants.md` (SKILL-002) | **serious** — a rule asserted `active` that the code violates, in an analysable language | no |
+| 5 | `observer-cli.md` (CLI-001) | moderate — false invariant | no |
+| 6 | `index.md`, `constitution.md` | minor — file count contradicts the stated scope | no |
+| 7 | `telemetry-store.md` | minor — concurrency described wrongly | no |
+| 8 | *absent* — CORS / WebSocket origin | **serious** — an unprotected path the documents' central claim implies is safe | no |
+| 9 | `validator.md` diagram | moderate — edges the code does not have | no |
+
+All still unfixed. They are the work-list for the next `describe` update pass; fixing them now would make
+the two scorings incomparable to any later re-score of the same revision.

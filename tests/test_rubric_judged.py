@@ -201,3 +201,23 @@ def test_a_path_outside_the_repo_is_not_judged(tmp_path):
     parsed = parse_brief(_filled(accuracy=(3, "~/.cursor/mcp.json", "the installer writes here")),
                          root=tmp_path)
     assert parsed["accuracy"]["score"] == 3 and not parsed["accuracy"]["unresolved"]
+
+
+def test_two_reviewers_of_the_same_artifact_do_not_share_a_file():
+    """A fixed judged.json meant the second parse overwrote the first. That is fatal for calibration
+    specifically: the two records exist to be compared, so parsing the second destroyed the thing it was
+    about to be compared against. Recovered from git that time."""
+    import importlib.util
+    import sys
+    from pathlib import Path
+    scripts = Path(__file__).resolve().parent.parent / "scripts"
+    sys.path.insert(0, str(scripts))   # selfeval.py imports evalhome from beside itself
+    spec = importlib.util.spec_from_file_location("selfeval_script", scripts / "selfeval.py")
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules["selfeval_script"] = mod
+    spec.loader.exec_module(mod)
+    a = mod._slug("jeff (independent reviewer)")
+    b = mod._slug("blind model judge")
+    assert a != b and a and b
+    assert "/" not in a and " " not in a, "the slug becomes a filename"
+    assert mod._slug("") == "unrecorded", "an unnamed reviewer still gets a stable, non-empty file"

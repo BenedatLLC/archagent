@@ -68,6 +68,10 @@ def do_score(path: Path, arch_dir: str | None, rev: str = "", changed: set[str] 
     return data
 
 
+def _slug(name: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "unrecorded"
+
+
 def _is_completed(path: Path) -> bool:
     """Has someone filled this brief in? A blank template has `score:` with nothing after it."""
     return path.is_file() and bool(re.search(r"^\s*score\s*:\s*\d", path.read_text(errors="replace"),
@@ -101,7 +105,10 @@ def do_judged(path: Path, review: Path, by: str) -> None:
     root = path.resolve()
     # root is passed so citations are resolved against the tree, not merely pattern-matched
     r = review_from(review.read_text(), root.name, "", by, root=root)
-    dest = save_review(RESULTS / root.name / "judged.json", r)
+    # One file per reviewer. A fixed judged.json silently clobbered the previous reviewer's record —
+    # which is fatal here, because the whole point is comparing two independent scorings of the same
+    # artifact, so the second parse destroyed the thing it was about to be compared against.
+    dest = save_review(RESULTS / root.name / f"judged-{_slug(r.judged_by)}.json", r)
     kept, answered = r.coverage
     print(f"\n{root.name} — judged rubric ({r.judged_by})\n")
     for cid, s in r.scores.items():
