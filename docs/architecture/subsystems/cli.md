@@ -32,6 +32,13 @@ report shows and some it does not — each inactive family carries the `signs` i
 (`cli.py:423`), so an agent can check the coverage report against the findings list rather than reading
 prose. The text view collapses that to a label because a person reading a terminal does not need it.
 
+**A clean report must mean something was checked.** `check` lists every rule `gen` skipped under *Not
+checked — asserted in invariants.md, verified by nobody*, and an artifact whose rules are all `prose` tier
+gets `No invariant was checked … this is not a passing run` instead of a pass. The passing line names the
+count (`All 10 checked invariant(s) hold`). This came from a reviewed artifact with eight prose rules, two
+of them false, where `check` printed an empty table and "All invariants hold." — ADR 0002's failure mode
+arriving through the report rather than through a scan.
+
 **Findings carry their own next step.** A finding marked `investigate` prints the exact command that acts
 on it (`cli.py:441`). A reader who cannot act on a finding drops it.
 

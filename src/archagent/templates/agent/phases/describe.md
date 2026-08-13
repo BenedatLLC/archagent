@@ -127,6 +127,46 @@ the user first, and never overwrite their existing content.
    - (d) **State current coverage** (e.g. "N of M packages documented") so partial progress is visible in
      the artifact itself. Run `archagent status` for the count.
 
+## Claims you make about the code — the five ways these go wrong
+
+An independent review of a generated artifact found nine defects. Every one is a rule that was not stated
+here, so they are stated now. All five failures share a shape: the document says something checkable, and
+nobody checked it.
+
+1. **Cite the line, and read the line you cite.** A document claimed the UI was embedded by
+   `cmd/obstudio/embed.go`; that file embeds the *skills*, and the UI is embedded three directories away.
+   The citation resolved — the file exists — and was wrong. Open the line before you write it down.
+
+2. **A line range is a claim about what is *not* in it.** An invariant read "only `POST /api/validation/*`
+   changes state — true at `<rev>` (`api/handler.go:75-92`)", while `DELETE /api/data` sat at `:93`. The
+   range stopped one line before its own counterexample. **Prefer a whole-symbol or whole-block citation
+   over a hand-typed range**, and when you must give a range, look at the lines just past both ends.
+
+3. **"Only", "never", "no other" are exhaustiveness claims — enumerate, don't sample.** A document said
+   "there is no equivalent `POST /api/clear` in the REST surface", which was true, to support "this is the
+   only interface that can change state", which was false: a `DELETE` route existed. Run the search that
+   would find a counterexample (`rg 'mux.HandleFunc\("(POST|DELETE|PUT|PATCH)'`) and say what you ran.
+
+4. **Do not generalise from one member of a set.** A rule was recorded as `active` and "currently held"
+   after reading one of five sibling scripts. The one read was a 32-line shim; the other four held ~2,600
+   lines of logic and violated the rule. If a claim covers N files, open N files.
+
+5. **Every number comes from a command, and name the command.** A document stated a file count twice that
+   contradicted the artifact's own declared scope, because the count was taken repo-wide by hand. Use
+   `archagent status`, `git ls-files … | wc -l`, or similar, and cite it.
+
+**A state diagram is a set of claims, one per edge.** Each transition asserts "this event causes this
+change of state". Cite the code that raises the event for every edge you draw. A reviewed diagram had
+three edges the code did not have — telemetry arriving marked a store stale but started, cancelled and
+restarted nothing — and the reviewer who scored the diagrams 5/5 cited the right function while reading
+the opposite behaviour out of it.
+
+**`Tier: prose` means nothing verified it.** `gen` skips those rows and `check` lists them under *Not
+checked*; an artifact whose invariants are all prose gets `No invariant was checked — this is not a
+passing run`. So a prose row marked `Status: active` is your assertion alone. Before writing `active`,
+record in the `Why` column **how** you checked it and at which revision. If you cannot check it, mark it
+`proposed`.
+
 **First pass sizing.** Size the work to the repo *before* choosing how many subsystems to write: run
 `archagent status` (packages + coverage) so you know whether this is a 3-package or a 30-package repo — a
 fixed "do 3 and stop" is wrong for anything large. Cover as many as you reasonably can this turn, then stop

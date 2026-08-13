@@ -104,3 +104,24 @@ over a hand-typed line range, since a range's edges are exactly where an unexami
 
 All still unfixed. They are the work-list for the next `describe` update pass; fixing them now would make
 the two scorings incomparable to any later re-score of the same revision.
+
+
+## Where each was addressed in archagent (2026-08-12)
+
+The artifact itself is left as it was — it is evidence, and re-scoring it later has to be against the same
+text. What mattered was whether each defect was preventable in the tool or the prompts. Eight of nine were.
+
+| # | Defect | Fixed in |
+|---|---|---|
+| 4, 5 | invariants asserted `active` that the code violates | **`check` reporting.** `gen` already knew these rows were skipped; `check` never showed it. It now lists them under *Not checked — asserted in invariants.md, verified by nobody*, and an all-prose artifact gets `No invariant was checked … this is not a passing run` instead of a pass. |
+| 1, 7 | a citation that resolves and is wrong | `describe` rule 1 — cite the line, and read the line you cite |
+| 3 | HTTP-001's range stops one line before its counterexample | `describe` rule 2 — a line range is a claim about what is *not* in it; prefer whole-symbol citations |
+| 2 | a true narrow sentence supporting a false general claim | `describe` rule 3 — "only"/"never" are exhaustiveness claims; enumerate and name the command |
+| 4 | generalised from one of five sibling scripts | `describe` rule 4 — if a claim covers N files, open N files |
+| 6 | a count contradicting the artifact's own scope | `describe` rule 5 — every number comes from a command, and name it |
+| 9 | state-diagram edges the code does not have | `describe` — a state diagram is a set of claims, one per edge; cite the code that raises each event |
+| 8 | CORS / WebSocket origin wide open and undescribed | **not fixable in a prompt** — filed as [#8](https://github.com/BenedatLLC/archagent/issues/8), a new `permissive-origin` signal for group D |
+
+The `check` change is the one with teeth. The rest are instructions a generating agent may or may not
+follow; that one makes the tool refuse to call an unchecked artifact clean, which is the same principle
+(ADR 0002) applied to its own reporting rather than to a scan.

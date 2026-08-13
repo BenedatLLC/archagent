@@ -231,10 +231,27 @@ def check(
         table.add_row(r.invariant_id, r.checker, mark, detail)
     console.print(table)
 
+    # Rules nothing checked must not be invisible. An artifact whose invariants are all `prose` tier
+    # produced an empty table and "All invariants hold." — while two of its eight rules were false. That
+    # is the silent-failure shape ADR 0002 exists to forbid: "nothing was checked" rendering exactly like
+    # "everything passed". A prose row is a claim asserted by a person; the tool has verified nothing
+    # about it and must say so.
+    if gen_result.skipped:
+        console.print(f"\n[yellow]Not checked ({len(gen_result.skipped)})[/] — asserted in "
+                      f"invariants.md, verified by nobody:")
+        for inv_id, why in gen_result.skipped:
+            console.print(f"  [yellow]{inv_id}[/]  {why}")
+
     if failed:
         console.print(f"[red]{failed} invariant(s) violated.[/]")
         raise typer.Exit(code=1)
-    console.print("[green]All invariants hold.[/]")
+    if not results:
+        console.print(f"[yellow]No invariant was checked[/] — "
+                      f"{len(gen_result.skipped)} rule(s) present, none enforceable. "
+                      f"This is not a passing run.")
+        return
+    console.print(f"[green]All {len(results)} checked invariant(s) hold.[/]"
+                  + (f" [yellow]{len(gen_result.skipped)} not checked.[/]" if gen_result.skipped else ""))
 
 
 @app.command()

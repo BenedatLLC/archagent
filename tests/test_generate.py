@@ -111,3 +111,49 @@ def test_unsupported_is_skipped_not_guessed(tmp_path):
     res = generate([_inv(id="Q", type="PURPOSE", tier="prose", rule="just prose")], cfg)
     assert res.skipped and res.skipped[0][0] == "Q"
     assert res.importlinter_ids == [] and res.astgrep_ids == []
+
+
+# --- rules nothing checked must not read as rules that passed ------------------------------------
+
+def _repo_with_invariants(tmp_path, rows: str):
+    arch = tmp_path / "architecture"
+    arch.mkdir(parents=True)
+    (arch / "invariants.md").write_text(
+        "# Invariants\n\n| ID | Type | Tier | Applies-to | Rule | Severity | Why | Status |\n"
+        "|----|------|------|-----------|------|----------|-----|--------|\n" + rows)
+    (tmp_path / "archagent.toml").write_text(
+        '[project]\nlanguages = ["python"]\n\n[python]\nsource_paths = ["src"]\n')
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src/a.py").write_text("x = 1\n")
+    return tmp_path
+
+
+def test_prose_rows_are_reported_as_skipped_not_dropped(tmp_path):
+    """obstudio's artifact had eight prose-tier rules, two of them demonstrably false, and `check`
+    printed an empty table and "All invariants hold." A rule the tool never looked at must not be
+    indistinguishable from one that passed (ADR 0002)."""
+    from archagent.config import load_config
+    from archagent.generate import generate
+    from archagent.invariants import parse_invariants
+    root = _repo_with_invariants(
+        tmp_path,
+        "| GO-001 | BOUNDARY | prose | go | `forbid a -> b` | error | x | active |\n"
+        "| GO-002 | BOUNDARY | prose | go | `forbid c -> d` | error | y | active |\n")
+    cfg = load_config(root)
+    res = generate(parse_invariants(cfg.invariants_path), cfg)
+    skipped = {i for i, _ in res.skipped}
+    assert skipped == {"GO-001", "GO-002"}
+    assert all("prose" in why for _, why in res.skipped)
+
+
+def test_an_all_prose_artifact_enforces_nothing(tmp_path):
+    """The count that matters: zero enforceable rules from a non-empty table."""
+    from archagent.config import load_config
+    from archagent.generate import generate
+    from archagent.invariants import parse_invariants
+    root = _repo_with_invariants(
+        tmp_path, "| GO-001 | BOUNDARY | prose | go | `forbid a -> b` | error | x | active |\n")
+    cfg = load_config(root)
+    res = generate(parse_invariants(cfg.invariants_path), cfg)
+    assert not (res.importlinter_ids or res.depcruiser_ids or res.astgrep_ids or res.pbt_ids)
+    assert len(res.skipped) == 1
