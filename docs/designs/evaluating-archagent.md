@@ -668,6 +668,89 @@ with a counter-criterion or left out of the gate.
 
 ---
 
+## 13a. Overfitting to the repository in front of you
+
+Every evaluation round ends with a list of defects and a temptation: fix each one. Some of those fixes
+generalise and some encode one repository's shape into the tool, and the two are hard to tell apart while
+you are making them. This section is the discipline, written after round 2 because that round produced
+ten changes and the question "how many of these are about obstudio?" turned out to have a measurable
+answer.
+
+### The test: can you state the rule without naming the repo?
+
+A fix that generalises describes a *class* of mistake. Round 2's changes, classified:
+
+| change | states a rule about | general? |
+|---|---|---|
+| `_resolve_ref` handles wildcards | a glob is not a missing file | yes |
+| `_resolve_ref` checks the filesystem | a file in an unparsed language still exists | yes |
+| `**Config:**` reads past line one | a wrapped declaration is one declaration | yes |
+| citation regex longest-first | `ts\|tsx` truncates `.tsx` | yes — a plain bug |
+| citations outside the repo skipped | a path outside the tree is not a claim about the tree | yes |
+| `check` lists unchecked prose rows | "nothing was checked" ≠ "everything passed" | yes |
+| `describe`'s five claim rules | how a checkable claim goes wrong | yes |
+| per-reviewer `judged.json` | two records that exist to be compared must not share a path | yes |
+| origin **reflection** detection | reflection is more permissive than `*` | yes |
+| **`permissive-origin` signal** | a trust boundary the documents skip | mechanism yes, evidence thin |
+
+Nine of ten are bug fixes or prompt rules whose statement never mentions obstudio. That is not a
+coincidence — it is what a review of a *documentation artifact* mostly produces, because the failures are
+in how claims are made rather than in what the system does.
+
+### Where overfitting actually lives: pattern lists
+
+Bug fixes generalise by construction. **Pattern lists do not**, and they are where every heuristic in this
+tool will rot. Concretely: `originscan`'s test-directory skip list guesses `test`, `tests`, `__tests__`,
+`testdata`, `fixtures`, `examples` — and litellm keeps its example servers in `cookbook/`, which the list
+does not contain, so a permissive CORS in an example fired as a finding.
+
+The wrong response is to add `cookbook` to the list. That is the overfitting move: it fixes litellm and
+teaches nothing, and the next repository will use `recipes/` or `demos/`. Two better responses:
+
+- **Let the judging step absorb it.** "Candidates, not verdicts" is an anti-overfitting mechanism, not
+  only a humility one. A reader dismissing "this is in `cookbook/`, an examples directory" is the system
+  working. The scanner does not need to know every repository's conventions if something downstream does.
+- **Prefer a structural fact to a name.** Whatever can be tied to a declaration (`**Covers:**`, a build
+  target, a package boundary) instead of a directory name survives contact with the next repository.
+
+### Do not report a validation the corpus cannot support
+
+The sharper lesson from round 2. Running `permissive-origin` over all fourteen corpus repositories gives
+**one hit in fourteen**, which reads like strong evidence of a low false-positive rate. It is not:
+
+> Files mentioning any CORS or HTTP-server construct — angular 0, ansible 0, datasette 0, django 0,
+> flask 0, homeassistant 0, nova 0, pandas 0, poetry 0, prettier 0, scrapy 0, sympy 0, kibana 4,
+> litellm 431.
+
+**Twelve of fourteen had no opportunity to fire.** The corpus is libraries, frameworks and CLIs, assembled
+to exercise the checks that existed at the time — co-change, hotspots, duplicated decisions — all of which
+need only source and history. A signal about *service exposure* cannot be evaluated by a corpus with
+almost no services in it, and "0 false positives across 14 repositories" would have been true and
+misleading.
+
+So: **before quoting a corpus result for a new check, ask how many of those repositories could have
+produced a finding at all.** Report the denominator, not the numerator. The honest statement for this
+signal is "validated on one repository, incidentally correct on a second, and the corpus cannot yet
+evaluate it".
+
+### The rules
+
+1. **Fix the class, not the instance.** If the rule cannot be stated without naming the repository, it is
+   not a rule yet.
+2. **Prefer a tool fix to a pattern addition.** A bug fix generalises; a pattern list accumulates one
+   repository's vocabulary.
+3. **A new signal needs a mechanism argument, not just an instance.** CORS is a web-platform behaviour,
+   not an obstudio behaviour — that is why the signal is defensible on thin evidence. A signal justified
+   only by "it found something here" is not.
+4. **Never tune a threshold on the repository that motivated the check.** `permissive-origin` has no
+   numeric threshold, deliberately; the two it would have needed (how many sites, how close to a route)
+   would both have been fitted to one example.
+5. **Check whether the corpus can evaluate the change, and say so when it cannot.**
+6. **The corpus has to grow with the signal set.** It was selected for the checks of the time and is now
+   unrepresentative for a whole class of them.
+
+---
+
 ## 14. Threats to validity
 
 Written down because they are easy to forget once numbers exist.
