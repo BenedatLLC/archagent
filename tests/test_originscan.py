@@ -24,6 +24,12 @@ def _repo(tmp_path: Path, files: dict[str, str]) -> Path:
 @pytest.mark.parametrize("rel,line,kind", [
     ("svc/handler.go", 'w.Header().Set("Access-Control-Allow-Origin", "*")', "acao-wildcard"),
     ("svc/ws.go", "CheckOrigin: func(r *http.Request) bool { return true },", "ws-checkorigin-true"),
+    ("svc/echo.go", 'w.Header().Set("Access-Control-Allow-Origin", r.Header.Get("Origin"))',
+     "acao-reflects-request"),
+    ("web/echo.js", 'res.setHeader("Access-Control-Allow-Origin", req.headers.origin)',
+     "acao-reflects-request"),
+    ("app/echo.py", 'response.headers["Access-Control-Allow-Origin"] = request.headers.get("Origin")',
+     "acao-reflects-request"),
     ("app/main.py", 'app.add_middleware(CORSMiddleware, allow_origins=["*"])', "allow-origins-wildcard"),
     ("web/server.js", 'app.use(cors({ origin: "*" }))', "cors-origin-wildcard"),
     ("web/other.js", "app.use(cors())", "cors-default-open"),
@@ -115,3 +121,21 @@ def test_scope_restricts_the_route_search(tmp_path):
     })
     assert mutating_routes(root, under=("observer/",)) == ["observer/api.go:1"]
     assert len(mutating_routes(root)) == 2
+
+
+def test_reflection_is_caught_even_though_it_has_no_wildcard(tmp_path):
+    """Echoing the request's Origin back is *more* permissive than `*`: browsers refuse a wildcard when
+    credentials are sent, so reflection is the form that actually allows a cross-origin read of an
+    authenticated response. It contains no star, so a wildcard-only scanner sees nothing."""
+    from archagent.originscan import scan
+    hits = scan(_repo(tmp_path, {
+        "svc/a.go": 'w.Header().Set("Access-Control-Allow-Origin", r.Header.Get("Origin"))\n'}))
+    assert [h.kind for h in hits] == ["acao-reflects-request"]
+    assert hits[0].confidence == "high"
+
+
+def test_a_fixed_allowed_origin_is_not_reflection(tmp_path):
+    """The header name itself contains the word Origin, so the pattern must look only at the value."""
+    from archagent.originscan import scan
+    assert scan(_repo(tmp_path, {
+        "svc/a.go": 'w.Header().Set("Access-Control-Allow-Origin", "https://app.example.com")\n'})) == []

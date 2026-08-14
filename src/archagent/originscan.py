@@ -16,6 +16,24 @@ built for would be worth nothing. The cost is that the patterns are textual and 
 **A permissive origin is not automatically a defect** (issue #8). A public read-only API may want one. The
 question is what else is reachable, which `evaluate` decides by checking whether the service also exposes a
 state-changing route — so this module reports facts and rates nothing.
+
+## What a line-based scan cannot see, measured rather than assumed
+
+Probed against constructed cases; these are the known edges, not a guess at them.
+
+*Missed (false negatives).* A policy assembled indirectly — `origin := "*"` on one line and the header set
+from the variable on the next — is invisible; so is a value split across lines, e.g. `allow_origins=[`
+newline `"*"`. Both need dataflow or a parser. The consequence is a quiet under-report, which is the
+tolerable direction: the signal is a floor on exposure, never a clearance.
+
+*Reported when it may be fine (false positive).* A wildcard inside `if devMode { … }` is reported exactly
+like an unconditional one, because nothing here reads control flow. This is the most likely reason a
+reader will dismiss a finding, and the `evaluate` prompt says so.
+
+*Deliberately not attempted.* Whether the origin is *effectively* restricted by something upstream — a
+reverse proxy, an auth middleware, a firewall — is invisible to any static scan of this repository. That is
+part of why the finding is framed as "the artifact does not describe this boundary" rather than "this is
+insecure".
 """
 
 from __future__ import annotations
@@ -35,6 +53,14 @@ _PATTERNS: tuple[tuple[str, re.Pattern[str], str, str], ...] = (
     ("acao-wildcard",
      re.compile(r"""Access-Control-Allow-Origin["']?\s*[,:=\]]\s*["']\*["']""", re.IGNORECASE),
      "high", "Access-Control-Allow-Origin is set to `*`"),
+    # Reflecting the request's own Origin back is *more* permissive than `*`, not less: a wildcard is
+    # rejected by browsers when credentials are sent, so reflection is the form that actually allows a
+    # cross-origin read of an authenticated response. It is the dangerous spelling and it does not
+    # contain a star, so a wildcard-only scanner sees nothing.
+    ("acao-reflects-request",
+     re.compile(r"""Access-Control-Allow-Origin["']?\s*[,:=\]]\s*[^\n]*?"""
+                r"""(?:\.origin\b|\[["']Origin["']\]|\(["']Origin["']\))""", re.IGNORECASE),
+     "high", "Access-Control-Allow-Origin echoes the request's own Origin"),
     # gorilla/websocket: the upgrader's origin check replaced with an unconditional true. The default
     # (absent CheckOrigin) is same-origin, so this is an explicit opt-out.
     ("ws-checkorigin-true",
