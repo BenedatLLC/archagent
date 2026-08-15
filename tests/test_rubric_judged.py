@@ -221,3 +221,28 @@ def test_two_reviewers_of_the_same_artifact_do_not_share_a_file():
     assert a != b and a and b
     assert "/" not in a and " " not in a, "the slug becomes a filename"
     assert mod._slug("") == "unrecorded", "an unnamed reviewer still gets a stable, non-empty file"
+
+
+def test_a_score_in_the_heading_is_read():
+    """`## accuracy — Score: 5` instead of a `score:` field. The second of three real reviews to be
+    unreadable for a formatting reason, each time with the content perfectly fine. Where a number was
+    typed is not what this rubric is trying to measure."""
+    text = ("# review\n\n## accuracy — Score: 5\n\n"
+            "**evidence:** checked five claims\n\n"
+            "**why:** every one holds — `src/main.py:12` confirms the first\n")
+    parsed = parse_brief(text)
+    assert parsed["accuracy"]["score"] == 5
+    assert "every one holds" in parsed["accuracy"]["why"]
+
+
+def test_a_heading_score_does_not_override_a_field_score():
+    text = ("## prose — Score: 5\n\nscore: 3\nevidence: `a.py:1`\nwhy: mixed\n")
+    assert parse_brief(text)["prose"]["score"] == 3
+
+
+def test_a_framework_name_is_not_a_missing_file(tmp_path):
+    """"Next.js" ends in `.js` and is not a file. Reporting it as an invented citation is noise that
+    teaches a reader to ignore the check."""
+    from rubric_judged import unresolved_citations
+    assert unresolved_citations("The Next.js route handler and the Node.js runtime.", tmp_path) == []
+    assert unresolved_citations("See invented.js for details.", tmp_path) != []

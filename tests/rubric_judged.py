@@ -42,6 +42,14 @@ _CITATION = re.compile(
 _CITE_PARTS = re.compile(rf"([\w/.-]+\.{_EXT})(?:\s*(?::|,?\s+lines?\s+)\s*(\d+))?")
 
 
+#: Framework names that look like filenames. A bounded, well-known set — §18 warns that pattern lists are
+#: where overfitting lives, and the alternative here (guessing from capitalisation) would misfire on real
+#: files like `App.jsx`. Reporting "Next.js — no such file" is noise that teaches readers to ignore the
+#: check, which costs more than the list does.
+_NOT_FILES = {"next.js", "node.js", "vue.js", "nuxt.js", "three.js", "d3.js", "express.js",
+              "react.js", "ember.js", "backbone.js", "chart.js", "socket.js", "moment.js"}
+
+
 def unresolved_citations(text: str, root: Path) -> list[str]:
     """Citations in `text` that do not point at anything: a missing file, or a line past its end.
 
@@ -55,6 +63,8 @@ def unresolved_citations(text: str, root: Path) -> list[str]:
     bad = []
     for m in _CITE_PARTS.finditer(text):
         raw, line = m.group(1), m.group(2)
+        if raw.lower() in _NOT_FILES:
+            continue
         # A path outside the repo is not a claim about the repo. `~/.cursor/mcp.json` in a document about
         # an installer is a real thing at a real location, and resolving it against the checkout would
         # report it as invented. Only repo-relative citations are checkable here.
@@ -290,6 +300,13 @@ def parse_brief(text: str, root: Path | None = None) -> dict[str, dict]:
             continue
         got = _fields(block)
         raw = re.sub(r"[^0-9]", "", got["score"].split()[0] if got["score"] else "")
+        if not raw:
+            # The score may live in the heading — `## accuracy — Score: 5` — rather than in a field.
+            # Two of the first three reviews received were unreadable for a different formatting reason
+            # each time, and in both cases the content was fine. A parser that rejects a well-evidenced
+            # review over where a number was typed is measuring the reviewer's guess at our format.
+            m_head = re.search(r"score\s*[:=]\s*(\d)", block.split("\n", 1)[0], re.IGNORECASE)
+            raw = m_head.group(1) if m_head else ""
         if not raw:
             continue
         score = int(raw[0])
