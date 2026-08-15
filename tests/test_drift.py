@@ -429,3 +429,12 @@ def test_stale_doc_detected_via_git(tmp_path):
     r = find_drift(cfg)
     assert r.git_available is True
     assert any("pkg.md" in doc for doc, _ in r.stale)
+
+
+def test_a_bare_extension_in_prose_is_not_a_file_reference(tmp_path):
+    """"the suite is `.ts` only" names no file. Reading it as one produced a dangling finding against a
+    document that had referenced nothing."""
+    from archagent.drift import _file_refs
+    refs = _file_refs("The suite is `.ts` only, and `frontend/scripts/` holds three `.mjs` tools "
+                      "alongside `app/main.py`.")
+    assert refs == ["app/main.py"]

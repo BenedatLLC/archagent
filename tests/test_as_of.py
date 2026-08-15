@@ -285,3 +285,18 @@ def test_no_history_does_not_claim_a_family_it_still_reported(tmp_path):
     assert "enum-value-escape" in signs, "the pure code scan must run without git"
     for fam, _reason in ((i["family"], i["reason"]) for i in data.get("inactive", [])):
         assert fam != "B/E/F — git history", "family F was reported inactive while F produced a finding"
+
+
+def test_a_literal_path_containing_brackets_is_not_a_missing_glob(tmp_path):
+    """Every Next.js App Router dynamic segment contains glob metacharacters — `[id]`, `[...path]`,
+    `[[...slug]]` — and as a glob those brackets are a character class matching none of them. Treating
+    the path as a pattern reported a file that exists as missing."""
+    from archagent.config import load_config
+    from archagent.drift import find_drift
+    root = _repo_with_go(tmp_path)
+    d = root / "frontend/app/api/v1/[...path]"
+    d.mkdir(parents=True)
+    (d / "route.ts").write_text("export const runtime = 'nodejs';\n")
+    (root / "architecture/subsystems/proxy.md").write_text(
+        "# proxy\n\n**Covers:** `src/app.py`\n\nThe catch-all is `frontend/app/api/v1/[...path]/route.ts`.\n")
+    assert find_drift(load_config(root)).dangling == []

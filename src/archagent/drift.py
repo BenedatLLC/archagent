@@ -183,11 +183,19 @@ def find_drift(config: Config, until: str | None = None) -> DriftResult:
 # --- doc parsing ---------------------------------------------------------
 
 def _file_refs(text: str) -> list[str]:
-    """Backtick tokens that look like references to CODE files."""
+    """Backtick tokens that look like references to CODE files.
+
+    A bare extension is not one. Prose says things like "the suite is `.ts` only" or "three `.mjs`
+    tools", and reading those as filenames reported them as code that no longer exists — a dangling
+    finding against a document that named no file at all.
+    """
     out: list[str] = []
     for tok in _BACKTICK.findall(text):
         t = tok.strip()
         if " " in t or not t.endswith(CODE_EXTS):
+            continue
+        stem = t.rsplit("/", 1)[-1]
+        if stem.startswith("."):        # `.ts`, `.mjs` — an extension, not a file
             continue
         if t not in out:
             out.append(t)
@@ -242,8 +250,12 @@ def _resolve_ref(ref: str, root: Path, source_files: set[str]) -> str | None:
         return ref
     r = ref.lstrip("./")
     if any(ch in r for ch in "*?["):
-        # a pattern: resolved if it matches anything at all, code or not
-        return r if _glob_matches_any(root, r) else None
+        if _glob_matches_any(root, r):
+            return r
+        # Not necessarily a pattern. A literal path can contain glob metacharacters: every Next.js
+        # App Router dynamic segment does — `[id]`, `[...path]`, `[[...slug]]` — and as a glob those
+        # brackets are a character class that matches none of them. Fall through to the ordinary
+        # lookups rather than reporting a file that exists as missing.
     if "/" in r:
         for sf in source_files:
             if sf == r or sf.endswith("/" + r):
