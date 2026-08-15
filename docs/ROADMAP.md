@@ -35,6 +35,28 @@ Rationale and design detail for most items live in `~/research/architecture-agen
   "clean."
 - **Connector-typed edges** (`**Connects:** … via <kind>`) + inference from code. Python + JS/TS.
 
+## Evaluation
+
+How archagent is evaluated, and the rules by which a proposed change is accepted, are in
+[`docs/designs/evaluating-archagent.md`](designs/evaluating-archagent.md). Four parts: orientation, the
+instruments that produce evidence, the process that turns evidence into a decision, and the limits. Start
+with "If you are reading this for the first time".
+
+Open items from that design, in the order they unblock things:
+
+- [ ] **Measure the noise floor** (§15). How far a score moves between identical runs. Three acceptance
+  rules say "significant" and none can be evaluated without it. This blocks everything downstream.
+- [ ] **Build the recurrence suite** (§13) from the nine confirmed obstudio defects, phrased as facts
+  about the pinned target rather than about any one artifact.
+- [ ] **Build the per-repository checklist format** (§14) — ground truth stated, judged
+  correct/wrong/absent. Covers the misreading class the recurrence suite provably cannot.
+- [ ] **The evaluation ledger** (§17). One row per run, carrying the variance sources, not just scores.
+- [ ] **Wire the update path** (§16). `check_update_captured` and `update_quality` are built and have
+  never run; they need the changed-file set from a `git diff` between the two revisions.
+- [ ] **Groups A–D have no evidence and the corpus cannot produce any** — they read declared metadata no
+  corpus repo has. Split proposed: synthetic injection for recall, artifact-bearing repos for precision.
+  See [#9](https://github.com/BenedatLLC/archagent/issues/9).
+
 ## Releases
 
 - **0.3.0** (2026-08-03) — **Two new `evaluate` signal groups.** Group **E** `change-prone-file` (per-file
@@ -492,7 +514,7 @@ self-preference).
   `python scripts/selfeval.py score <path>`: ADL conformance (a gate), Covers globs resolving, coverage,
   falsifiable-claim count, drift-after-describe, clean command exits (a gate), and how many `evaluate`
   families were active. Needs no agent and no model.
-  **Every graded criterion is paired with its counter-criterion**, as §13.3 requires, and the tests build
+  **Every graded criterion is paired with its counter-criterion**, as §20.3 requires, and the tests build
   the degenerate artifacts to prove it. The specificity target scales with the codebase (√ of the
   source-file count, floored at 8, capped at 120): a flat constant asked the same of a 20-file project and
   a 10,000-file monorepo, so it was either trivial for one or negligible for the other. The *shape* is now
@@ -551,14 +573,14 @@ self-preference).
   Scoring is objective only — the ground-truth verdicts from the corpus pass (`tests/blindcomp_truth.toml`,
   three findings labelled by reading code, including the archetypal intended family a good report must
   dismiss *with a reason*), plus machine-checkable hygiene: evidence citations, clustering, and "tells"
-  that would identify an arm. §13.2 requires a gate to be objective, so this is the half that carries a
+  that would identify an arm. §20.2 requires a gate to be objective, so this is the half that carries a
   decision even once a judge exists.
   Attribution took three attempts: a plain proximity window credits one dismissal against every finding
   near it; *nearest* mention breaks on "…by design, dismissed. NextFile.py — …"; the rule that works is
   the most recent finding named **before** the dismissal, which is how prose reads. Same findings, three arms — shipped guidance, a
   generic prompt, no guidance — shuffled and scored by a judge that is not told which is which. The
   intended-family dismissals from the corpus pass give it real ground truth rather than taste.
-- [ ] **Closing the loop — automatic feedback into prompts and tools** (§13). **Deferred until the basic
+- [ ] **Closing the loop — automatic feedback into prompts and tools** (§20). **Deferred until the basic
   evaluation is proven**; recorded so the pieces before it are built in a shape that admits it. Inspired by
   *Self-Harnesses* (arXiv 2606.09498): mine failures from traces, propose minimal edits tied to them,
   accept only if regression tests still pass. We already have their safeguard — the golden fixtures and

@@ -11,7 +11,7 @@ a model family. So `prepare` writes briefs for someone else to run, and `score` 
 back.
 
 **What is scored here is the objective half only** — whether each report reaches the verdicts the corpus
-pass established by reading code, plus machine-checkable report hygiene. §13.2 requires that anything
+pass established by reading code, plus machine-checkable report hygiene. §20.2 requires that anything
 gating a decision be objective, so this is the half that would carry a decision even once a judge exists.
 The judged criteria of §9 need a model, and per §11 an uncalibrated judge is a number of unknown meaning.
 """

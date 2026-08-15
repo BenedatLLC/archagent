@@ -14,7 +14,7 @@ blinding and shuffling the outputs, and the **objective** scoring. Generation an
 an external model and are deliberately not done here — see `scripts/blindcomp.py` for why one session
 writing all three arms and then grading them would measure self-preference rather than quality.
 
-The objective half is not a consolation prize. §13.2 requires that anything *gating* a decision be
+The objective half is not a consolation prize. §20.2 requires that anything *gating* a decision be
 objective, with judged scores informing proposals and never deciding them, so this is the part that would
 carry an acceptance decision even once a judge exists.
 """

@@ -1,6 +1,6 @@
 """The deterministic rubric — and whether it can be gamed.
 
-The point of the paired counter-criteria (design §13.3) is that a machine-checkable criterion becomes a
+The point of the paired counter-criteria (design §20.3) is that a machine-checkable criterion becomes a
 target the moment anyone optimises against it. These tests build the degenerate artifacts the design names
 — one glob claiming everything, documents too vague to contradict — and require the rubric to mark them
 down rather than award them a perfect score.
@@ -65,7 +65,7 @@ def _good(tmp):
 
 
 def _gamed_coverage(tmp):
-    """The §13.3 degenerate case: one glob claiming the entire codebase."""
+    """The §20.3 degenerate case: one glob claiming the entire codebase."""
     files = {**SRC, **CORE,
              "architecture/subsystems/everything.md": "# Everything\n\n**Covers:** `src/**/*.py`\n"}
     return _repo(tmp, files)
@@ -114,7 +114,7 @@ def test_a_real_artifact_makes_falsifiable_claims(tmp_path):
 
 def test_a_single_process_repo_is_not_charged_for_having_no_services(tmp_path):
     """Family A needs `**Service:**` on two subsystems. A CLI has none, and declaring some to satisfy the
-    rubric would mean writing a false document to raise a score — the §13.3 failure mode by the front
+    rubric would mean writing a false document to raise a score — the §20.3 failure mode by the front
     door. The excuse is named in the detail so it cannot be confused with not measuring."""
     root = _repo(tmp_path, {**SRC, **CORE, "architecture/subsystems/a.md": "# A\n\n**Covers:** `src/**`\n"})
     c = check_evaluate_coverage(root)

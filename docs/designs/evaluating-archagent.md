@@ -1,6 +1,7 @@
 ---
-status: draft - open for review
+status: active
 date: 2026-07-28
+updated: 2026-08-15
 ---
 
 # Design: How we evaluate archagent
@@ -14,24 +15,70 @@ The near-term goal is **confidence in the tool** and a repeatable way to gauge a
 its results. A paper is a later consideration; the designs here are chosen so that the evidence they
 produce would support one, but nothing is built for publication first.
 
+## If you are reading this for the first time
+
+The document is in four parts, and you do not need all of them.
+
+| Part | What it answers | Read it if |
+|---|---|---|
+| **I — Orientation** (§1–4) | what we are trying to establish and under what rules | always; it is short |
+| **II — The instruments** (§5–11) | how evidence is produced, from cheapest to most judged | you are running an evaluation or building one |
+| **III — The process** (§12–17) | how evidence becomes a decision about a proposed change | you are proposing a change to archagent |
+| **IV — Discipline and limits** (§18–21) | what keeps this honest, and what it still cannot tell us | before quoting any number from it |
+
+**The shortest useful summary.** archagent is judged at two levels: the deterministic *signals* it computes,
+and the *artifact* its prompts generate. Signals are checked against outcomes nobody chose — whether a
+flagged file later accumulated bug fixes. Artifacts are scored against a fixed rubric, half of it computed
+by code and half judged by a reader. Because a judged score means nothing on its own, a small number of
+expensive **calibration runs** have both a model and an independent human score the same artifact, and the
+agreement between them is what makes the cheap, frequent **scoring runs** interpretable. Every confirmed
+defect is banked as a mechanical assertion so it can never quietly return.
+
+**One idea does most of the work**, and it is worth stating before the detail: *no party may label, tune and
+grade the same thing.* Nearly every rule below is that principle applied somewhere — held-out repositories,
+blinded reviewers, excluding the repository that prompted a change, recording who could see what.
+
 ## Terms used in this document
 
 - **Signal / finding** — one deterministic result from `evaluate`, `drift`, or `check` (e.g. a
   change-prone file). A **check** is the code that produces a family of findings.
-- **Precision** — of the findings reported, the share that a competent reviewer confirms. **Recall** — of
-  the real problems present, the share reported. We can measure precision; recall is mostly out of reach,
-  and this document says where we approximate it.
+- **Artifact** — the `architecture/` directory archagent generates and maintains for a target repository:
+  constitution, invariants table, subsystem documents, ADRs, diagrams.
+- **Target** — the repository being evaluated, always named as a URL pinned to a commit or tag. A target
+  is a repository *at a revision*, never a repository.
+- **Precision** — of the findings reported, the share a competent reviewer confirms. **Recall** — of the
+  real problems present, the share reported. We can measure precision; recall is mostly out of reach, and
+  this document says where we approximate it.
 - **As-of evaluation** — running the tool against a repository as it stood at a chosen past commit, so
-  that later history can be used as an outcome nobody could have seen at the time.
-- **Held-out** — a repository (or a time window) deliberately excluded from any tuning, so that a
-  measurement on it is not a measurement of our own threshold-fitting.
-- **Rubric** — a fixed list of scored criteria, half of them machine-checkable and half judged, with an
-  anchored scale so two runs are comparable.
-- **Defect-fixing commit** — a commit that repairs a reported defect. Recognised two ways: by this
-  project's learned commit wording (no external service), or by an issue reference that a public tracker
-  confirms was labelled a bug (stronger, and used only inside our evaluation harness).
+  later history can be used as an outcome nobody could have seen at the time.
+- **Held-out** — a repository (or time window) deliberately excluded from any tuning, so a measurement on
+  it is not a measurement of our own threshold-fitting.
+- **Fresh repository** — one archagent has never been run against and no reviewer has previously read. A
+  depleting resource: each use consumes it permanently (§12).
+- **Rubric** — a fixed list of scored criteria, half machine-checkable and half judged, with an anchored
+  scale so two runs are comparable (§9).
+- **Recurrence suite** — assertions derived from confirmed defects, phrased as facts about a pinned
+  target, checked mechanically against any newly generated artifact (§13).
+- **Checklist** — a per-target list of specific claims an artifact should get right, with the correct
+  answer stated, scored `correct` / `wrong` / `absent` by a judge (§14).
+- **Calibration run / scoring run** — the two kinds of evaluation run. A calibration run is scored twice,
+  by a model judge and independently by a human; a scoring run is scored once, by a model judge (§12).
+- **Arm** — one condition in a comparison. Two arms of a prompt change means generating the artifact twice
+  for the same target, once under each version of the prompt, and comparing (§10, §15).
+- **Noise floor** — how much a score moves between identical runs, from generation and judging variance
+  alone. Until it is measured, "significantly better" cannot be computed (§15).
+- **Objective vs subjective change** — an objective change is a defect fix whose correctness can be
+  demonstrated without a judge; a subjective change is a prompt edit or a heuristic adjustment whose value
+  is a matter of degree. They are accepted by different rules (§15).
+- **Defect-fixing commit** — a commit repairing a reported defect. Recognised two ways: by the project's
+  learned commit wording (no external service), or by an issue reference a public tracker confirms was
+  labelled a bug (stronger, used only inside our evaluation harness).
 
 ---
+
+# Part I — Orientation
+
+What we are trying to establish, about which parts of the tool, and under what rules.
 
 ## 1. Why
 
@@ -49,83 +96,6 @@ Three specific gaps follow from that:
    caught nothing about whether the tool still works on Django.
 3. **Nothing at all on the agent half.** The skills that turn findings into a report are the part a user
    actually reads, and they have never been evaluated.
-
----
-
-## 1a. Where this stands (2026-08-01)
-
-**L1 (the deterministic signals) now has evidence that does not depend on our judgement.** The held-out
-defect study ran four times, each pre-registered before running, and three of four adequately-powered
-repositories show that files flagged as change-prone-and-complex go on to accumulate significantly more
-defect-fixing commits than churn-matched controls — across two languages and three architectures. The
-fourth shows the same effect at reduced magnitude. Full record with every deviation:
-`docs/evaluations/defect-study/RESULTS.md`.
-
-Two limits on how that may be quoted. Magnitudes are **not comparable across repositories** — the rate
-ratio tracks how concentrated defect fixes are, partly mechanically — so pass/fail stands but the numbers
-are not effect sizes for the check in general. And every attempt on a *small* repository was underpowered,
-so nothing here speaks to those.
-
-**L2 (the skills) still has no evidence, and the reason is structural.** Four pieces of machinery are
-built and all of them are waiting on the same thing:
-
-| piece | state |
-|---|---|
-| deterministic rubric (§9) | works today; scores an artifact with no agent and no model |
-| judged rubric (§9) | **criteria + machinery built**, uncalibrated; scores carry the caveat and gate nothing |
-| spot-check worksheet + label store (§11) | works; **holds zero labels** |
-| blind comparison (§10) | objective half works; generation and judged scoring need other sessions |
-
-The binding constraint is the empty label store. Labels produced by whoever built the checks would
-recreate the closed loop §1 opens by criticising, so this is a people problem rather than a code problem —
-and everything downstream (judged rubric, judged blind comparison, any feedback loop of §13) is gated
-behind it.
-
-Two things were deliberately *not* automated, and the reasoning is the same in both cases. `selfeval run`
-refuses rather than invoking an agent, because comparing two scorecards is meaningless until a repeat run
-establishes how much of a difference is agent variance. `blindcomp` refuses to generate its own arms,
-because one session writing its own guidance's output and then grading it measures self-preference. In
-both cases a working-looking implementation was available and would have produced numbers worth less than
-nothing.
-
-**Update (2026-08-02): the first judged review arrived, and the rubric could not read it.** Details in
-`docs/evaluations/selfeval/archagent/CALIBRATION.md`; three findings belong in this design.
-
-*A field parser is part of the instrument.* `parse_brief` read each field to end-of-line. The reviewer put
-a summary after `why:` and the claim-by-claim evidence beneath it, so the citation rule saw a bare sentence
-and discarded five of six scores as unevidenced — rejecting the most thoroughly cited review received *for
-having no citations*, and reporting the surviving sixth as the artifact's score. Add to the silent-failure
-list below.
-
-*The citation rule was checking form, not truth* (§9). "A `file:line` is present" is satisfied exactly as
-well by an invented one, and four of the review's citations pointed at nothing: a line 1593 in a 248-line
-file, an ADR filename that has never existed. Citations are now resolved against the tree. This does not
-catch a citation that resolves but does not support its claim, and nothing mechanical will.
-
-*The strongest result is about which criteria are safe to judge.* The four criteria answerable from the
-artifact text scored 3–4 with no fabricated citations. The two requiring the code to be opened — `accuracy`
-and `completeness` — are the two that were fabricated, and the two lowest scores. §11 concluded that a
-verdict reached from a finding's summary is not a verdict; the same holds one level up. **Criteria that
-require leaving the artifact need either a reviewer who demonstrably left it, or a mechanical substitute.**
-`check_orientation` is the first such substitute: `describe` step 8(b) has always mandated a system map,
-the shipped `index.md` pre-places its markers, and archagent's own artifact had neither — with every
-deterministic check passing, because nothing looked. A mandated step with no verification is a step that
-silently stops happening, which is the §13.3 gaming argument arriving by accident rather than by intent.
-
-The qualitative findings that survived independent of the fabricated evidence are filed as issues
-[#4](https://github.com/BenedatLLC/archagent/issues/4) (decorative diagram captions),
-[#5](https://github.com/BenedatLLC/archagent/issues/5) (abstractions named before they are grounded) and
-[#6](https://github.com/BenedatLLC/archagent/issues/6) (invariants forbidding single edges rather than
-classes of edge). The generation prompts were corrected for all three so future artifacts do not inherit
-them; the existing documents were not.
-
-**A pattern worth recording, because it recurred five times.** Every serious defect found while building
-this was a *silent* failure — a condition that rendered as a plausible clean result rather than an error:
-a timed-out history walk read as a repository with no commits; an outcome walk read as a year with no
-defects; a corrupt clone read as an empty history; a bounded history run against an unbounded tree; and a
-cached profile learned from after the cutoff. None produced a stack trace. Each was caught by a
-consistency check — a number next to another number that could not both be true — rather than by the code
-failing. Budget for the guards accordingly; they caught more than the tests did.
 
 ---
 
@@ -155,7 +125,7 @@ This design covers L1 and L2 in full and sketches L3 only far enough to keep fro
   tag or commit SHA, works in a temporary checkout, and never mutates a local working copy.
 - **Tuning set and held-out set are separate, and stay separate.** Thresholds were fitted on Django,
   LiteLLM, opencode, OpenHands, and Datasette; those five can no longer produce an unbiased number for
-  anything tuned on them. If an automatic proposer is ever introduced (§13) this becomes a three-way
+  anything tuned on them. If an automatic proposer is ever introduced (§20) this becomes a three-way
   split, because selecting among proposals consumes a held-out set as surely as tuning does.
 - **A check must be able to fail.** If an evaluation cannot produce a result that would retire a signal,
   it is not measuring anything. Negative results are the point.
@@ -166,10 +136,15 @@ This design covers L1 and L2 in full and sketches L3 only far enough to keep fro
 
 ## 4. How the pieces fit
 
+Two flows. The **instruments** (Part II) turn a repository into evidence. The **process** (Part III) turns
+evidence into a decision about a proposed change.
+
 ```
+  INSTRUMENTS (Part II) — producing evidence
+  ─────────────────────────────────────────
                     ┌──────────────────────────────────────────────┐
    pinned repos ───►│  as-of checkout  (§5)                        │
-   (URL + tag)      │  worktree at <rev> + history bounded --until  │
+   (URL + commit)   │  worktree at <rev> + history bounded --until  │
                     └───────┬───────────────────────┬──────────────┘
                             │                       │
               ┌─────────────▼──────────┐   ┌────────▼─────────────────────┐
@@ -177,24 +152,50 @@ This design covers L1 and L2 in full and sketches L3 only far enough to keep fro
               │ same repos, same rev,  │   │ signals at T vs defect-fixing│
               │ same findings? (CI-ish)│   │ commits in (T, now]          │
               └────────────────────────┘   └──────────────────────────────┘
+                                     the two objective instruments; no judge
 
               ┌────────────────────────────────────────────────────────────┐
-              │ §8 end-to-end self-evaluation                              │
-              │ describe @rev1 → evaluate → score  →  describe @rev2 →      │
-              │ evaluate → score  →  did quality hold? were changes caught? │
+              │ §8 describe an artifact  →  §9 score it                     │
+              │      9.1 deterministic (no model)                           │
+              │      9.2 judged 1-5 against anchors (a model, or a human)   │
               └──────────────────────────┬─────────────────────────────────┘
-                                         │ §9 rubric (deterministic + judged)
+                                         │
               ┌──────────────────────────▼─────────────────────────────────┐
-              │ §10 blind comparison — is it the *guidance* doing the work? │
-              └──────────────────────────┬─────────────────────────────────┘
-                                         │  §9 and §10 are judged by a model
-              ┌──────────────────────────▼─────────────────────────────────┐
-              │ §11 human spot-check — a small blind sample, stored durably,│
-              │ giving the agreement rate that calibrates those judgements  │
+              │ §11 human spot-check — an independent read of the same      │
+              │ artifact, giving the agreement rate that makes §9.2 mean    │
+              │ something.  §10 blind comparison isolates the *guidance*.   │
               └────────────────────────────────────────────────────────────┘
+
+  PROCESS (Part III) — turning evidence into a decision
+  ────────────────────────────────────────────────────
+     §12 calibration run                        §12 scoring run
+     fresh repo, judged twice                   any repo, judged once
+     (human + model)                            (model)
+            │                                          │
+            │ leaves behind                            │ produces
+            ▼                                          ▼
+     §13 recurrence entries  ──────────►  §15 accepting a change
+     §14 checklist entries                  objective  → test + ship
+            │                               subjective → suites pass 100%
+            │                                          + defect stops recurring
+            │                                          + no decline elsewhere
+            ▼                                          │
+     §17 the ledger  ◄──────────────────────────────────┘
+     one row per run; §16 update pairs link via predecessor_run_id
 ```
 
----
+**The direction that matters:** calibration runs are expensive and rare, and most of their value is not
+their scores but the recurrence and checklist entries they leave behind. Those entries are what make the
+cheap, frequent scoring runs able to decide anything.
+
+# Part II — The instruments
+
+Each section below is one way of producing evidence, ordered from cheapest and most objective to most
+expensive and most judged. Nothing here decides whether a change is accepted — that is Part III. These are
+the measuring devices.
+
+A newcomer wanting the short version: §6 catches regressions, §7 is the only evidence that a signal
+predicts anything, §9 scores a generated artifact, and §11 is what makes a model's score mean something.
 
 ## 5. Prerequisite — running as of a past commit
 
@@ -410,7 +411,7 @@ comparable across runs so a change to a prompt can be shown to help or hurt.
 **Persist a trace, not only the scorecard.** Alongside the scores, record what actually happened: which
 findings the skill was given, which it confirmed or dismissed and on what stated grounds, what reached the
 report, and where any of that disagreed with the label store. A score says something regressed; a trace
-says where. This is also the input any future feedback loop would mine (§13), and it makes failures
+says where. This is also the input any future feedback loop would mine (§20), and it makes failures
 diagnosable by hand long before that.
 
 **The dependency to settle:** steps 2 and 5 need a coding agent, run non-interactively. That makes this
@@ -425,6 +426,8 @@ on the same inputs establishes the noise floor before any two scores are compare
 
 Two halves, deliberately. The deterministic half is cheap, reproducible, and cannot be talked into a good
 score. The judged half covers what matters most and cannot be automated.
+
+### 9.1 The deterministic half
 
 **Deterministic checks** (pass/fail or a count, computed by code):
 
@@ -442,10 +445,12 @@ score. The judged half covers what matters most and cannot be automated.
   whose document was also updated.
 - **Orientation:** the index carries a system map and prose before its catalog. Both are already mandated
   by the `describe` prompt, which is exactly why this check exists — a requirement nobody verifies stops
-  happening quietly (§1a).
+  happening quietly (Appendix A).
 - Every command is invoked through the checkout being scored, not through `PATH`. A global install
   shadowing the venv once failed the `tools.clean` gate with a missing subcommand and reported it as a
   defect in the artifact.
+
+### 9.2 The judged half
 
 **Judged criteria** (scored 1–5 by a subagent against anchored descriptors, each score requiring a
 `file:line` citation that **resolves** — the path must exist and the line must be inside it. A well-formed
@@ -553,7 +558,7 @@ intended families that correctly re-surface on every corpus run get labelled onc
 this works, the separate `capabilities.md` format is probably unnecessary.
 
 **Agreement is conditional, not a constant.** The rate is measured over a particular distribution of
-output. Anything that moves that distribution — a prompt rewrite, a model change, an optimiser (§13) —
+output. Anything that moves that distribution — a prompt rewrite, a model change, an optimiser (§20) —
 invalidates it, and it has to be re-sampled from the new output rather than carried forward.
 
 **Cautions.** This is an evaluation mode and never a runtime gate — the ground rule that a full pass needs
@@ -562,113 +567,293 @@ independent; the store records who reviewed each item so that can be weighed lat
 
 ---
 
-## 12. Tooling — what we build and what we adopt
+---
 
-The judged half of §9 needs the usual scaffolding around an LLM judge: prompt construction, score
-extraction against a schema, retries, thresholds, caching (judge calls are the slow, expensive part), and
-some way to combine machine-checkable gates with judged criteria in one score.
+# Part III — The process
 
-**DeepEval is the candidate on the table** for that, as a dev/test dependency only. Two things fit well.
-Its `DAG` metric — a graph-based judge builder with deterministic branching and model calls at the leaves —
-is close to the shape §9 already has, where a failed ADL conformance check should short-circuit the whole
-score rather than be averaged with a prose rating. And it is pytest-shaped, which matches the suite we
-already run.
+Part II lists instruments. This part is the procedure that uses them: what a run is, what gets recorded,
+and the rules by which a proposed change to archagent is accepted or rejected.
 
-Two things fit badly. Its metric catalogue (answer relevancy, faithfulness, contextual recall) assumes a
-query → answer → context triple, which an architecture artifact judged against a codebase is not; we would
-use `G-Eval` and `DAG` and none of the rest, and its `LLMTestCase` shape would mean stuffing a document set
-into `actual_output`. Shoehorning tends to drag what gets measured toward what the framework represents
-easily, and criteria like "would this invariant catch a violation someone might plausibly commit" resist
-that shape. Separately, the annotation and persistence features are the hosted product, whereas the label
-store of §11 is deliberately a local, versioned, diffable file — the most distinctive part of this design
-is the part such a framework least supports without its platform.
+The problem this part exists to solve: an evaluation produces a list of defects and a temptation to fix
+each one. Some of those fixes are improvements and some are the tool memorising one repository. Without a
+written rule, the difference is decided by whoever is holding the defect list, which is the same closed
+loop §1 opens by criticising.
 
-**Decision: not yet, and not ruled out.** Build order items 1–3 have no model in the loop, so nothing there
-would use it. At item 4, build one rubric criterion **twice** — hand-rolled and with `DAG` — and compare
-effort and output. That is a day's work and settles the question with evidence.
+## 12. Two kinds of evaluation run
 
-Two rules that hold either way:
+An **evaluation run** applies archagent at a known commit to a target repository at a known commit, and
+scores the result. Everything in Part III is built from runs of two kinds.
 
-- **No evaluation dependency enters the shipped package.** Everything here lives in the dev/test group;
-  `archagent` keeps running with nothing but a git repository.
-- **The judge sits behind a thin interface, and the scorecard schema is ours.** Whatever produces a score,
-  the stored shape does not change, so the trial is cheap to reverse and results stay comparable across a
-  tooling switch.
+| | Calibration run | Scoring run |
+|---|---|---|
+| **Target** | a **fresh** repository | known or fresh |
+| **Scored by** | a model judge **and** an independent human, same rubric, neither seeing the other's scores | a model judge |
+| **Produces** | agreement data; new recurrence entries; new checklist entries | a score, comparable to other scoring runs |
+| **Cost** | hours of human attention, plus the judge | the judge only |
+| **Frequency** | rarely — the supply of fresh repositories is finite | often; this is the routine measurement |
 
-**A caution about the stack.** There is a lot of model judgement piled up here — a model-judged framework
-scoring a model-written report about a tool whose findings a model acts on. §11 is the only thing anchoring
-that to a human, and no framework supplies it. Adopting one should not create the impression that the
-calibration problem has been handled.
+**Calibration runs are what make scoring runs mean anything.** A model judge's number is uninterpretable
+on its own. Agreement with an independent human on the same artifact and the same rubric is what converts
+it from an opinion into an estimate with a known error. Calibration also produces the durable assets: the
+defects found become recurrence entries (§13), and the ground truth established while finding them becomes
+checklist entries (§14). A calibration round is expensive and most of its value is in what it leaves
+behind, not in its scores.
+
+**Scoring runs are the routine instrument.** They are what Part III's acceptance rules consume. They need
+no human, so they can be run across several targets for every proposed change.
+
+### Fresh repositories are a consumable
+
+Each calibration run permanently consumes one fresh repository: afterwards it is a known target, useful for
+scoring and regression but no longer able to produce an independent read. Budget them.
+
+**"Fresh" also has to be fresh to the judge.** A model has very likely seen Django in pretraining and can
+describe it from memory rather than from the code in front of it — which is the same failure as a citation
+that resolves without supporting its claim. For calibrating a *judge*, prefer repositories obscure enough
+that memory is not an option. A small, recently published project is a better calibration target than a
+famous one, despite being a worse regression target.
+
+## 13. The recurrence suite
+
+Every confirmed defect is a fact about a target at a revision. The recurrence suite turns those facts into
+mechanical assertions, so that a defect found once can be checked for on every future artifact generated
+for that target.
+
+It lives in the evaluation data repository, not in archagent: it is data, it grows without bound, and
+running it requires generating an artifact, which is expensive.
+
+### Entries are phrased against the target, not the artifact
+
+This is the rule that makes an entry survive. An assertion like *"the artifact must not mark SKILL-002 as
+`active`"* breaks the first time a regenerated artifact numbers its invariants differently — and it does,
+every time, because the numbering is invented afresh on each run.
+
+Write the ground truth instead:
+
+> **obstudio @ 88aebe8** — `skills/*/scripts/` contains ~2,616 lines of logic across four files
+> (`validate_gap_closure.py` 712, `validate_reader_report.py` 599, `validate_configure_output.py` 1222,
+> `scan_python_otel_topology.py` 83). Any claim that per-skill scripts are shims over
+> `references/scripts/` is false.
+
+That is checkable against any artifact, however it chooses to name things, and it stays true because the
+target is pinned.
+
+### Every negative assertion needs a positive pair
+
+Most defects express naturally as *"the artifact must not claim X"*. Left alone, that drives artifacts
+toward silence: an artifact passes "must not describe `Store` as a single mutex" by never mentioning
+concurrency at all. That is the same degenerate direction `check_specificity` exists to punish (§9).
+
+So each negative gets a positive pair wherever the topic is load-bearing:
+
+- *must not* claim `Store` is a single `sync.Mutex`, **and**
+- *must* say something about how `Store` serialises access.
+
+Some defects are naturally positive already — *"the artifact must describe the origin policy"* — and those
+are the better-shaped entries. Prefer "must address X correctly" over "must not say Y" when both are
+available.
+
+### What the suite catches, and what it cannot
+
+Two mechanical checks are available. **Text assertions** match claims the artifact must not make. **Citation
+assertions** ask whether the artifact engaged with a specific piece of evidence at all — the inverse of the
+citation resolution already used on reviews (§9), and the stronger of the two, because it asks what the
+author looked at rather than what they wrote.
+
+Measured against the real obstudio artifact:
+
+| ground truth the artifact should have engaged with | result |
+|---|---|
+| CORS header, `api/handler.go:283` | file cited at 40, 75, 76, 354 — nowhere near 283 |
+| WebSocket `CheckOrigin`, `web/websocket.go:21` | file cited at 204, 233, 238, 260 — nowhere near 21 |
+| `DELETE` route, `api/handler.go:93` | cited at 75, 76 — **passes** |
+| `Store` mutexes, `store/store.go:313` | cited at 314 — **passes** |
+
+The first two are a real defect caught with no judge. The last two are false passes, and not by accident:
+one is an invariant citing `handler.go:75-92`, so a proximity window sees a citation seventeen lines away
+and calls it engaged; the other cites `store.go:314` for a neighbouring fact while describing line 313
+wrongly.
+
+So the suite covers exactly one class:
+
+- **Omission** — the artifact never looked at the evidence. Mechanical, cheap, run every time.
+- **Misreading** — the artifact looked at the right place and drew the wrong conclusion. **Not mechanical,
+  and no window size fixes it**: too tight raises false alarms on off-by-a-few citations, too loose passes
+  a citation range that stops one line short of its own counterexample.
+
+Misreading is the residual, and §14 is what covers it.
+
+## 14. Per-repository checklists
+
+A checklist is a fixed list of specific claims an artifact should get right about one target, **with the
+correct answer written down**, scored `correct` / `wrong` / `absent` by a judge.
+
+The distinction from the open rubric (§9) is the ground truth. Do not ask a judge *"is the concurrency
+description correct?"* — that is a research task, and it re-runs the very error the checklist exists to
+prevent. Ask:
+
+> `Store` uses a `sync.RWMutex` plus three further mutexes — `subMu`, `invalidateMu`, `changeMu`
+> (`store/store.go:313-332`). Does the artifact convey this?
+> **correct / wrong / absent**
+
+That converts research into comparison. It is cheaper (the judge does not explore the codebase), more
+reproducible (fixed questions in a fixed order), and ternary rather than 1–5, so aggregation is simple and
+the variance is far below a five-point judgement.
+
+The reading was done once, by a human, during a calibration run. **The checklist is where that work is
+banked so it never has to be repeated.**
+
+### Three cautions
+
+**A checklist is an answer key.** Whoever authors a prompt change must not be reading it while doing so, or
+the change is fitted to the test rather than to the problem. The same blinding rule as §15's exclusion of
+the prompting repository.
+
+**It is still a model reading prose.** More reproducible than open scoring, not immune. Expect the residual
+error in the boundary between `wrong` and `absent` — an artifact that gestures at the right topic without
+committing to a claim.
+
+**The open rubric must survive alongside it.** A checklist can only re-test known defects. If it replaces
+the open rubric, the next calibration finds nothing new and the suite stops growing. The open rubric
+explores, the checklist exploits, and every new defect the open rubric finds becomes a checklist entry for
+the round after.
+
+## 15. Accepting a change
+
+Evaluation produces proposed changes. They are accepted by two different rules, and telling them apart is
+the first decision.
+
+**An objective change is a defect fix whose correctness can be demonstrated without a judge.** A glob
+reported as a missing file; a wrapped declaration read only to its first line; `check` printing "All
+invariants hold" having checked none. These are accepted on a passing test that would have failed before —
+no comparison, no scoring runs. Write the regression test, fix, ship.
+
+**A subjective change is a prompt edit or a heuristic adjustment whose value is a matter of degree.** Guidance
+telling `describe` to ground abstractions at first mention; a new pattern in a matching heuristic. There is
+no test that proves these correct, which is why they need the procedure below.
+
+### The gate for a subjective change
+
+1. **The unit suite and the recurrence suite pass 100%.** Non-negotiable and cheap.
+2. **The recurrence suite shows the specific defect no longer recurs.** This is the evidence *for* the
+   change.
+3. **Scoring runs on N targets show no significant decline**, where the targets include at least one fresh
+   repository and **exclude the repository whose evaluation prompted the change**. This is the guard
+   against collateral damage.
+
+### Why the burden of proof sits where it does
+
+An earlier draft had this the other way around: the rubric proving improvement, the recurrence suite
+guarding regression. That cannot work.
+
+The rubric mean is a judge score over six criteria, carrying both generation variance and judging variance.
+A plausible prompt effect is perhaps +0.3 on a five-point scale. With three to five targets and unmeasured
+variance, a paired test has almost no power — the gate would reject good changes and teach nothing by
+rejecting them.
+
+The recurrence suite is binary, per-defect, and needs no judge. It tests exactly what the change was for.
+
+**So the sensitive instrument proves the effect, and the insensitive one guards against damage.** "No
+significant decline" is a far weaker claim than "significant improvement" and is achievable at N we can
+afford.
+
+### Excluding the prompting repository is the anti-overfitting control
+
+The repository that surfaced a defect is the one a fix is most likely to be fitted to. Measuring the fix
+there measures memorisation. This single rule does more than any other to keep prompt guidance general;
+§18 is the wider discussion.
+
+### The noise floor is a prerequisite, not a refinement
+
+Rules 2 and 3 both contain "significant", and neither can be computed without knowing how much a score
+moves between *identical* runs. That number does not exist yet. It is obtained by generating the artifact
+for one target several times with everything held constant and measuring the spread of the scores.
+
+**Until it is measured, this gate cannot be operated as written**, and any significance claimed would be
+decoration. Measuring it is the first item in the build order (Appendix D).
+
+## 16. Evaluating the update path
+
+Describing a system once is the easy half. The maintenance claim — that archagent keeps an artifact true as
+the code moves — is the one that matters to a user, and it has never been measured.
+
+The design is a paired run: generate the artifact for a target at commit **N**, score it, advance the
+target to commit **N+x**, run the update, score again.
+
+### Gate on update-specific measures, not the overall score
+
+The obvious gate — "the score must not decline" — conflates two different things. An artifact can score
+lower at N+x because the update failed, or because the system genuinely became larger and harder to
+describe in the intervening commits. Only the first is archagent's fault.
+
+Three sharper measures already exist:
+
+- **`check_update_captured`** — of the files that changed between N and N+x, the share sitting in a
+  subsystem whose document was also updated. Directly measures whether the update noticed the change.
+- **Post-update drift** — running `drift` after the update should report close to nothing. A fresh
+  disagreement is an update that did not land.
+- **`update_quality`** — the judged criterion that only appears on a second run. Its 3-anchor names the
+  failure worth hunting: *"new material was added but old material was not removed, so the document now
+  describes two systems at once."* An artifact that only ever grows looks complete and describes a system
+  that no longer exists.
+
+Gate on those; report the overall score as context.
+
+### Status
+
+**Built and never run.** `check_update_captured` exists and is tested, but `do_score` only calls it when
+passed a set of changed files and nothing passes one — the `score` subcommand has no flag for it.
+`update_quality` renders only with `--second-run`. Both are waiting on the two-revision loop (§8), which
+still refuses to execute. Wiring the changed-file set from a `git diff` between the two revisions is a
+small piece of work and unblocks the rest.
+
+## 17. The evaluation ledger
+
+One table, one row per evaluation run, so that results accumulate into a record rather than a pile of
+files. CSV, in the evaluation data repository, alongside the runs it indexes.
+
+### What a row must carry
+
+The scores are the least interesting part. What makes two rows comparable are the inputs:
+
+| Column | Why it is there |
+|---|---|
+| `run_id` | primary key |
+| `date` | |
+| `archagent_commit` | the tool version under evaluation |
+| `target_url`, `target_commit` | a target is a repository *at a revision* |
+| `target_fresh` | whether this target had ever been used before |
+| `run_kind` | `calibration` or `scoring` (§12) |
+| `generating_agent`, `generating_model` | **likely the largest single source of variance** |
+| `judge_model` | a judge is not interchangeable with another judge |
+| `rubric_version` | criteria and briefs change; two means from different briefs are not comparable |
+| `replicate_id` | which repeat of an identical configuration this is — this is where the noise floor lives |
+| `blinding` | what the reviewer could see: the other scores, the defect list, the artifact's author |
+| `deterministic_score`, `judged_mean`, `judged_scored`, `judged_answered` | §9; the last two because a mean over a fraction of a review is not a score of the artifact |
+| `recurrence_pass`, `recurrence_total` | §13 |
+| `checklist_correct`, `checklist_wrong`, `checklist_absent` | §14 |
+| `predecessor_run_id` | set on the second run of an update pair (§16) |
+| `notes` | free text, including any deviation from the pre-registered procedure |
+
+Two of these are corrections of an earlier design rather than obvious additions. Without
+`generating_model`, `judge_model` and `rubric_version`, two rows cannot be compared at all — the first two
+calibration rounds already used different briefs, so their means were never comparable and nothing recorded
+that. And without `replicate_id` there is nowhere to put the runs that establish the noise floor, which is
+the measurement everything in §15 depends on.
+
+### Updates are a relation, not extra columns
+
+An update evaluation is two runs plus a link between them. Modelling it as a second set of columns on one
+row leaves most of the table empty and cannot express a chain longer than two. `predecessor_run_id` on an
+ordinary row handles both, and keeps every run the same shape.
 
 ---
 
-## 13. Closing the loop — feeding results back into prompts and tools
+# Part IV — Discipline and limits
 
-**Status: deferred.** Nothing here gets built until the evaluation itself is proven — the preconditions
-below are not a formality, they are what separates a feedback loop from an amplifier of our own mistakes.
-Recorded now so the earlier sections are built in a shape that admits it later.
+What keeps the process honest, what it still cannot tell us, and what is deliberately not built yet.
 
-The inspiration is *Self-Harnesses: Harnesses That Improve Themselves* (arXiv 2606.09498): mine failure
-patterns from execution traces, propose minimal edits tied to those failures, and accept an edit only if
-regression tests still pass. The regression gate is the piece we already have — golden fixtures plus the
-pinned corpus (§6), which between them catch the failure that matters most, a check quietly *losing* a
-finding rather than producing a wrong one.
-
-**The difference that drives the design.** Self-Harness accepts edits against task pass rates, a metric
-that does not care what any model thinks. Our nearest equivalent for the skill layer is a rubric scored by
-a model. An optimiser pointed at a model-judged score will find judge quirks at least as readily as
-quality, so the acceptance gate cannot be the rubric as a whole.
-
-### 13.1 Preconditions
-
-1. **Noise floor measured** (§8) — no delta can be called an improvement until repeat runs on identical
-   inputs establish the spread.
-2. **Calibration established** (§11) — an agreement rate between judge and person.
-3. **A three-way repository split** — train to propose against, dev to select among proposals, test
-   consulted rarely against a stated budget. Two sets are not enough: proposal *selection* consumes a
-   held-out set as surely as tuning does.
-4. **Regression nets blocking**, not advisory (§6).
-5. **Traces persisted** (§8) — a scorecard is a number; weakness mining needs a record of what happened.
-
-### 13.2 Shape, if built
-
-- **Eligible surfaces: prompts and configuration.** Thresholds stay on the slow loop, because their
-  objective metric is the defect study and its outcome window is months; letting a fast loop tune them
-  re-creates exactly the fit-then-measure failure §7.1 exists to prevent. Changes to check *code* are
-  proposed, never applied automatically.
-- **Two loops at different speeds.** Fast: prompt edits, gated on the deterministic half of §9 plus the
-  ground-truthed dismissals from the label store. Slow: threshold changes, gated on §7. The fast loop's
-  results are re-checked by the slow one periodically.
-- **Acceptance is gated on objective criteria only.** Judged rubric scores may *inform proposals* — they
-  are good at pointing at what is weak — but they never decide acceptance.
-- **Calibration is re-sampled every round.** Agreement between judge and person is conditional on the
-  output distribution it was measured over. An optimiser moves that distribution, so a rate carried
-  forward from before the change may no longer describe anything. Without this the loop can settle in a
-  region where the judge is confidently wrong and nothing says so.
-- **Containment.** The evaluation assets — fixtures, goldens, corpus expectations, the label store — are
-  **read-only to the optimiser**. An agent able to edit both the prompt and the test will improve the
-  score. Accepted edits land as a branch with provenance (which run, which failure it answers, before and
-  after on each gate), never straight onto the main line — the same stance archagent takes toward its own
-  findings.
-- **Stopping rule.** No acceptance when the delta sits inside the noise floor.
-
-### 13.3 The deterministic criteria need an adversarial reading first
-
-Being machine-checkable does not make a criterion safe to optimise against. Two from §9 that are already
-gameable:
-
-- **Coverage** — the share of files claimed by some subsystem's `**Covers:**` — is maximised by writing
-  `**Covers:** src/**` in one document. Perfect score, no architecture described.
-- **Drift near zero after describe** is maximised by writing documents vague enough that nothing can
-  contradict them.
-
-Both are fine as *diagnostics* and dangerous as *targets*. Before any criterion becomes an acceptance
-gate, it gets read adversarially — what is the laziest change that maximises this? — and either paired
-with a counter-criterion or left out of the gate.
-
----
-
-## 13a. Overfitting to the repository in front of you
+## 18. Avoiding overfitting to the repository in front of you
 
 Every evaluation round ends with a list of defects and a temptation: fix each one. Some of those fixes
 generalise and some encode one repository's shape into the tool, and the two are hard to tell apart while
@@ -751,7 +936,7 @@ evaluate it".
 
 ---
 
-## 14. Threats to validity
+## 19. Threats to validity
 
 Written down because they are easy to forget once numbers exist.
 
@@ -768,14 +953,238 @@ Written down because they are easy to forget once numbers exist.
 - **Goodhart.** Once the rubric exists, prompts will be tuned to it — by hand well before any optimiser
   exists. Keep some criteria out of the prompts, re-read the rubric when scores rise without the output
   visibly improving, and read every deterministic criterion adversarially before it gates anything
-  (§13.3 shows two from §9 that are trivially gameable).
+  (§20.3 shows two from §9 that are trivially gameable).
 - **Held-out decay through selection.** Choosing among candidate changes on the held-out set spends it,
-  even though nothing was "tuned" on it. §13.1 answers this with a three-way split and a consultation
+  even though nothing was "tuned" on it. §20.1 answers this with a three-way split and a consultation
   budget; until then, the held-out set is looked at rarely and each look is recorded.
 
 ---
 
-## 15. Build order — and where it stands
+## 20. Closing the loop — feeding results back into prompts and tools
+
+**Status: deferred.** Nothing here gets built until the evaluation itself is proven — the preconditions
+below are not a formality, they are what separates a feedback loop from an amplifier of our own mistakes.
+Recorded now so the earlier sections are built in a shape that admits it later.
+
+The inspiration is *Self-Harnesses: Harnesses That Improve Themselves* (arXiv 2606.09498): mine failure
+patterns from execution traces, propose minimal edits tied to those failures, and accept an edit only if
+regression tests still pass. The regression gate is the piece we already have — golden fixtures plus the
+pinned corpus (§6), which between them catch the failure that matters most, a check quietly *losing* a
+finding rather than producing a wrong one.
+
+**The difference that drives the design.** Self-Harness accepts edits against task pass rates, a metric
+that does not care what any model thinks. Our nearest equivalent for the skill layer is a rubric scored by
+a model. An optimiser pointed at a model-judged score will find judge quirks at least as readily as
+quality, so the acceptance gate cannot be the rubric as a whole.
+
+### 20.1 Preconditions
+
+1. **Noise floor measured** (§8) — no delta can be called an improvement until repeat runs on identical
+   inputs establish the spread.
+2. **Calibration established** (§11) — an agreement rate between judge and person.
+3. **A three-way repository split** — train to propose against, dev to select among proposals, test
+   consulted rarely against a stated budget. Two sets are not enough: proposal *selection* consumes a
+   held-out set as surely as tuning does.
+4. **Regression nets blocking**, not advisory (§6).
+5. **Traces persisted** (§8) — a scorecard is a number; weakness mining needs a record of what happened.
+
+### 20.2 Shape, if built
+
+- **Eligible surfaces: prompts and configuration.** Thresholds stay on the slow loop, because their
+  objective metric is the defect study and its outcome window is months; letting a fast loop tune them
+  re-creates exactly the fit-then-measure failure §7.1 exists to prevent. Changes to check *code* are
+  proposed, never applied automatically.
+- **Two loops at different speeds.** Fast: prompt edits, gated on the deterministic half of §9 plus the
+  ground-truthed dismissals from the label store. Slow: threshold changes, gated on §7. The fast loop's
+  results are re-checked by the slow one periodically.
+- **Acceptance is gated on objective criteria only.** Judged rubric scores may *inform proposals* — they
+  are good at pointing at what is weak — but they never decide acceptance.
+- **Calibration is re-sampled every round.** Agreement between judge and person is conditional on the
+  output distribution it was measured over. An optimiser moves that distribution, so a rate carried
+  forward from before the change may no longer describe anything. Without this the loop can settle in a
+  region where the judge is confidently wrong and nothing says so.
+- **Containment.** The evaluation assets — fixtures, goldens, corpus expectations, the label store — are
+  **read-only to the optimiser**. An agent able to edit both the prompt and the test will improve the
+  score. Accepted edits land as a branch with provenance (which run, which failure it answers, before and
+  after on each gate), never straight onto the main line — the same stance archagent takes toward its own
+  findings.
+- **Stopping rule.** No acceptance when the delta sits inside the noise floor.
+
+### 20.3 The deterministic criteria need an adversarial reading first
+
+Being machine-checkable does not make a criterion safe to optimise against. Two from §9 that are already
+gameable:
+
+- **Coverage** — the share of files claimed by some subsystem's `**Covers:**` — is maximised by writing
+  `**Covers:** src/**` in one document. Perfect score, no architecture described.
+- **Drift near zero after describe** is maximised by writing documents vague enough that nothing can
+  contradict them.
+
+Both are fine as *diagnostics* and dangerous as *targets*. Before any criterion becomes an acceptance
+gate, it gets read adversarially — what is the laziest change that maximises this? — and either paired
+with a counter-criterion or left out of the gate.
+
+---
+
+## 21. Out of scope
+
+- **Any runtime dependency on an issue tracker.** Defect data belongs to the harness, not the tool.
+- **Modifying the local test-repository checkouts.** They are the measurement baseline; evaluations work in
+  temporary clones and leave them untouched.
+- **Human-subject studies.** Everything here is judged by code, by public history, or by a model.
+- **Benchmarking against other tools.** Interesting later; it needs a shared task definition we don't have.
+- **Optimising for a paper.** The evidence should be publishable if we want it to be, but no evaluation is
+  chosen because it would look good in one.
+
+---
+
+---
+
+# Appendices
+
+Operational detail: current status, what we build versus adopt, where the outputs live, and what order to
+build in. None of it is needed to understand the method.
+
+## Appendix A — Where this stands
+
+*Current as of 2026-08-15. This is the only part of the document that goes stale by design.*
+
+### What has evidence
+
+**L1, the deterministic signals — partial.** The held-out defect study (§7) ran four times, each
+pre-registered, and three of four adequately-powered repositories show that files flagged as
+change-prone-and-complex go on to accumulate significantly more defect-fixing commits than churn-matched
+controls, across two languages and three architectures. Record with every deviation:
+`docs/evaluations/defect-study/RESULTS.md`. Two limits on quoting it: magnitudes are **not comparable
+across repositories**, because the rate ratio partly tracks how concentrated defect fixes are; and every
+attempt on a *small* repository was underpowered, so nothing here speaks to those.
+
+**Group F has precision data**, from 19 independently labelled findings — 89% for
+`scattered-source-of-truth`, 60% strict / 90% lenient for `enum-value-escape`, intervals roughly ±25
+points. One reviewer, and 17 of the 19 findings from one repository.
+
+**Everything else has none.** Of roughly 19 signals, three have evidence. Groups A, B, C and D — about 16
+signals — have **zero labelled findings**, and this is structural rather than an oversight: those signals
+read `**Service:**`, `**Tier:**` and `**Connects:**` from subsystem documents, and no corpus repository has
+an artifact at all. They cannot fire on the corpus however many repositories are added to it. Splitting
+that problem is an open item: synthetic injection into the fixture repos would give recall cheaply,
+precision still needs real repositories carrying real artifacts.
+
+**L2, the artifact quality — one agreement number.** Calibration round 2 (obstudio) produced the first:
+exact agreement 2/6, within one point 6/6, human mean 4.00 against a model judge's 3.67. On n=6 over one
+artifact the within-one figure is the only one worth reading. Both scorings were evidenced — no fabricated
+citations, unlike round 1 — but the judge found six defects the human did not, including the strongest of
+the round. Full write-up: `docs/evaluations/selfeval/obstudio/CALIBRATION.md`.
+
+### What is built and not yet running
+
+| Piece | State |
+|---|---|
+| deterministic rubric (§9.1) | works today; no agent, no model |
+| judged rubric (§9.2) | works; one agreement number, still uncalibrated for practical purposes |
+| spot-check worksheet + label store (§11) | works; holds 19 labels |
+| blind comparison (§10) | objective half works; generating the arms needs other sessions |
+| recurrence suite (§13) | **designed, not built** — nine confirmed obstudio defects are the seed |
+| per-repository checklists (§14) | **designed, not built** |
+| the ledger (§17) | **designed, not built** |
+| update evaluation (§16) | machinery built, never run; blocked on the two-revision loop |
+| noise floor (§15) | **not measured** — this blocks the acceptance gate as written |
+
+### The binding constraint
+
+It has moved. It used to be the empty label store; that is no longer true. **It is now the noise floor.**
+Three of the acceptance rules in §15 contain the word "significant", and none of them can be evaluated
+until we know how far a score moves between identical runs. Nothing downstream — accepting a subjective
+change, gating an update, comparing two releases — can be operated as written until that number exists.
+
+### A pattern worth recording, because it recurred seven times
+
+Every serious defect found while building this was a **silent failure** — a condition that rendered as a
+plausible clean result rather than an error: a timed-out history walk read as a repository with no commits;
+an outcome walk read as a year with no defects; a corrupt clone read as an empty history; a bounded history
+run against an unbounded tree; a cached profile learned from after the cutoff; a review parser that
+discarded five of six scores and reported the sixth as the artifact's score; and `check` printing "All
+invariants hold" having checked none of eight. None produced a stack trace. Each was caught by a
+consistency check — one number beside another that could not both be true — rather than by code failing.
+Budget for the guards accordingly; they have caught more than the tests have.
+
+### Two things deliberately not automated
+
+`selfeval run` refuses rather than invoking an agent, because comparing two scorecards is meaningless until
+a repeat run establishes how much of a difference is agent variance. `blindcomp` refuses to generate its
+own arms, because one session writing its own guidance's output and then grading it measures
+self-preference. In both cases a working-looking implementation was available and would have produced
+numbers worth less than nothing.
+
+## Appendix B — Tooling: what we build and what we adopt
+
+The judged half of §9 needs the usual scaffolding around an LLM judge: prompt construction, score
+extraction against a schema, retries, thresholds, caching (judge calls are the slow, expensive part), and
+some way to combine machine-checkable gates with judged criteria in one score.
+
+**DeepEval is the candidate on the table** for that, as a dev/test dependency only. Two things fit well.
+Its `DAG` metric — a graph-based judge builder with deterministic branching and model calls at the leaves —
+is close to the shape §9 already has, where a failed ADL conformance check should short-circuit the whole
+score rather than be averaged with a prose rating. And it is pytest-shaped, which matches the suite we
+already run.
+
+Two things fit badly. Its metric catalogue (answer relevancy, faithfulness, contextual recall) assumes a
+query → answer → context triple, which an architecture artifact judged against a codebase is not; we would
+use `G-Eval` and `DAG` and none of the rest, and its `LLMTestCase` shape would mean stuffing a document set
+into `actual_output`. Shoehorning tends to drag what gets measured toward what the framework represents
+easily, and criteria like "would this invariant catch a violation someone might plausibly commit" resist
+that shape. Separately, the annotation and persistence features are the hosted product, whereas the label
+store of §11 is deliberately a local, versioned, diffable file — the most distinctive part of this design
+is the part such a framework least supports without its platform.
+
+**Decision: not yet, and not ruled out.** Build order items 1–3 have no model in the loop, so nothing there
+would use it. At item 4, build one rubric criterion **twice** — hand-rolled and with `DAG` — and compare
+effort and output. That is a day's work and settles the question with evidence.
+
+Two rules that hold either way:
+
+- **No evaluation dependency enters the shipped package.** Everything here lives in the dev/test group;
+  `archagent` keeps running with nothing but a git repository.
+- **The judge sits behind a thin interface, and the scorecard schema is ours.** Whatever produces a score,
+  the stored shape does not change, so the trial is cheap to reverse and results stay comparable across a
+  tooling switch.
+
+**A caution about the stack.** There is a lot of model judgement piled up here — a model-judged framework
+scoring a model-written report about a tool whose findings a model acts on. §11 is the only thing anchoring
+that to a human, and no framework supplies it. Adopting one should not create the impression that the
+calibration problem has been handled.
+
+---
+
+## Appendix C — Where the data and the write-ups live
+
+Evaluation **data** moved to a separate private repository,
+[BenedatLLC/archagent-evaluations](https://github.com/BenedatLLC/archagent-evaluations); the **write-ups**
+stayed in `docs/evaluations/`. The split is by kind, not by size: a number without its reasoning is
+unreadable, and a write-up separated from its evidence is untrustworthy, so each document states its
+conclusions here and cites the data repo by path.
+
+The reason is trajectory rather than present size. At the move the data was 1.0 MB across 55 files, which
+is nothing; but every defect-study run adds a per-repo flagged-file dump (kibana's is 143 KB) and every
+calibration round adds a whole generated artifact (obstudio's is 20 documents). A tool repository that
+accumulates its own measurement history without bound becomes hard to clone and harder to read.
+
+Two properties make this safe rather than merely tidy:
+
+- **The test suite does not read it.** All 451 tests pass with the data repository absent. Only the
+  regression fixtures under `tests/corpus/` and `tests/golden/` (44 KB, 5 files) are load-bearing, and
+  those are inputs to tests rather than outputs of runs.
+- **Scripts resolve their output root** through `scripts/evalhome.py`: `$ARCHAGENT_EVAL_HOME`, else a
+  sibling `../archagent-evaluations/` checkout, else a gitignored `./evaluations/`. A fresh clone with no
+  data repository still runs, and its output cannot land in git by accident.
+
+It is private because it analyses third-party repositories and frames findings as defects — including a
+security-relevant claim about litellm. Publishing that is a decision to take deliberately, not a
+side effect of where a file sits.
+
+---
+
+## Appendix D — Build order
 
 | # | item | state |
 |---|---|---|
@@ -806,40 +1215,3 @@ Written down because they are easy to forget once numbers exist.
 
 ---
 
-## 16. Out of scope
-
-- **Any runtime dependency on an issue tracker.** Defect data belongs to the harness, not the tool.
-- **Modifying the local test-repository checkouts.** They are the measurement baseline; evaluations work in
-  temporary clones and leave them untouched.
-- **Human-subject studies.** Everything here is judged by code, by public history, or by a model.
-- **Benchmarking against other tools.** Interesting later; it needs a shared task definition we don't have.
-- **Optimising for a paper.** The evidence should be publishable if we want it to be, but no evaluation is
-  chosen because it would look good in one.
-
----
-
-## 17. Where the data lives (2026-08-02)
-
-Evaluation **data** moved to a separate private repository,
-[BenedatLLC/archagent-evaluations](https://github.com/BenedatLLC/archagent-evaluations); the **write-ups**
-stayed in `docs/evaluations/`. The split is by kind, not by size: a number without its reasoning is
-unreadable, and a write-up separated from its evidence is untrustworthy, so each document states its
-conclusions here and cites the data repo by path.
-
-The reason is trajectory rather than present size. At the move the data was 1.0 MB across 55 files, which
-is nothing; but every defect-study run adds a per-repo flagged-file dump (kibana's is 143 KB) and every
-calibration round adds a whole generated artifact (obstudio's is 20 documents). A tool repository that
-accumulates its own measurement history without bound becomes hard to clone and harder to read.
-
-Two properties make this safe rather than merely tidy:
-
-- **The test suite does not read it.** All 451 tests pass with the data repository absent. Only the
-  regression fixtures under `tests/corpus/` and `tests/golden/` (44 KB, 5 files) are load-bearing, and
-  those are inputs to tests rather than outputs of runs.
-- **Scripts resolve their output root** through `scripts/evalhome.py`: `$ARCHAGENT_EVAL_HOME`, else a
-  sibling `../archagent-evaluations/` checkout, else a gitignored `./evaluations/`. A fresh clone with no
-  data repository still runs, and its output cannot land in git by accident.
-
-It is private because it analyses third-party repositories and frames findings as defects — including a
-security-relevant claim about litellm. Publishing that is a decision to take deliberately, not a
-side effect of where a file sits.

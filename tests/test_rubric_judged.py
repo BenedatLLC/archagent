@@ -89,7 +89,7 @@ def test_the_mean_ignores_discarded_scores():
 
 
 def test_a_review_carries_its_own_uncalibrated_caveat():
-    """§13.2: judged scores inform proposals and never gate a decision. The record says so itself, so a
+    """§20.2: judged scores inform proposals and never gate a decision. The record says so itself, so a
     number cannot be quoted apart from the caveat."""
     d = review_from(_filled(prose=(5, "architecture/a.md:1", "clear")), "demo", "v1", "judge").to_dict()
     assert d["calibrated"] is False

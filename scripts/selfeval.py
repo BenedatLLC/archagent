@@ -124,7 +124,7 @@ def do_judged(path: Path, review: Path, by: str) -> None:
         print(f"  NOT A SCORE OF THE ARTIFACT: {answered - kept} of {answered} criteria were discarded, "
               f"so this mean\n  describes the part that survived, not the artifact")
     print(f"  [uncalibrated] no agreement with a human reviewer has been measured for these criteria,")
-    print(f"  so this number has unknown meaning and gates nothing (design §11, §13.2)")
+    print(f"  so this number has unknown meaning and gates nothing (design §11, §20.2)")
     print(f"\n  written to {dest}")
 
 

@@ -129,7 +129,7 @@ learned from the git history, and family A needs `**Service:**` on two subsystem
 single process with no services at all. The check claimed to measure whether the *artifact* was
 under-specified and was partly measuring the *repository*. Fixing it moved the score from 0.963 to 1.0.
 
-That is precisely the §13.3 hazard — a criterion becomes a target once someone optimises against it — with
+That is precisely the §20.3 hazard — a criterion becomes a target once someone optimises against it — with
 the twist that here the optimiser and the rubric author are the same. The reasoning holds on its merits
 (the alternative fix was to declare fictional services in `deployment.md`, which is writing a false
 document to raise a score) but the conflict of interest is real and the change should be read with it in
@@ -153,7 +153,7 @@ a ranking.
 
 **Nothing yet.** 3.0 is one review by one reviewer whose evidence was wrong in every instance it was
 checked. That is not agreement data; it is a demonstration that the rubric could not previously tell a
-grounded review from an ungrounded one. The criteria remain uncalibrated and gate nothing (§13.2).
+grounded review from an ungrounded one. The criteria remain uncalibrated and gate nothing (§20.2).
 
 The findings calibration (`docs/evaluations/labels/CALIBRATION.md`) reached 68% agreement and concluded *a
 verdict reached from the finding's summary is not a verdict*. The same rule turns out to hold one level

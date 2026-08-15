@@ -113,7 +113,7 @@ Practical reading, pending more rounds:
 - **`prose` and `diagrams` remain unresolved.** They are where the two split, and the split is not random:
   the human rated both 5 while holding a mistaken verification of a diagram edge. A high interpretive score
   can rest on a check that did not hold.
-- **Scores still gate nothing** (design §13.2), and both records carry that caveat.
+- **Scores still gate nothing** (design §20.2), and both records carry that caveat.
 
 ## Limits
 

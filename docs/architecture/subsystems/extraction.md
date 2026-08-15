@@ -54,6 +54,11 @@ compared against rather than in the fact itself.
 **Regex and AST, never execution.** "Static" here means no import of the target code, so scanning a
 repository can never run it.
 
+**The dangerous spelling is not the obvious one.** `originscan` looks for a wildcard origin, but also for
+the header *echoing the request's own `Origin` back* — which is more permissive than `*`, because browsers
+reject a wildcard when credentials are sent, so reflection is the form that actually allows a cross-origin
+read of an authenticated response. It contains no star, so a wildcard-only scan sees nothing.
+
 **`originscan` is the one scanner not bound to the configured languages.** Every other extractor needs a
 parser and so only sees `languages` from `archagent.toml`; this one is a literal search for a handful of
 spellings that works the same anywhere. It reads Go, which archagent otherwise cannot analyse — which is

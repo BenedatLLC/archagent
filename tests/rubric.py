@@ -4,7 +4,7 @@ Half the rubric is machine-checkable and half needs judgement. This is the machi
 reproducible, and impossible to talk into a good score. It is useful on its own — it needs no agent and no
 model — and it is what the judged half will later be calibrated against.
 
-**Every graded criterion is paired with a counter-criterion.** §13.3 requires this, and the two examples
+**Every graded criterion is paired with a counter-criterion.** §20.3 requires this, and the two examples
 it gives are both live here:
 
 - *Coverage* — the share of files claimed by some subsystem — is maximised by writing `**Covers:** src/**`
@@ -366,7 +366,7 @@ def check_evaluate_coverage(root: Path) -> Check:
       young repository permanently.
     - Family A needs `**Service:**` on two or more subsystems. On a single-process tool there are no
       services, and declaring some to satisfy the rubric would be writing a false document to raise a
-      score. That is the §13.3 failure mode arriving through the front door.
+      score. That is the §20.3 failure mode arriving through the front door.
 
     Excused families are named in the detail rather than dropped silently, because "not applicable here"
     and "we chose not to measure it" must not look the same to a reader.

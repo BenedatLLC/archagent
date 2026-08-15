@@ -18,7 +18,7 @@ readily.
 half of that calibration has been done and produced a sobering number: 68% agreement between an
 independent reviewer and the person who built the checks, with errors in *both* directions. Until the
 equivalent exists for these criteria, a judged score is reported with that caveat attached and never
-gates anything (§13.2).
+gates anything (§20.2).
 """
 
 from __future__ import annotations
