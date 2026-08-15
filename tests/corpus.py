@@ -138,6 +138,30 @@ def _rev_present(clone: Path, rev: str) -> bool:
         return False
 
 
+ARTIFACTS = HERE / "corpus" / "artifacts"
+
+
+def _install_artifact(root: Path, entry: dict) -> bool:
+    """Copy this entry's minimal artifact into the worktree, if it has one.
+
+    Groups A, B and B/C read `**Service:**`, `**Tier:**` and `**Connects:**` from subsystem documents, so
+    on a repository with no artifact they cannot fire at all — adding a service-shaped repository does not
+    change that (issue #9). A hand-written metadata-only artifact is what makes them measurable.
+
+    The bias is real and is stated in `corpus/artifacts/<name>/README.md`: declaring the architecture
+    declares what the layering signals compare against. That is acceptable here only because this corpus
+    asks "did the output change?" and never "is the output right?".
+    """
+    src = ARTIFACTS / entry["name"]
+    if not src.is_dir():
+        return False
+    dest = root / "architecture"
+    if dest.exists():
+        shutil.rmtree(dest)
+    shutil.copytree(src, dest)
+    return True
+
+
 def _write_config(root: Path, entry: dict) -> None:
     paths = entry.get("paths", {})
     langs = ", ".join(f'"{lang}"' for lang in paths)
@@ -162,6 +186,7 @@ def run_entry(entry: dict, work: Path) -> dict:
     _git(clone, "worktree", "add", "--detach", str(work), entry["rev"])
     try:
         _write_config(work, entry)
+        _install_artifact(work, entry)
         # `--as-of` from the revision itself: the tree is checked out to match, so the history window and
         # the file contents describe the same moment and no mismatch warning should appear.
         until = _git(clone, "log", "-1", "--format=%cI", entry["rev"])

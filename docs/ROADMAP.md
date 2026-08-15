@@ -61,7 +61,13 @@ Open items from that design, in the order they unblock things:
   value and threshold. The first non-thin verdicts: `MIN_LOC = 30` clean, `PCTILE_BAR = 0.75` **unranked**
   — no repository pins it and nothing prefers it to its neighbours either. Ranking it needs precision
   labels across the sweep, which the corpus does not have.
-- [ ] **Groups A–D have no evidence and the corpus cannot produce any** — they read declared metadata no
+- [x] **The corpus can now exercise groups A/B/C.** Added `fastapi-template` (five compose services,
+  Python + TypeScript, 17 state-changing routes) *and* the mechanism that was actually blocking it: a
+  corpus entry may carry a hand-written metadata-only artifact, because those families read declared
+  `**Service:**`/`**Tier:**`/`**Connects:**` and no corpus repo had any. Inactive families on that entry
+  went from five to one, and it produced the corpus's first group B finding.
+- [ ] **Groups A–D still have no *precision* evidence** — the corpus says whether output changed, never
+  whether it was right — they read declared metadata no
   corpus repo has. Split proposed: synthetic injection for recall, artifact-bearing repos for precision.
   See [#9](https://github.com/BenedatLLC/archagent/issues/9).
 

@@ -1,0 +1,71 @@
+{
+  "findings": [
+    {
+      "sign": "implicit-coupling",
+      "group": "B",
+      "severity": "high",
+      "confidence": "med",
+      "regime": "history",
+      "subjects": [
+        "backend-api",
+        "backend-data"
+      ],
+      "values": null
+    },
+    {
+      "sign": "change-prone-file",
+      "group": "E",
+      "severity": "med",
+      "confidence": "med",
+      "regime": "history",
+      "subjects": [
+        "frontend/src/components/UserSettings/ChangePassword.tsx"
+      ],
+      "values": null
+    },
+    {
+      "sign": "change-prone-file",
+      "group": "E",
+      "severity": "med",
+      "confidence": "med",
+      "regime": "history",
+      "subjects": [
+        "frontend/src/components/UserSettings/UserInformation.tsx"
+      ],
+      "values": null
+    },
+    {
+      "sign": "change-prone-file",
+      "group": "E",
+      "severity": "med",
+      "confidence": "med",
+      "regime": "history",
+      "subjects": [
+        "frontend/src/components/Admin/EditUser.tsx"
+      ],
+      "values": null
+    },
+    {
+      "sign": "change-prone-file",
+      "group": "E",
+      "severity": "med",
+      "confidence": "med",
+      "regime": "history",
+      "subjects": [
+        "frontend/src/routes/login.tsx"
+      ],
+      "values": null
+    }
+  ],
+  "inactive": [
+    "E \u2014 bug-fix weighting"
+  ],
+  "truncated": [],
+  "history": {
+    "commits_seen": 1106,
+    "commits_analyzed": 110,
+    "profile_style": "none",
+    "fix_matched": 0,
+    "subjects_sampled": 1106
+  }
+}

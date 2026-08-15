@@ -38,3 +38,16 @@ name = "openhands"
 url = "https://github.com/All-Hands-AI/OpenHands"
 rev = "cloud-1.47.1"
 paths = { python = ["openhands", "enterprise"], ts = ["frontend/src"] }
+
+# Service-shaped, added for issue #9. Every other entry is a library, framework or CLI, chosen when the
+# checks needed only source and history — so the corpus could not exercise anything about deployment
+# shape or exposure. This one ships five compose services (db, adminer, prestart, backend, frontend),
+# a real HTTP surface with 17 state-changing routes, and both languages archagent parses.
+#
+# It is not a held-out repository and makes no independence claim: like the rest of this file it exists
+# to answer "did the output change?", never "is the output right?".
+[[repo]]
+name = "fastapi-template"
+url = "https://github.com/fastapi/full-stack-fastapi-template"
+rev = "0.9.0"
+paths = { python = ["backend/app"], ts = ["frontend/src"] }

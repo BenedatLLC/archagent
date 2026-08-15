@@ -270,6 +270,25 @@ expectation skips — and skips *before* any network work, so declaring a reposi
 someone records it. Each clone is hundreds of megabytes, and a harness that pulls five of them to then
 skip three is one nobody runs.
 
+### An entry may carry a minimal artifact
+
+Groups A, B and B/C read `**Service:**`, `**Tier:**` and `**Connects:**` from subsystem documents. Every
+corpus repository was evaluated from `archagent.toml` alone, so those families could not fire on any of
+them — not rarely, *structurally*. Adding a service-shaped repository did not change it: five compose
+services and seventeen state-changing routes still produced `A`, `B`, `B/C` and `B — subsystem co-change`
+all inactive.
+
+An entry may therefore ship a hand-written, metadata-only artifact under
+`tests/corpus/artifacts/<name>/`, copied into the worktree before `evaluate` runs. On the same repository
+that changed the inactive list from five families to one, and produced the first group B finding the
+corpus has ever contained.
+
+**The bias is real and is stated in each artifact's own README.** Declaring the architecture declares what
+the layering signals compare against, so these findings are not evidence that archagent describes the
+system correctly. That is tolerable here for one reason only: this corpus asks *"did the output change?"*
+and never *"is the output right?"* An artifact written by us is a legitimate input to the first question
+and would be worthless for the second.
+
 ### What "read and re-recorded deliberately" means
 
 A baseline is ~1000 lines of JSON, so a raw diff is unreadable and would be rubber-stamped. Three
