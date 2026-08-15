@@ -53,6 +53,12 @@ Open items from that design, in the order they unblock things:
 - [ ] **The evaluation ledger** (§17). One row per run, carrying the variance sources, not just scores.
 - [ ] **Wire the update path** (§16). `check_update_captured` and `update_quality` are built and have
   never run; they need the changed-file set from a `git diff` between the two revisions.
+- [x] **Leave-one-out threshold sensitivity** (§18) — `scripts/thresholds.py`. Reports whether a
+  threshold's value is held in place by a single repository, and distinguishes that from *unconstrained*
+  (nothing responds) and *thin* (too few findings to say). First run:
+  `docs/evaluations/thresholds/RESULTS.md` — three thresholds pinned, all thin, `TIGHTNESS` unconstrained.
+- [ ] **Sweep `PCTILE_BAR` and `MIN_LOC`** with the same instrument. They need mined churn, so the sweep
+  has to cache history across values rather than re-walking per value.
 - [ ] **Groups A–D have no evidence and the corpus cannot produce any** — they read declared metadata no
   corpus repo has. Split proposed: synthetic injection for recall, artifact-bearing repos for precision.
   See [#9](https://github.com/BenedatLLC/archagent/issues/9).

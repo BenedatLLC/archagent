@@ -270,6 +270,45 @@ expectation skips — and skips *before* any network work, so declaring a reposi
 someone records it. Each clone is hundreds of megabytes, and a harness that pulls five of them to then
 skip three is one nobody runs.
 
+### What "read and re-recorded deliberately" means
+
+A baseline is ~1000 lines of JSON, so a raw diff is unreadable and would be rubber-stamped. Three
+properties make the re-record a decision rather than a reflex.
+
+**The failure prints a projection, not the JSON.** `summarise_diff` reduces the change to the four things a
+reviewer must judge:
+
+```
+LOST     <sign>  <subject>      appeared before, does not now
+NEW      <sign>  <subject>      appears now, did not before
+CHANGED  <sign>  <subject>      severity / confidence / values / subjects moved
+INACTIVE / TRUNCATED / HISTORY  the coverage report itself changed
+```
+
+`LOST` is why the projection exists. A check quietly *losing* findings renders as a clean run — the
+silent-failure shape that recurs throughout this project (Appendix A) — and in a thousand-line diff it is
+invisible.
+
+**Accepting requires a separate, explicit act.** The failure message names the only way through:
+
+```
+ARCHAGENT_UPDATE_CORPUS=1 uv run pytest -m corpus -k <repo>
+```
+
+There is no auto-update on failure and no `--update-snapshots` convenience. You read the projection, decide
+the diff is what you meant, and then say so with an environment variable. A snapshot test whose baselines
+are refreshed whenever they are inconvenient measures nothing; the gate is only a gate because updating it
+is deliberate.
+
+**The acceptance lands in git.** Re-recording rewrites a committed file, so the decision is reviewable by
+someone else rather than a private judgement that disappears once the test goes green.
+
+The worked example: adding `permissive-origin` produced one `NEW` and zero `LOST` on litellm; the site was
+checked (`from flask_cors import CORS` then `CORS(app)` — genuinely permissive), the finding judged
+correct, the baseline re-recorded, and datasette and django confirmed unchanged. Had it read
+`LOST change-prone-file …`, the correct response would have been the opposite: do not re-record, treat it
+as a regression, find out what stopped firing.
+
 ---
 
 ## 7. Held-out defect study — do the signals predict anything?
@@ -961,10 +1000,29 @@ The point is that re-recording is a deliberate act with a visible diff, which is
 
 ### Two further mechanical controls
 
-**Leave-one-out for numeric thresholds.** Thresholds are where overfitting bites hardest and where a hard
-gate genuinely works: re-fit the threshold with the motivating repository excluded and require the value
-not to move materially. If `PCTILE_BAR` or `COHESION` shifts once one repository is dropped, it was fitted
-to that repository. This is not yet implemented and is the strongest remaining gap in this section.
+**Leave-one-out for numeric thresholds.** Thresholds are where overfitting bites hardest, and here a
+mechanical check genuinely works. **Implemented**: `tests/thresholds.py` + `scripts/thresholds.py`.
+
+It does not re-fit, because there is no fitting objective and inventing one would be worse than the
+judgement it replaced. It answers the narrower, answerable question: *would we have chosen this value if
+one repository had not been in the room?* A filter threshold produces a step function, so any value inside
+a step is equivalent — a **plateau**. Compute the plateau with every repository included, then again with
+each one dropped. A large widening means that repository was the only thing holding the value where it is.
+
+Three verdicts, and the last two matter as much as the first:
+
+- **pinned by R** — dropping R would have let you choose very differently.
+- **unconstrained** — nothing responds to the threshold anywhere in the swept range. That is *not*
+  agreement, and the check prints them differently: a value nobody's output distinguishes is unfalsifiable
+  on this evidence, not endorsed by it.
+- **thin** — the verdict rests on too few findings to mean much. "Pinned by django" on two findings and on
+  two hundred are different claims, and the arithmetic cannot tell them apart, so the report must.
+
+The first run (`docs/evaluations/thresholds/RESULTS.md`) found `COHESION` pinned by django,
+`MIN_FILES_PER_VALUE` by litellm, `MIN_CLUSTER_VALUES` by two — **and every one marked thin**, because the
+corpus produces one or two group-F findings per repository. No threshold should move on that. The
+instrument works; it is blocked on the same corpus gap as everything else. `TIGHTNESS` came back
+unconstrained, which is the one durable result: nobody should cite corpus evidence for that value.
 
 **A computed opportunity denominator.** Before any corpus number is quoted for a check, the count of
 repositories that *could* have produced a finding must be reported alongside it — the measurement in the

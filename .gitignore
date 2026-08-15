@@ -232,3 +232,6 @@ __marimo__/
 # This directory stays as a local working area — scripts write here by default when
 # ARCHAGENT_EVAL_HOME is unset and no sibling checkout exists.
 /evaluations/
+
+# threshold sweep worktrees (regenerated from the corpus cache)
+/.archagent/threshold-trees/
