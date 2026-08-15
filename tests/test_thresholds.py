@@ -154,3 +154,28 @@ def test_plenty_of_findings_is_not_flagged_thin():
         "beta":  [60, 60, 60, 60, 60, 30, 30, 30, 30],
     })
     assert leave_one_out(v).thin == []
+
+
+def test_a_threshold_everything_responds_to_endorses_nothing():
+    """PCTILE_BAR: all three repos' counts change at every step, so the plateau is a single point however
+    many you drop — "not pinned" is then guaranteed by the arithmetic rather than earned. The check asks
+    who holds a value in place, never whether the value is right, and must not read as endorsement."""
+    v = _sweep("PCTILE_BAR", 0.5, {
+        "alpha": [90, 80, 70, 60, 50, 40, 30, 20, 10],
+        "beta":  [45, 40, 35, 30, 25, 20, 15, 10, 5],
+    })
+    verdict = leave_one_out(v)
+    assert verdict.unranked and verdict.pinned_by == []
+    assert "UNRANKED" in verdict.report()
+    assert "no repository is doing the work alone" not in verdict.report()
+
+
+def test_a_genuinely_agreed_value_is_still_reported_as_agreed():
+    """Shared plateaus with a shared step: not unranked, because the value range is actually constrained."""
+    v = _sweep("X", 0.6, {
+        "alpha": [9, 9, 9, 9, 9, 4, 4, 4, 4],
+        "beta":  [6, 6, 6, 6, 6, 3, 3, 3, 3],
+    })
+    verdict = leave_one_out(v)
+    assert not verdict.unranked
+    assert "no repository is doing the work alone" in verdict.report()

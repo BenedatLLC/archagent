@@ -91,6 +91,7 @@ class Verdict:
     silent: list[str] = field(default_factory=list)
     thin: list[str] = field(default_factory=list)      # too few findings to support any verdict
     unconstrained: bool = False                        # nothing in the corpus responds to this threshold
+    unranked: bool = False                             # everything responds, so nothing prefers this value
 
     @property
     def ok(self) -> bool:
@@ -118,7 +119,12 @@ class Verdict:
         if self.thin:
             lines.append(f"  THIN — {', '.join(self.thin)} produce too few findings for a verdict to "
                          f"mean much;\n         read every conclusion here as directional")
-        if self.ok and not self.unconstrained:
+        if self.unranked:
+            lines.append("  UNRANKED — every repository's count changes at every step, so no single one "
+                         "pins the value;\n             equally, nothing here prefers it to its "
+                         "neighbours. This check asks who holds\n             the value in place, never "
+                         "whether the value is right.")
+        elif self.ok and not self.unconstrained:
             lines.append("  -> no repository is doing the work alone")
         return "\n".join(lines)
 
@@ -163,8 +169,12 @@ def leave_one_out(sweep: Sweep, widen_factor: float = 2.0, cliff_min: int = 2,
 
     thin = [r for r in speaking if opportunity[r] < thin_below]
     unconstrained = all(len(set(sweep.counts[r])) == 1 for r in speaking) if speaking else True
+    # every repo moves at every step: the plateau is a single point however many repos you drop, so
+    # "not pinned" is guaranteed rather than informative
+    unranked = (len(speaking) > 1 and not unconstrained
+                and all(_width(without[r]) == 0 for r in speaking) and _width(agreed) == 0)
 
     return Verdict(threshold=sweep.name, chosen=sweep.chosen, agreed=agreed, without=without,
                    opportunity=opportunity, cliff=cliff,
                    pinned_by=pinned, on_a_cliff_for=on_cliff, silent=silent,
-                   thin=thin, unconstrained=unconstrained)
+                   thin=thin, unconstrained=unconstrained, unranked=unranked)

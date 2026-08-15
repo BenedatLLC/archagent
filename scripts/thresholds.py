@@ -82,6 +82,51 @@ def _decisions_counter(trees, key):
     return count
 
 
+def _hotspots_counter(trees, key, entries, mined):
+    """Findings from `find_hotspots` at a given threshold value.
+
+    **The history is mined once per repository and reused across every threshold in the run** — `mined`
+    is owned by the caller for exactly that reason. Mining is the entire
+    cost here — a full `git log --name-only` walk, tens of seconds on a large repository — and it does not
+    depend on the threshold being swept. Re-walking per value would make the sweep quadratic in nothing
+    useful and would tempt whoever ran it into a grid too coarse to see a plateau.
+    """
+    from archagent.cochange import mine_cochange, resolve_as_of
+    from archagent.history import history_profile
+    from archagent.hotspots import find_hotspots
+
+    def churn_of(repo):
+        if repo not in mined:
+            root, files = trees[repo]
+            rev = next(e["rev"] for e in entries if e["name"] == repo)
+            # `until` is a *date*, handed straight to `git log --until=`. Passing the tag produced two
+            # repositories with plausible-looking churn from a malformed date and one with none at all,
+            # and nothing errored. resolve_as_of is what turns a revision into the date it happened on.
+            until = resolve_as_of(root, rev)
+            print(f"    mining {repo} @ {rev} (until {until}) ...", flush=True)
+            profile = history_profile(root, None, use_cache=False, until=until)
+            cc = mine_cochange(root, {}, fix_re=profile.matcher(), until=until)
+            if cc.mining_failed or not cc.file_commits:
+                raise SystemExit(
+                    f"{repo}: mining produced no per-file churn (mining_failed={cc.mining_failed}, "
+                    f"{cc.commits_seen} commit(s) seen). Every hotspot threshold would then report zero "
+                    f"findings at every value, and the sweep would record that as a repository with "
+                    f"nothing to say — a silent wrong answer rather than an error. Fix the clone or the "
+                    f"window before trusting any number here.")
+            mined[repo] = (cc.file_commits, cc.file_fix_commits)
+            print(f"      {len(cc.file_commits)} file(s) with churn from "
+                  f"{cc.commits_seen} commit(s) seen", flush=True)
+        return mined[repo]
+
+    def count(repo, value):
+        root, files = trees[repo]
+        churn, fix_churn = churn_of(repo)
+        kw = {key: int(value) if key == "min_loc" else value}
+        return len(find_hotspots(root, files, churn, fix_churn, **kw))
+
+    return count
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--only", help="one threshold name")
@@ -109,11 +154,24 @@ def main() -> None:
         ("MIN_FILES_PER_VALUE", float(MIN_FILES_PER_VALUE), [2.0, 3.0, 4.0, 5.0, 6.0], "min_files"),
         ("MIN_CLUSTER_VALUES", float(MIN_CLUSTER_VALUES), [2.0, 3.0, 4.0, 5.0, 6.0], "min_values"),
     ]
+    from archagent.hotspots import MIN_LOC, PCTILE_BAR
+
+    specs += [
+        ("PCTILE_BAR", PCTILE_BAR, [round(0.05 * i, 2) for i in range(10, 20)], "bar"),
+        ("MIN_LOC", float(MIN_LOC), [10.0, 20.0, 30.0, 40.0, 60.0, 80.0, 120.0], "min_loc"),
+    ]
+
+    hotspot_names = {"PCTILE_BAR", "MIN_LOC"}
+    # one mining pass for the whole run, not one per threshold: it is the entire cost and does not
+    # depend on the value being swept
+    mined: dict[str, tuple] = {}
     failures = 0
     for name, chosen, grid, kwarg in specs:
         if args.only and args.only != name:
             continue
-        sweep = measure(name, chosen, grid, _decisions_counter(trees, kwarg), repos)
+        counter = (_hotspots_counter(trees, kwarg, manifest, mined) if name in hotspot_names
+                   else _decisions_counter(trees, kwarg))
+        sweep = measure(name, chosen, grid, counter, repos)
         verdict = leave_one_out(sweep)
         print(verdict.report())
         print("    counts:", {r: sweep.counts[r] for r in repos})

@@ -57,8 +57,10 @@ Open items from that design, in the order they unblock things:
   threshold's value is held in place by a single repository, and distinguishes that from *unconstrained*
   (nothing responds) and *thin* (too few findings to say). First run:
   `docs/evaluations/thresholds/RESULTS.md` — three thresholds pinned, all thin, `TIGHTNESS` unconstrained.
-- [ ] **Sweep `PCTILE_BAR` and `MIN_LOC`** with the same instrument. They need mined churn, so the sweep
-  has to cache history across values rather than re-walking per value.
+- [x] **Sweep `PCTILE_BAR` and `MIN_LOC`.** History is mined once per repository and reused across every
+  value and threshold. The first non-thin verdicts: `MIN_LOC = 30` clean, `PCTILE_BAR = 0.75` **unranked**
+  — no repository pins it and nothing prefers it to its neighbours either. Ranking it needs precision
+  labels across the sweep, which the corpus does not have.
 - [ ] **Groups A–D have no evidence and the corpus cannot produce any** — they read declared metadata no
   corpus repo has. Split proposed: synthetic injection for recall, artifact-bearing repos for precision.
   See [#9](https://github.com/BenedatLLC/archagent/issues/9).

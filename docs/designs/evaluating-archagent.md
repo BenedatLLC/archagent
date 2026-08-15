@@ -1018,11 +1018,23 @@ Three verdicts, and the last two matter as much as the first:
 - **thin** — the verdict rests on too few findings to mean much. "Pinned by django" on two findings and on
   two hundred are different claims, and the arithmetic cannot tell them apart, so the report must.
 
-The first run (`docs/evaluations/thresholds/RESULTS.md`) found `COHESION` pinned by django,
-`MIN_FILES_PER_VALUE` by litellm, `MIN_CLUSTER_VALUES` by two — **and every one marked thin**, because the
-corpus produces one or two group-F findings per repository. No threshold should move on that. The
-instrument works; it is blocked on the same corpus gap as everything else. `TIGHTNESS` came back
-unconstrained, which is the one durable result: nobody should cite corpus evidence for that value.
+A fourth verdict, **unranked**, exists because of the hotspot sweep: when every repository's count changes
+at every step, the plateau is a single point however many repositories you drop, so "not pinned" is
+guaranteed by the arithmetic rather than earned. `PCTILE_BAR = 0.75` reads that way — no repository holds
+it in place, and equally nothing prefers it to 0.70 or 0.80. **This check asks who holds a value where it
+is, never whether the value is right**, and a report that read as endorsement would be the worse error.
+
+First run: `docs/evaluations/thresholds/RESULTS.md`. The four `dupdecide` thresholds came back pinned or
+unconstrained and **all marked thin**, resting on one or two findings per repository — no threshold should
+move on that. The two hotspot thresholds rest on tens to hundreds of findings and are the first
+non-thin verdicts: `MIN_LOC = 30` is clean, `PCTILE_BAR = 0.75` is unranked.
+
+The sweep also found a bug in itself worth recording, because it is the shape this project keeps hitting:
+`until` is handed straight to `git log --until=`, which wants a date, and the sweep passed a tag. Two
+repositories produced plausible churn from a malformed date and one produced none, with no error. It now
+resolves the revision to its commit date and refuses to continue when a repository yields no churn at all
+— otherwise every value reports zero findings and the report records a repository with nothing to say
+rather than a broken measurement.
 
 **A computed opportunity denominator.** Before any corpus number is quoted for a check, the count of
 repositories that *could* have produced a finding must be reported alongside it — the measurement in the
