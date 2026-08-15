@@ -50,4 +50,7 @@ paths = { python = ["openhands", "enterprise"], ts = ["frontend/src"] }
 name = "fastapi-template"
 url = "https://github.com/fastapi/full-stack-fastapi-template"
 rev = "0.9.0"
-paths = { python = ["backend/app"], ts = ["frontend/src"] }
+# `backend`, not `backend/app`: module names are derived from source_paths, so `backend/app` makes
+# `app/api/deps.py` resolve as `api.deps` while the code imports `app.api.deps` — no internal edge
+# then matches and every declared Connects looks stale.
+paths = { python = ["backend"], ts = ["frontend/src"] }

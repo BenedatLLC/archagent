@@ -1,14 +1,131 @@
 {
   "findings": [
     {
-      "sign": "implicit-coupling",
+      "sign": "god-component",
+      "group": "C",
+      "severity": "med",
+      "confidence": "med",
+      "regime": "static",
+      "subjects": [
+        "frontend-app"
+      ],
+      "values": null
+    },
+    {
+      "sign": "cycle-subsystem",
+      "group": "C",
+      "severity": "med",
+      "confidence": "high",
+      "regime": "static",
+      "subjects": [
+        "backend-core",
+        "backend-domain"
+      ],
+      "values": null
+    },
+    {
+      "sign": "layer-inversion",
+      "group": "B",
+      "severity": "high",
+      "confidence": "high",
+      "regime": "static",
+      "subjects": [
+        "backend-core",
+        "backend-domain"
+      ],
+      "values": null
+    },
+    {
+      "sign": "layer-skip",
+      "group": "B",
+      "severity": "med",
+      "confidence": "med",
+      "regime": "static",
+      "subjects": [
+        "backend-http",
+        "backend-core"
+      ],
+      "values": null
+    },
+    {
+      "sign": "layer-skip",
+      "group": "B",
+      "severity": "med",
+      "confidence": "med",
+      "regime": "static",
+      "subjects": [
+        "backend-http",
+        "backend-domain"
+      ],
+      "values": null
+    },
+    {
+      "sign": "layer-inversion",
+      "group": "B",
+      "severity": "high",
+      "confidence": "high",
+      "regime": "static",
+      "subjects": [
+        "backend-ops",
+        "backend-domain"
+      ],
+      "values": null
+    },
+    {
+      "sign": "layer-inversion",
+      "group": "B",
+      "severity": "high",
+      "confidence": "high",
+      "regime": "static",
+      "subjects": [
+        "backend-tests",
+        "backend-domain"
+      ],
+      "values": null
+    },
+    {
+      "sign": "layer-inversion",
+      "group": "B",
+      "severity": "high",
+      "confidence": "high",
+      "regime": "static",
+      "subjects": [
+        "backend-tests",
+        "backend-http"
+      ],
+      "values": null
+    },
+    {
+      "sign": "layer-skip",
+      "group": "B",
+      "severity": "med",
+      "confidence": "med",
+      "regime": "static",
+      "subjects": [
+        "frontend-app",
+        "frontend-client"
+      ],
+      "values": null
+    },
+    {
+      "sign": "unstable-interface",
       "group": "B",
       "severity": "high",
       "confidence": "med",
       "regime": "history",
       "subjects": [
-        "backend-api",
-        "backend-data"
+        "backend-core"
+      ],
+      "values": null
+    },
+    {
+      "sign": "unstable-interface",
+      "group": "B",
+      "severity": "high",
+      "confidence": "med",
+      "regime": "history",
+      "subjects": [
+        "backend-domain"
       ],
       "values": null
     },
@@ -63,7 +180,7 @@
   "truncated": [],
   "history": {
     "commits_seen": 1106,
-    "commits_analyzed": 110,
+    "commits_analyzed": 113,
     "profile_style": "none",
     "fix_matched": 0,
     "subjects_sampled": 1106
