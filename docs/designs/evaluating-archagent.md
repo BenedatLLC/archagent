@@ -735,11 +735,19 @@ no test that proves these correct, which is why they need the procedure below.
 ### The gate for a subjective change
 
 1. **The unit suite and the recurrence suite pass 100%.** Non-negotiable and cheap.
-2. **The recurrence suite shows the specific defect no longer recurs.** This is the evidence *for* the
+2. **The pinned-corpus regression (§6) is run, and any diff is read and re-recorded deliberately.**
+   `pytest -m corpus` — it is deselected by default because it clones over the network, so it does *not*
+   run in an ordinary `pytest` invocation. For a change to a pattern, a threshold, or any matching
+   heuristic this is the control that shows the change did not quietly alter behaviour on repositories
+   nobody was thinking about (§18). A green default run is not evidence of this.
+3. **The recurrence suite shows the specific defect no longer recurs.** This is the evidence *for* the
    change.
-3. **Scoring runs on N targets show no significant decline**, where the targets include at least one fresh
+4. **Scoring runs on N targets show no significant decline**, where the targets include at least one fresh
    repository and **exclude the repository whose evaluation prompted the change**. This is the guard
    against collateral damage.
+5. **The evidence class is recorded** — `bug-with-test`, `independent-instances`, `mechanism` or
+   `single-instance` (§18). A `single-instance` change ships with that limitation stated in the signal's
+   own output rather than silently.
 
 ### Why the burden of proof sits where it does
 
@@ -917,6 +925,65 @@ So: **before quoting a corpus result for a new check, ask how many of those repo
 produced a finding at all.** Report the denominator, not the numerator. The honest statement for this
 signal is "validated on one repository, incidentally correct on a second, and the corpus cannot yet
 evaluate it".
+
+### Make it mechanical: "must not misfire elsewhere", not "must fire elsewhere"
+
+The rules above are judgement. Two of them can be enforced by code, and one tempting rule should not be.
+
+**The tempting one: require a change to fire on a second repository.** It sounds like the obvious control
+and it is the wrong shape. A well-targeted signal *should* be quiet — `permissive-origin` fires on one of
+fourteen corpus repositories and that is correct behaviour, not weak evidence. A "must fire elsewhere" gate
+pressures every pattern toward breadth, which trades precision for a coverage statistic. It also confuses
+firing with being right: a pattern that fires on five repositories with five false positives is worse than
+one that fires once, correctly.
+
+**The dual is the real control, and it already exists.** §6's pinned-corpus regression asserts that the
+complete findings set for each pinned repository is unchanged. Any pattern or threshold change that starts
+firing — or stops firing — anywhere other than the repository that motivated it breaks a baseline and
+produces a diff that has to be read and re-recorded deliberately. That is exactly "this change did not
+quietly alter behaviour on repositories I was not thinking about", and it needs no new machinery.
+
+It works. Adding `permissive-origin` produced:
+
+```
+litellm @ v1.95.0-dev.2 changed:
+  NEW      permissive-origin   cookbook/codellama-server/main.py
+```
+
+**And it was bypassed.** The corpus tests are marked `corpus` and deselected by default because they clone
+over the network, so the ordinary `pytest` run stays green while the gate never executes. The signal was
+built, tested, documented and committed without it ever running. Nothing was wrong with the control; it
+simply was not in the procedure. §15 now lists it explicitly, and the same applies to anyone reading this:
+**a green default test run is not evidence that a matching change is contained.**
+
+The finding above is genuine (that example server does open its origin), so the baseline was re-recorded.
+The point is that re-recording is a deliberate act with a visible diff, which is what makes it a control.
+
+### Two further mechanical controls
+
+**Leave-one-out for numeric thresholds.** Thresholds are where overfitting bites hardest and where a hard
+gate genuinely works: re-fit the threshold with the motivating repository excluded and require the value
+not to move materially. If `PCTILE_BAR` or `COHESION` shifts once one repository is dropped, it was fitted
+to that repository. This is not yet implemented and is the strongest remaining gap in this section.
+
+**A computed opportunity denominator.** Before any corpus number is quoted for a check, the count of
+repositories that *could* have produced a finding must be reported alongside it — the measurement in the
+previous subsection, produced by a script rather than by hand. "One hit in fourteen" and "one hit in the
+two that contain an HTTP server" are different claims, and only the second is evidence.
+
+### Record which kind of evidence a change has
+
+Every accepted change records one of four, and the classification is auditable in review:
+
+| Evidence | Meaning | Example |
+|---|---|---|
+| `bug-with-test` | a regression test fails before and passes after | a glob reported as a missing file |
+| `independent-instances` | the same failure observed in ≥2 unrelated repositories | — |
+| `mechanism` | justified by how the platform works, not by an instance count | CORS is a web-platform behaviour, not one repository's |
+| `single-instance` | one occurrence, no mechanism argument | **a recorded limitation**, which must constrain the signal's confidence and be revisited |
+
+`single-instance` is not a rejection. It is a requirement to say so in the signal's own output, so that a
+reader is not given a `high`-confidence finding backed by one example.
 
 ### The rules
 

@@ -13,6 +13,13 @@ prompted it was in Go, which archagent does not analyse: a tool that could not s
 built for would be worth nothing. The cost is that the patterns are textual and can be fooled; the
 `confidence` field says so per kind.
 
+**Evidence class: `single-instance` + `mechanism`** (design §18). One repository motivated this check and
+one other has ever produced a hit, and twelve of fourteen corpus repositories contain no HTTP server at
+all, so the corpus cannot yet say much about its false-positive rate. What justifies it is mechanism
+rather than instance count: a wildcard or reflected origin is a web-platform behaviour with known
+consequences, not one project's quirk. Confidence is set accordingly — never `high` on the textual
+route evidence alone.
+
 **A permissive origin is not automatically a defect** (issue #8). A public read-only API may want one. The
 question is what else is reachable, which `evaluate` decides by checking whether the service also exposes a
 state-changing route — so this module reports facts and rates nothing.

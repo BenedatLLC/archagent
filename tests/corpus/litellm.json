@@ -986,6 +986,17 @@
         "litellm/types/proxy/management_endpoints/config_overrides.py:11"
       ],
       "values": null
+    },
+    {
+      "sign": "permissive-origin",
+      "group": "D",
+      "severity": "med",
+      "confidence": "low",
+      "regime": "static",
+      "subjects": [
+        "cookbook/codellama-server/main.py"
+      ],
+      "values": null
     }
   ],
   "inactive": [
