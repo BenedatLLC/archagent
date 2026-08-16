@@ -873,6 +873,43 @@ the open rubric, the next calibration finds nothing new and the suite stops grow
 explores, the checklist exploits, and every new defect the open rubric finds becomes a checklist entry for
 the round after.
 
+### As built (2026-08-16)
+
+`tests/checklist.py` and `scripts/checklist.py`, with keys in `<eval-home>/checklists/<target>.toml`.
+Fourteen items each for obstudio and wardrowbe.
+
+```
+python scripts/checklist.py render --target obstudio --artifact architecture --out worksheet.md
+python scripts/checklist.py score worksheet.md --target obstudio
+```
+
+Four decisions the design above left open.
+
+**Items are severity-weighted, and the two numbers are both reported.** An unweighted score treats a false
+security claim and a wrong file count identically. `serious` counts 3, `moderate` 2, `minor` 1, and both
+`accuracy` and `weighted` are printed, because a divergence between them is itself the finding: the same
+score reached by getting the small things right is a different artifact.
+
+**A `wrong` verdict requires a quote from the artifact.** This is the mechanism for the caution above — the
+`wrong`/`absent` boundary. Without it, `wrong` becomes the verdict for anything vague, and a vague artifact
+scores like a lying one. A `wrong` with no quote is *discarded*, counted as neither right nor wrong, and
+reported as discarded.
+
+**A checklist may not be only past defects, and a test enforces it.** The third caution above says the
+suite stops growing if the checklist replaces the open rubric; the same thing happens one level down if the
+checklist is nothing but a defect list. Then its score can only fall, and it measures what §13 already
+measures. At least a quarter of each list must come from reading the code rather than from a finding —
+currently four items each, including the two most architecturally load-bearing facts either target has
+(obstudio's per-process telemetry retention; wardrowbe's arq queue and its retry contract). Neither has
+ever been the subject of a defect.
+
+**Count items are phrased conditionally.** *"If the artifact states a Go file count, is it 57?"* — not
+stating a number is `absent`, not a failure. An unconditional count item rewards an artifact for inventing
+numbers, which is the mechanism behind two of the defects on record.
+
+The scorer refuses one silent failure explicitly: an unanswered worksheet reports `accuracy` as unset
+rather than 1.0, and a skipped item is listed as skipped rather than dropped.
+
 ## 15. Accepting a change
 
 Evaluation produces proposed changes. They are accepted by two different rules, and telling them apart is
