@@ -741,6 +741,42 @@ So the suite covers exactly one class:
 
 Misreading is the residual, and §14 is what covers it.
 
+### As built (2026-08-16)
+
+`tests/recurrence.py` and `scripts/recurrence.py`, with entries in `<eval-home>/recurrence/<target>.toml`.
+Nineteen entries are on record — obstudio's nine and wardrowbe's ten — covering every defect confirmed in
+rounds 2 and 3. `fastapi-template` contributes none: it was a scoring run, so it has a scorecard and no
+review.
+
+```
+python scripts/recurrence.py <artifact-dir> --target wardrowbe   # exit 1 if any entry fails
+python scripts/recurrence.py --list
+```
+
+Three things came out of building it that the design above did not anticipate.
+
+**Citation assertions were not implemented.** The table above measures them at two real catches and two
+false passes, and both real catches — CORS and `CheckOrigin` — are covered by a text `require` on
+`Allow-Origin|CheckOrigin|CORS`, which does not depend on a proximity window and does not care which line
+the artifact happens to cite. A mechanism with a 50% false-pass rate is not worth carrying when the cheaper
+one subsumes its wins. The design's conclusion stands regardless: the class it was aimed at is omission,
+and text `require` covers omission.
+
+**Entries need a self-check, because a bad entry is a silent pass.** Each entry was written from a defect
+confirmed in a specific artifact, and that artifact is kept unfixed as evidence — so every entry must
+*fail* on it. `test_every_entry_fires_on_the_artifact_it_came_from` asserts exactly that, and it caught two
+broken entries on the first run: a `forbid` whose proximity guess was twelve characters too tight to match
+the sentence it was written from, and a `require` on `ownership|tenant|user_id|scoped by` satisfied by
+`GET /{user_id}/{filename}` in a routes table. Both reported clean on known-bad input, which is the failure
+mode this whole document is organised around. A keyword is not evidence that a topic was addressed; the
+replacement requires the keyword *and* a word about enforcement within the same paragraph.
+
+**One entry is not about the target.** `kind = "guard"` marks an assertion about the artifact's own text
+integrity rather than a fact about a revision — currently one: a paragraph emptied by shell
+command-substitution during an edit, leaving grammatical prose with no content. Guards are exempt from the
+positive-pair rule, since for a guard silence is the correct outcome. They are the exception, and the
+`kind` field exists so the exception has to be declared rather than assumed.
+
 ## 14. Per-repository checklists
 
 A checklist is a fixed list of specific claims an artifact should get right about one target, **with the
