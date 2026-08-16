@@ -910,6 +910,35 @@ numbers, which is the mechanism behind two of the defects on record.
 The scorer refuses one silent failure explicitly: an unanswered worksheet reports `accuracy` as unset
 rather than 1.0, and a skipped item is listed as skipped rather than dropped.
 
+### First run: the instrument works, and one caution above was incomplete
+
+Four blind judges — Opus and Sonnet on each artifact, none reading the source repository, the other judges,
+or any prior review. Full write-up in `docs/evaluations/checklists/RESULTS.md`.
+
+**Agreement is 26/28 = 0.93**, with obstudio unanimous at 14/14. Set that against the 1–5 rubric's floor
+measured on one of these same artifacts, where `diagrams` moved from 2 to 4 across two runs of one model
+and only two of six criteria were unanimous across six judgings. The claim that comparison varies less than
+research is now measured rather than argued, and the practical consequence is the one §15 needs: a
+checklist result can carry a per-item claim, where a per-criterion rubric score cannot.
+
+**No known defect scored `correct` — 0 of 20**, across both judges and both targets. Since both artifacts
+are kept unfixed, that is the construct-validity check: the worksheet is readable and the verdicts mean
+what they say.
+
+**The residual is not only on the `wrong`/`absent` boundary.** One of the two disagreements is exactly
+where this section predicted. The other is `correct` vs `absent` on an item asserting *two* facts where the
+artifact carried one of them — one judge scored the half present, the other the half missing, and both
+flagged the call as hard without seeing each other's work. So there is a fifth rule, and it is the one that
+would have prevented both flagged hard calls:
+
+**An item asserts one fact.** A compound item — a fact bundled with its rationale, or two facts about the
+same mechanism — has no correct ternary answer when an artifact splits it, and the two available answers
+differ by a full verdict. That is a defect in the item, not in the judge.
+
+**The scores themselves are not yet quality scores for these artifacts,** because ten of fourteen items per
+target were written from those artifacts' own defects. Such a list can only produce a low number. The score
+becomes a measurement at the next generation of these targets, which is what banking the items is for.
+
 ## 15. Accepting a change
 
 Evaluation produces proposed changes. They are accepted by two different rules, and telling them apart is
