@@ -155,3 +155,141 @@ def test_a_client_bound_by_a_with_statement_is_still_a_client(tmp_path):
     """The fix must not lose the ordinary spelling: `async with httpx.AsyncClient() as client`."""
     root, files = _mod(tmp_path, ROUTE_FETCH)
     assert len(scan_python(root, files)) == 1
+
+
+def test_a_fixed_base_with_a_caller_supplied_path_is_not_a_finding(tmp_path):
+    """The shape every proxy has: `f"{base}{path}"` with the base from configuration. The caller chooses
+    what path to ask for and not where the request goes, so the destination is fixed. Without this the
+    signal fires on every proxy layer ever written."""
+    root, files = _mod(tmp_path, '''
+import httpx
+from fastapi import APIRouter
+router = APIRouter()
+
+@router.get("/proxy")
+async def proxy(data: dict):
+    path = data.get("path", "")
+    base = settings.backend_url
+    async with httpx.AsyncClient() as client:
+        return await client.get(f"{base}{path}")
+''')
+    assert scan_python(root, files) == []
+
+
+def test_a_caller_supplied_host_is_still_a_finding(tmp_path):
+    """The same construction with the tainted value at the front: now the caller picks the host."""
+    root, files = _mod(tmp_path, '''
+import httpx
+from fastapi import APIRouter
+router = APIRouter()
+
+@router.get("/probe")
+async def probe(data: dict):
+    host = data.get("host", "")
+    async with httpx.AsyncClient() as client:
+        return await client.get(f"{host}/health")
+''')
+    assert len(scan_python(root, files)) == 1
+
+
+# --- JS/TS -------------------------------------------------------------------------------------------
+
+from archagent.fetchscan import scan_ts  # noqa: E402
+
+
+def _ts(tmp_path: Path, body: str, name: str = "route.ts") -> tuple[Path, set[str]]:
+    (tmp_path / name).write_text(body)
+    return tmp_path, {name}
+
+
+def test_a_nextjs_handler_fetching_a_caller_supplied_host_is_found(tmp_path):
+    root, files = _ts(tmp_path, '''
+export async function POST(request: NextRequest) {
+  const body = await request.json();
+  const target = body.url;
+  const res = await fetch(`${target}/probe`);
+  return NextResponse.json(await res.json());
+}
+''')
+    hits = scan_ts(root, files)
+    assert len(hits) == 1 and hits[0].guard == "none"
+
+
+def test_a_proxy_with_a_fixed_base_does_not_fire(tmp_path):
+    """The shape wardrowbe's proxy actually has. The caller picks the path; configuration picks the host.
+    Without this discriminator the signal fires on every proxy layer ever written — verified against the
+    real file, which produces zero hits."""
+    root, files = _ts(tmp_path, '''
+export async function GET(request: NextRequest) {
+  const target = new URL(request.url);
+  const backend = backendUrl();
+  const url = `${backend}${target.pathname}${target.search}`;
+  return fetch(url, { method: request.method });
+}
+''')
+    assert scan_ts(root, files) == []
+
+
+def test_a_browser_side_component_is_out_of_scope(tmp_path):
+    """A React component fetching a URL from props issues that request from the *user's* browser, not
+    from the server, so it has none of the server's network position. The file must not look like a
+    request handler for this check to consider it at all."""
+    root, files = _ts(tmp_path, '''
+export function Preview({ url }: { url: string }) {
+  const [data, setData] = useState(null);
+  useEffect(() => { fetch(url).then(r => r.json()).then(setData); }, [url]);
+  return <div>{JSON.stringify(data)}</div>;
+}
+''', name="Preview.tsx")
+    assert scan_ts(root, files) == []
+
+
+def test_an_allowlist_is_recognised_in_ts(tmp_path):
+    root, files = _ts(tmp_path, '''
+export async function POST(request: NextRequest) {
+  const body = await request.json();
+  const target = body.url;
+  if (!ALLOWED_HOSTS.includes(new URL(target).host)) return NextResponse.error();
+  return fetch(`${target}/probe`);
+}
+''')
+    assert scan_ts(root, files)[0].guard == "allow-list"
+
+
+def test_host_control_survives_an_assignment_in_python(tmp_path):
+    """`url = f"{base}{path}"` then `client.get(url)`. Once the composite is bound to a name the position
+    of the tainted part is otherwise lost, and a proxy reads as an SSRF. Host-control travels with the
+    name."""
+    root, files = _mod(tmp_path, '''
+import httpx
+from fastapi import APIRouter
+router = APIRouter()
+
+@router.get("/proxy")
+async def proxy(data: dict):
+    path = data.get("path", "")
+    base = settings.backend_url
+    url = f"{base}{path}"
+    async with httpx.AsyncClient() as client:
+        return await client.get(url)
+''')
+    assert scan_python(root, files) == []
+
+
+def test_a_method_call_on_a_tainted_value_keeps_its_taint(tmp_path):
+    """`health_url = url.replace("/v1", "/api/tags")` is still whatever `url` was. Reading the first
+    argument instead of the receiver dropped the one true finding on wardrowbe while every other test
+    still passed."""
+    root, files = _mod(tmp_path, '''
+import httpx
+from fastapi import APIRouter
+router = APIRouter()
+
+@router.post("/test-ai-endpoint")
+async def test_ai_endpoint(data: dict):
+    url = data.get("url", "").rstrip("/")
+    health_url = url.replace("/v1", "/api/tags")
+    async with httpx.AsyncClient() as client:
+        return await client.get(health_url)
+''')
+    assert len(scan_python(root, files)) == 1

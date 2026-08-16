@@ -102,6 +102,36 @@ def _callee_name(node: ast.Call) -> str:
     return f.id if isinstance(f, ast.Name) else ""
 
 
+def _host_is_caller_controlled(node: ast.AST, tainted: set[str]) -> bool:
+    """Does the caller decide *where* the request goes, or only what path it asks for?
+
+    The discriminator the whole signal needs. Every proxy builds `f"{base}{path}"` with a base from
+    configuration and a path from the request — the destination is fixed and that is not SSRF. Only a
+    tainted value at the *front* of the URL controls the host.
+    """
+    if isinstance(node, ast.Name):
+        return node.id in tainted
+    if isinstance(node, ast.JoinedStr):                     # f-string: inspect the leading part
+        for part in node.values:
+            if isinstance(part, ast.Constant) and str(part.value).strip():
+                return False                                # starts with a literal, e.g. "https://api/"
+            if isinstance(part, ast.FormattedValue):
+                return bool(_names_in(part.value) & tainted)
+        return False
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+        return _host_is_caller_controlled(node.left, tainted)
+    if isinstance(node, ast.Call):
+        # A method call carries its subject in the receiver, not the arguments: `url.replace("/v1", …)`
+        # is still whatever `url` was. Only a plain call like `urljoin(base, path)` takes its base from
+        # the first argument. Getting this backwards silently dropped the one true finding.
+        if isinstance(node.func, ast.Attribute):
+            return _host_is_caller_controlled(node.func.value, tainted)
+        return bool(node.args) and _host_is_caller_controlled(node.args[0], tainted)
+    if isinstance(node, ast.Attribute):
+        return bool(_names_in(node) & tainted)
+    return bool(_names_in(node) & tainted)
+
+
 def _names_in(node: ast.AST) -> set[str]:
     """Identifiers actually referenced by an expression.
 
@@ -112,7 +142,7 @@ def _names_in(node: ast.AST) -> set[str]:
     return {n.id for n in ast.walk(node) if isinstance(n, ast.Name)}
 
 
-def _tainted_names(fn: ast.AST, params: set[str], in_route: bool) -> set[str]:
+def _tainted_names(fn: ast.AST, params: set[str], in_route: bool) -> tuple[set[str], set[str]]:
     """Names in this function that hold something the caller supplied.
 
     Params of a route handler count, and so does anything assigned from a request accessor. One hop of
@@ -120,6 +150,7 @@ def _tainted_names(fn: ast.AST, params: set[str], in_route: bool) -> set[str]:
     a real taint engine is out of scope and would still not answer the guard question.
     """
     tainted = set(params)
+    host = set(params)                       # ... and of those, the ones that choose the *host*
     for _ in range(3):                       # a few passes, so short chains settle
         for n in ast.walk(fn):
             if not isinstance(n, ast.Assign) or not n.targets:
@@ -128,11 +159,18 @@ def _tainted_names(fn: ast.AST, params: set[str], in_route: bool) -> set[str]:
             hits_request = bool(_REQUEST_SOURCES.search(src)) or (
                 in_route and bool(_ROUTE_BODY_SOURCES.search(src)))
             hits_tainted = bool(_names_in(n.value) & tainted)
-            if hits_request or hits_tainted:
-                for tgt in n.targets:
-                    if isinstance(tgt, ast.Name):
-                        tainted.add(tgt.id)
-    return tainted
+            if not (hits_request or hits_tainted):
+                continue
+            # Host-control has to travel with the name. `url = f"{base}{path}"` is tainted but its
+            # destination is fixed, and once it is assigned to a name the position of the tainted part
+            # is otherwise lost — which is how a proxy ends up reported as an SSRF.
+            controls_host = hits_request or _host_is_caller_controlled(n.value, host)
+            for tgt in n.targets:
+                if isinstance(tgt, ast.Name):
+                    tainted.add(tgt.id)
+                    if controls_host:
+                        host.add(tgt.id)
+    return tainted, host
 
 
 def _guard_in(fn: ast.AST) -> str:
@@ -162,7 +200,7 @@ def scan_python(root: Path, files: set[str]) -> list[Fetch]:
             # method on every class — eight false positives against one real finding on the first run.
             params = ({a.arg for a in fn.args.args + fn.args.kwonlyargs} - {"self", "cls"}
                       if in_route else set())
-            tainted = _tainted_names(fn, params, in_route)
+            tainted, host_tainted = _tainted_names(fn, params, in_route)
             if not tainted:
                 continue
             guard = _guard_in(fn)
@@ -179,6 +217,88 @@ def scan_python(root: Path, files: set[str]) -> list[Fetch]:
                 if not call.args:
                     continue
                 referenced = _names_in(call.args[0]) & tainted
-                if referenced:
+                if referenced and _host_is_caller_controlled(call.args[0], host_tainted):
                     out.append(Fetch(rel, call.lineno, name, sorted(referenced)[0], guard, in_route))
+    return out
+
+
+# --- JS/TS ------------------------------------------------------------------------------------------
+#
+# Regex, not a parser, matching how archagent already reads JS/TS elsewhere (`drift._import_graph`,
+# `webapi`): Python via `ast`, JS/TS via regex, no Node required. The cost is a coarser scope — the unit
+# is the *file* rather than the function — which is tolerable only because the check first requires the
+# file to look like server-side request handling. A React component that fetches a URL from props is not
+# in scope and must not be: that request comes from the user's own browser, not from the server.
+
+#: The file is a server-side request handler at all.
+_TS_SERVER = re.compile(
+    r"export\s+(?:async\s+)?function\s+(?:GET|POST|PUT|PATCH|DELETE)\b"   # Next.js route handler
+    r"|\b(?:app|router)\.(?:get|post|put|patch|delete|all)\s*\("            # Express / Fastify
+    r"|\bcreateServer\s*\(")
+
+#: A value that came from the caller.
+_TS_TAINT_SOURCE = re.compile(
+    r"\b(?:req|request)\.(?:body|query|params|url|nextUrl)\b"
+    r"|\bsearchParams\.get\s*\(|\bawait\s+(?:req|request)\.(?:json|text|formData)\s*\(")
+
+#: An outbound request from the server.
+_TS_FETCH = re.compile(
+    r"\b(?:fetch|axios|got|superagent|ky)\s*(?:\.\s*(?:get|post|put|patch|delete|request))?\s*\(\s*([^,)]+)")
+
+_TS_ALLOWLIST = re.compile(
+    r"\b(allow(?:ed)?_?(?:list|Hosts?|Domains?|Origins?)|whitelist|isAllowed|ALLOWED_)\b", re.IGNORECASE)
+_TS_SHAPE_ONLY = re.compile(
+    r"\b(startsWith|new\s+URL|protocol|https?://|z\.string\(\)\.url)\b")
+
+_TS_ASSIGN = re.compile(r"\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*([^;\n]+)")
+
+
+def _ts_host_is_caller_controlled(expr: str, tainted: set[str]) -> bool:
+    """As the Python version: only a tainted value at the front of the URL chooses the host.
+
+    `` `${backend}${target.pathname}` `` is a proxy — the base is configuration and the caller picks the
+    path. `` `${host}/health` `` is not.
+    """
+    e = expr.strip().lstrip("`'\"")
+    if e.startswith(("http://", "https://", "/")):
+        return False
+    m = re.match(r"\$\{\s*([A-Za-z_$][\w$]*)", e)          # leading `${name}` of a template literal
+    if m:
+        return m.group(1) in tainted
+    m = re.match(r"([A-Za-z_$][\w$]*)", e)                  # a bare identifier or `name + ...`
+    return bool(m) and m.group(1) in tainted
+
+
+def scan_ts(root: Path, files: set[str]) -> list[Fetch]:
+    out: list[Fetch] = []
+    for rel in sorted(files):
+        if not rel.endswith((".ts", ".tsx", ".js", ".jsx", ".mjs")):
+            continue
+        try:
+            text = (root / rel).read_text(errors="replace")
+        except OSError:
+            continue
+        if not _TS_SERVER.search(text):
+            continue
+        tainted: set[str] = set()
+        host_tainted: set[str] = set()
+        for _ in range(3):
+            for name, value in _TS_ASSIGN.findall(text):
+                from_request = bool(_TS_TAINT_SOURCE.search(value))
+                from_tainted = any(re.search(rf"\b{re.escape(v)}\b", value) for v in tainted)
+                if not (from_request or from_tainted):
+                    continue
+                tainted.add(name)
+                if from_request or _ts_host_is_caller_controlled(value, host_tainted):
+                    host_tainted.add(name)
+        if not host_tainted:
+            continue
+        guard = ("allow-list" if _TS_ALLOWLIST.search(text)
+                 else "shape-only" if _TS_SHAPE_ONLY.search(text) else "none")
+        for m in _TS_FETCH.finditer(text):
+            arg = m.group(1)
+            hit = next((v for v in sorted(tainted) if re.search(rf"\b{re.escape(v)}\b", arg)), None)
+            if hit and _ts_host_is_caller_controlled(arg, host_tainted):
+                line = text[:m.start()].count("\n") + 1
+                out.append(Fetch(rel, line, m.group(0).split("(")[0].strip(), hit, guard, True))
     return out

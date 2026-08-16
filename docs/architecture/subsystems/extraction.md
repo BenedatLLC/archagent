@@ -67,11 +67,21 @@ the point, because the finding that prompted it was in Go and a scanner blind to
 nothing. Weaker evidence than a parse, so it is used only to *raise* a finding's severity, never lower it.
 
 **`fetchscan` is the only scanner that follows a value rather than matching one.** It tracks request
-input to an outbound HTTP call within a single function — enough for the observed shape, and it says so:
-anything routed through a helper is missed, so a clean result is not a clearance. Its three false-positive
-classes are all pinned as tests, because a taint check that fires on everything is worse than none:
-`self` is a parameter and tainted every method on every class; an f-string's literal text is not a
-variable reference; and an ORM `session.delete(item)` shares its verbs with an HTTP client.
+input to an outbound HTTP call — Python via `ast` within a single function, JS/TS via regex within a file
+that looks like a request handler, which is the same split the rest of the tool uses. Anything routed
+through a helper is missed, so a clean result is not a clearance, and it says so.
+
+**The question it really answers is "does the caller choose the host".** Not "is caller input in the URL"
+— every proxy builds `f"{base}{path}"` from configuration and a request path, and reporting those would
+make the signal useless. Only a tainted value at the *front* of a URL controls the destination, and that
+property has to travel with a name through assignment or a proxy reads as an SSRF the moment the URL is
+bound to a variable.
+
+Five false-positive classes are pinned as tests, because a taint check that fires on everything is worse
+than none: `self` is a parameter and tainted every method on every class; an f-string's literal text is
+not a variable reference; an ORM `session.delete(item)` shares its verbs with an HTTP client; a fixed base
+with a caller-supplied path is a proxy; and a React component fetching a prop issues that request from the
+*user's* browser, which has none of the server's network position.
 
 **A wrapped declaration is still one declaration.** `configscan`'s `**Config:**` pattern runs to the next
 blank line or `**Field:**`, not to the end of its first line. A real manifest is a long list of keys and

@@ -31,7 +31,7 @@ from .investigations import load as _load_investigation
 from .hotspots import MAX_REPORTED, find_hotspots
 from .mdutil import strip_code_fences
 from .obsscan import scan as _obs_scan
-from .fetchscan import scan_python as _fetch_scan
+from .fetchscan import scan_python as _fetch_scan, scan_ts as _fetch_scan_ts
 from .originscan import mutating_routes as _mutating_routes, scan as _origin_scan
 from .webapi import extract_routes
 from .drift import (
@@ -1104,7 +1104,9 @@ def _server_side_fetch(config: Config) -> list[Finding]:
     `shape-only` guard is reported as high — it is the case that looks defended and is not — while a
     named allow-list drops to `med` and is mostly a prompt to describe the boundary.
     """
-    hits = [f for f in _fetch_scan(config.project_root, _source_files(config)) if f.in_route]
+    src = _source_files(config)
+    hits = [f for f in _fetch_scan(config.project_root, src) if f.in_route]
+    hits += _fetch_scan_ts(config.project_root, src)
     if not hits:
         return []
     out: list[Finding] = []
