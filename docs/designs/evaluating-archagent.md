@@ -779,6 +779,31 @@ So the criterion should ask for **coverage, not importance** — walk the docume
 a checklist (below) is how that becomes repeatable rather than a matter of how thorough a given reviewer
 felt.
 
+### Coverage was at ceiling exactly where the problem was
+
+Round 3's human reviewer scored `completeness` 3 because three subsystem documents were too thin to trace
+a change through, and noted that five had no diagram where three needed one. `archagent status` reported
+**100% coverage** on the same artifact.
+
+That is not a scoring disagreement, it is two different questions. Coverage answers *is this file
+described by something*; it says nothing about whether the description is usable, and an artifact can sit
+at ceiling on the first while failing the second completely.
+
+The fix is not a stronger prompt. A prompt rule for exactly this already existed and was written by the
+same person who then violated it — twice, on `Status: active` and on glob-shaped prose. What was missing
+was a measurement, so `status` now reports **prose words per file claimed**, diagram count, and the number
+of type or table declarations each document covers, and flags two shapes:
+
+- **thin** — under half the median density of the artifact's *own* documents. Relative on purpose: an
+  absolute bar would punish a terse house style everywhere, while one document far below its siblings is a
+  claim about this artifact.
+- **no diagram** — five or more type or table declarations with nothing drawn. Not "every document needs a
+  diagram": a CLI with no states was right that a lifecycle diagram would be decoration.
+
+On the reviewed artifact it flags the two documents the reviewer named and one more they did not — a
+108-file subsystem at 2.7 prose words per file. On archagent's own artifact it flags nothing as thin and
+asks one question about a diagram, which is answered in that document rather than silenced with a picture.
+
 ### There is no sample review, deliberately
 
 Two of the first three reviews were unreadable — fields read to end-of-line in one, a score in the heading

@@ -333,7 +333,12 @@ CLI:
   candidates for `/archagent-describe` to classify, verify, and lift into `invariants.md`. `--json`,
   `--markers-only`.
 - `archagent status` — repo-scale + coverage snapshot: per top-level package, how many source files a
-  subsystem's `**Covers:**` claims. Use it to size a `describe` pass (a fixed "document 3 and stop" is wrong
+  subsystem's `**Covers:**` claims, **and how much each subsystem document actually says about the code it
+  claims** — prose words per file, diagrams, and type/table declarations covered. Coverage answers "is
+  this described by something"; depth answers "is the description usable", and the two come apart: an
+  artifact can be at 100% coverage while a reader cannot trace a change through it. Flags a document under
+  half the median density of its siblings (relative, so a terse house style is not punished) and one that
+  covers five or more type declarations with no diagram. Use it to size a `describe` pass (a fixed "document 3 and stop" is wrong
   for a large repo) and to state coverage in `index.md` as an "N of M" count.
 - `archagent graph` — generate a Mermaid system map (one node per subsystem, one edge per typed
   `**Connects:**`) from the metadata the docs already declare. `--write` splices it into `index.md` between

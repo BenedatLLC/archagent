@@ -769,6 +769,32 @@ def status(project: Path = typer.Option(Path("."), help="Target repo root")) -> 
         bar = "█" * (p.pct // 10) + "░" * (10 - p.pct // 10)
         table.add_row(p.name, str(p.total), f"{p.covered}/{p.total}", f"[{style}]{bar} {p.pct:3}%[/]")
     console.print(table)
+
+    thin = report.thin
+    undiagrammed = [d for d in report.depth if d.wants_a_diagram]
+    if thin or undiagrammed:
+        console.print("\n[bold]Subsystem depth[/] — coverage says a file is described; this says whether "
+                      "the description is usable")
+        t2 = Table(show_header=True, header_style="bold")
+        t2.add_column("Subsystem", no_wrap=True)
+        for col in ("Files", "Words", "Per file", "Diag", "Types"):
+            t2.add_column(col, justify="right")
+        t2.add_column("")
+        for d in sorted(report.depth, key=lambda x: x.words_per_file):
+            note = "[yellow]thin[/]" if d in thin else (
+                "[yellow]no diagram[/]" if d.wants_a_diagram else "")
+            t2.add_row(d.name, str(d.files), str(d.words), f"{d.words_per_file:.1f}",
+                       str(d.diagrams), str(d.types), note)
+        console.print(t2)
+        if thin:
+            console.print("  [yellow]thin[/] — under half the density of the median document here. A terse "
+                          "house style is fine;\n         one document far below its siblings is usually a "
+                          "subsystem nobody has written up yet.")
+        if undiagrammed:
+            console.print("  [yellow]no diagram[/] — covers five or more type or table declarations and "
+                          "draws nothing. A document\n         whose subject is a set of relationships is "
+                          "where prose about directionality loses the reader.")
+
     console.print(
         f"\n[bold]{report.documented_packages} of {len(report.packages)} packages[/] have documented code · "
         f"[bold]{report.pct}%[/] of {report.total} source files covered · "

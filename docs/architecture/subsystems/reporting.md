@@ -17,6 +17,22 @@ documented, what the system map looks like, and whether the diagrams parse.
 
 ## Key abstractions
 
+**Coverage and depth are different questions, and only the first was measured.** `status` reports the
+share of files some subsystem claims. An artifact can score 100% on that while a reader finds its
+documents too thin to trace a change through — which is exactly what happened on a reviewed artifact, and
+is why `status` now also reports **prose words per file claimed**, diagram count, and how many type or
+table declarations each document covers.
+
+The thinness bar is *relative* — under half the median density of the artifact's own documents. An
+absolute words-per-file threshold would punish a terse house style everywhere; one document far below its
+siblings is a claim about this artifact rather than about prose in general.
+
+**This subsystem is itself flagged `no diagram`, and that is the right behaviour.** It covers six type
+declarations and draws nothing, so the check asks the question. The answer here is no: `status`, `graph`
+and `lint-docs` are three independent commands rather than a set of relationships, and a diagram would
+restate the table above it. The flag is a prompt, not a verdict — the same rule every other signal in
+this tool follows, and leaving it standing is cheaper than adding a decorative diagram to silence it.
+
 **Coverage is a prompt, not a score.** `status` exists to show an author where the artifact is thin. The
 evaluation rubric later learned the same lesson the hard way: coverage alone is maximised by one glob
 claiming everything, so it has to be read alongside how the claims are spread.
