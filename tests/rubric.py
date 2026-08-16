@@ -315,12 +315,21 @@ def check_orientation(root: Path, arch_dir: str) -> Check:
     body = re.split(r"^\s*\|", text, maxsplit=1, flags=re.MULTILINE)[0]
     # diagram source is not prose: a flowchart above the table would otherwise satisfy both halves at once
     body = re.sub(r"```.*?```", "", body, flags=re.DOTALL)
+    # A caption slot that still holds the placeholder is worse than none: it looks answered. `graph
+    # --write` seeds it precisely so an artifact that never filled it in is visible (issue #11).
+    caption = re.search(r"<!-- archagent:graph-caption -->\n(.*?)\n<!-- /archagent:graph-caption -->",
+                        text, re.DOTALL)
+    captioned = bool(caption) and "(unwritten" not in caption.group(1)
+    has_map = "```mermaid" in text
     have = {
-        "system map": "```mermaid" in text,
+        "system map": has_map,
         # a heading, then the table, tells a reader nothing about what they are looking at
         "prose before the catalog": len([ln for ln in body.splitlines()
                                          if ln.strip() and not ln.startswith(("#", "<!--", "-", "*"))]) >= 3,
     }
+    if has_map:
+        # only meaningful once there is a map; an artifact with no map is already marked down for that
+        have["a caption on the system map"] = captioned
     missing = [k for k, ok in have.items() if not ok]
     return Check("artifact.orientation", "Artifact is enterable", sum(have.values()) / len(have),
                  "system map and an entry narrative present" if not missing

@@ -20,6 +20,16 @@ from .mdutil import is_empty_value, strip_code_fences
 
 GRAPH_START = "<!-- archagent:graph -->"
 GRAPH_END = "<!-- /archagent:graph -->"
+CAPTION_START = "<!-- archagent:graph-caption -->"
+CAPTION_END = "<!-- /archagent:graph-caption -->"
+
+#: What a caption looks like before anyone has written one. Deliberately obvious, so an artifact that
+#: never filled it in is visible rather than merely uncaptioned.
+CAPTION_PLACEHOLDER = "_What to notice: (unwritten — say what this map shows about **this** system.)_"
+
+
+def _caption_block(existing: str | None = None) -> str:
+    return f"{CAPTION_START}\n{existing or CAPTION_PLACEHOLDER}\n{CAPTION_END}"
 
 _TIER = re.compile(r"^\s*\*\*\s*Tier\s*:?\s*\*\*\s*[:：]?\s*(.+)$", re.IGNORECASE | re.MULTILINE)
 # per-kind edge arrow: solid for synchronous/blocking coupling, dotted for asynchronous/loose
@@ -91,6 +101,13 @@ def _wrapped(block: str) -> str:
     return f"{GRAPH_START}\n{block}\n{GRAPH_END}"
 
 
+def _existing_caption(text: str) -> str | None:
+    """Whatever a person already wrote between the caption markers, so a re-run never discards it."""
+    m = re.search(re.escape(CAPTION_START) + r"\n(.*?)\n" + re.escape(CAPTION_END), text, re.DOTALL)
+    body = m.group(1).strip() if m else None
+    return body or None
+
+
 def write_to_index(config: Config, block: str) -> str:
     """Splice the fenced block into index.md between the markers. Returns the action taken.
 
@@ -101,13 +118,20 @@ def write_to_index(config: Config, block: str) -> str:
         raise ValueError(f"{index} does not exist — run `archagent init` first")
     text = index.read_text()
     wrapped = _wrapped(block)
+    # The caption lives OUTSIDE the replaced region. The generated map is the artifact's most prominent
+    # diagram and was the one with nowhere to put a caption, while the prompt demands one everywhere
+    # else (issue #11). Keeping it outside means a re-run refreshes the graph and never eats the
+    # sentence someone wrote about it.
+    existing = _existing_caption(text)
     if GRAPH_START in text and GRAPH_END in text:
         new = re.sub(re.escape(GRAPH_START) + r".*?" + re.escape(GRAPH_END), lambda _: wrapped, text, count=1, flags=re.DOTALL)
         action = "updated"
+        if CAPTION_START not in new:
+            new = new.replace(wrapped, wrapped + "\n\n" + _caption_block(existing), 1)
     else:
         lines = text.splitlines()
         insert_at = 1 if lines and lines[0].startswith("#") else 0
-        section = ["", "## System map", wrapped, ""]
+        section = ["", "## System map", wrapped, "", _caption_block(), ""]
         new = "\n".join(lines[:insert_at] + section + lines[insert_at:])
         action = "inserted"
     if not new.endswith("\n"):

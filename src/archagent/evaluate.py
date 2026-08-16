@@ -31,6 +31,7 @@ from .investigations import load as _load_investigation
 from .hotspots import MAX_REPORTED, find_hotspots
 from .mdutil import strip_code_fences
 from .obsscan import scan as _obs_scan
+from .fetchscan import scan_python as _fetch_scan
 from .originscan import mutating_routes as _mutating_routes, scan as _origin_scan
 from .webapi import extract_routes
 from .drift import (
@@ -321,6 +322,7 @@ def evaluate(config: Config, history: bool = True, since: str | None = None,
 
     result.findings += _hardcoded_endpoints(config)
     result.findings += _permissive_origin(config)
+    result.findings += _server_side_fetch(config)
     result.findings += _observability(root, model)
 
     _attach_investigations(config.architecture_dir, result)
@@ -1092,6 +1094,38 @@ def _permissive_origin(config: Config) -> list[Finding]:
             "restriction: a browser on any site can reach 127.0.0.1."),
         confidence=conf,
     )]
+
+
+def _server_side_fetch(config: Config) -> list[Finding]:
+    """A route that fetches a URL the caller supplied (issue #12).
+
+    Severity turns on the guard, and the distinction the check *cannot* make reliably is the important
+    one: a scheme check is not a restriction on where the request goes, an allow-list is. So a
+    `shape-only` guard is reported as high — it is the case that looks defended and is not — while a
+    named allow-list drops to `med` and is mostly a prompt to describe the boundary.
+    """
+    hits = [f for f in _fetch_scan(config.project_root, _source_files(config)) if f.in_route]
+    if not hits:
+        return []
+    out: list[Finding] = []
+    for f in hits:
+        sev = "med" if f.guard == "allow-list" else "high"
+        detail = (f"`{f.callee}` is called with a URL derived from request input (`{f.source}`); "
+                  f"the only guard found in the handler is **{f.guard}**")
+        out.append(Finding(
+            sign="server-side-fetch", group="D", severity=sev,
+            title="A route fetches a URL the caller supplies",
+            subjects=[f.where], detail=detail,
+            recommendation=(
+                "This runs with the server's network position, so a caller can reach what the service "
+                "can reach and their browser cannot — metadata endpoints, internal ports, localhost. "
+                "That may be the feature (a webhook tester, a feed reader, an add-by-URL import): if so, "
+                "say where the boundary is in `deployment.md` and restrict the destination with an "
+                "allow-list, not a scheme check. A scheme check constrains what the string looks like, "
+                "never where the request goes."),
+            confidence="low",
+        ))
+    return out
 
 
 def _hardcoded_endpoints(config: Config) -> list[Finding]:

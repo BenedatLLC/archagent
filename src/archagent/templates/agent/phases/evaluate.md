@@ -128,6 +128,19 @@ Mined from `git log`; require a git repo (skip with `--no-history`, window with 
     policy turns out to be intended.
   When the route evidence says "matched textually rather than parsed", open the file before you rate it —
   that path exists because the service is in a language archagent cannot parse.
+- **A route fetches a URL the caller supplies** (group D) — request input reaches an outbound HTTP call.
+  The finding names the guard it found: `none`, `shape-only` (a scheme or format check) or `allow-list`.
+  **`shape-only` is reported highest on purpose** — it is the case that looks defended and is not, because
+  a check on what the string looks like says nothing about where the request goes.
+  - **Confirm** when the documents describe the service as internal or the fetch as incidental. The harm
+    is that the route runs with the *server's* network position: a caller reaches metadata endpoints,
+    internal admin ports and localhost services that their browser cannot.
+  - **Dismiss** when fetching a user URL is the feature — a webhook tester, a feed reader, an add-by-URL
+    import. Then the question is whether the boundary is described and whether the destination is
+    restricted by an allow-list, not whether the route should exist.
+  - Either way, an undescribed trust boundary is the finding even when the behaviour is intended.
+  Taint is followed inside one function only, so a clean run is not a clearance — anything routed through
+  a helper is invisible. Open the handler before rating it.
 - **Change-prone complex file** (group E) — a single *file* that changes constantly **and** is deeply
   nested: the classic sign of an abstraction absorbing special cases it should be delegating. Both axes are
   percentiles within this repo, so it reads "unusually churny and unusually complex *here*". Distinct from

@@ -19,11 +19,6 @@ left unwritten and why.
 Generated from each subsystem's `**Connects:**` metadata by `archagent graph --write`; it is the
 declared structure, so a disagreement with the code is drift and worth chasing.
 
-**What to notice:** `cli` reaches everything and nothing reaches back — that is ADR 0001, the rule that
-`cli` is the only output layer. And `drift` and `extraction` point at each other. That is the recorded
-cycle in ADR 0003: `drift` needs the scanners, `invscan.py` needs `drift`'s git plumbing, and the fix is
-to pull the plumbing into a leaf module both can import.
-
 <!-- archagent:graph -->
 ```mermaid
 flowchart LR
@@ -56,6 +51,13 @@ flowchart LR
     reporting -->|import| extraction
 ```
 <!-- /archagent:graph -->
+
+<!-- archagent:graph-caption -->
+_**What to notice:** `cli` reaches everything and nothing reaches back — that is ADR 0001, the rule
+that `cli` is the only output layer. And `drift` and `extraction` point at each other: the recorded
+cycle in ADR 0003, where `drift` needs the scanners and `invscan.py` needs `drift`'s git plumbing.
+The fix is to pull the plumbing into a leaf module both can import._
+<!-- /archagent:graph-caption -->
 
 | Document | What it holds |
 |---|---|

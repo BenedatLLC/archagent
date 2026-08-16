@@ -304,7 +304,10 @@ CLI:
   and a **permissive cross-origin policy** (`Access-Control-Allow-Origin: *`, an unconditional WebSocket
   `CheckOrigin`, wildcard CORS middleware) — rated high only when the same service also registers a
   state-changing route, because "binds to localhost" is not a restriction: a browser on any site can reach
-  `127.0.0.1`. This one scans every language, not just the configured ones; plus **git-history** signals —
+  `127.0.0.1`. This one scans every language, not just the configured ones), and a **server-side fetch of a
+  caller-supplied URL** (the SSRF shape: request input reaching an outbound HTTP call, reported with the
+  guard it found — a scheme check constrains what the string looks like, never where the request goes);
+  plus **git-history** signals —
   **shotgun surgery** / implicit coupling and **unstable interface** (subsystem co-change),
   **change-prone complex files** (per-file churn × indentation complexity, both as within-repo
   percentiles), and **scattered single source of truth** — either inferred (one decision's value set

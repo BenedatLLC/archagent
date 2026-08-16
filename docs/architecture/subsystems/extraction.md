@@ -1,6 +1,6 @@
 # extraction — the static scanners
 
-**Covers:** `src/archagent/originscan.py`, `src/archagent/configscan.py`, `src/archagent/deployscan.py`, `src/archagent/webapi.py`, `src/archagent/datamap.py`, `src/archagent/connscan.py`, `src/archagent/obsscan.py`, `src/archagent/invscan.py`, `src/archagent/mdutil.py`
+**Covers:** `src/archagent/fetchscan.py`, `src/archagent/originscan.py`, `src/archagent/configscan.py`, `src/archagent/deployscan.py`, `src/archagent/webapi.py`, `src/archagent/datamap.py`, `src/archagent/connscan.py`, `src/archagent/obsscan.py`, `src/archagent/invscan.py`, `src/archagent/mdutil.py`
 **Tier:** infra
 **Connects:** config via import, drift via import
 
@@ -18,6 +18,7 @@ returns data; none of them judges.
 | `connscan.py` | outbound calls whose target resolves to a known service |
 | `obsscan.py` | tracing / correlation-id instrumentation |
 | `originscan.py` | permissive cross-origin policy, and state-changing route registrations |
+| `fetchscan.py` | a route that fetches a URL the caller supplied, and what guarded it |
 | `invscan.py` | invariants already *stated* in prose or asserts, as candidates |
 | `mdutil.py` | markdown helpers (fence stripping, empty-value detection) |
 
@@ -64,6 +65,13 @@ parser and so only sees `languages` from `archagent.toml`; this one is a literal
 spellings that works the same anywhere. It reads Go, which archagent otherwise cannot analyse — which is
 the point, because the finding that prompted it was in Go and a scanner blind to that case would be worth
 nothing. Weaker evidence than a parse, so it is used only to *raise* a finding's severity, never lower it.
+
+**`fetchscan` is the only scanner that follows a value rather than matching one.** It tracks request
+input to an outbound HTTP call within a single function — enough for the observed shape, and it says so:
+anything routed through a helper is missed, so a clean result is not a clearance. Its three false-positive
+classes are all pinned as tests, because a taint check that fires on everything is worse than none:
+`self` is a parameter and tainted every method on every class; an f-string's literal text is not a
+variable reference; and an ORM `session.delete(item)` shares its verbs with an HTTP client.
 
 **A wrapped declaration is still one declaration.** `configscan`'s `**Config:**` pattern runs to the next
 blank line or `**Field:**`, not to the end of its first line. A real manifest is a long list of keys and
