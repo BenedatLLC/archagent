@@ -29,7 +29,8 @@ divergence. Architecture prose then cites the claim rather than stating a number
 - **Claims file** — the Markdown table holding every claim for one artifact: an identifier, the command,
   the recorded value, and a note saying what the claim is for.
 - **`check`** — run every command, compare against the recorded values, and report each divergence with
-  both the recorded and the observed value. The only mode; see §5.2.
+  both the recorded and the observed value. The only mode; see §5.2. *Within this document only* — it is
+  not a command name, and archagent's existing `check` command means something else (§5.6).
 - **Stage** — one element of a claim command's pipeline. `rg foo src/ | wc -l` has two stages.
 - **The ADL** — archagent's Architecture Description Language (`docs/ADL-SPEC.md`), the format of the
   documents archagent generates.
@@ -196,16 +197,30 @@ Mitigation: constrain commands to a small allowlist of read-only tools, run from
 directory with normalised output (sorted, trailing whitespace stripped), and record the tool versions in
 the claims file header. Arbitrary shell should be an escape hatch that is visibly an escape hatch.
 
-### 5.4 The claims file is executable content
+### 5.4 The claims file is executable content — how much that actually matters
 
-A file that lives in the repository being described, containing commands archagent runs, is arbitrary code
-execution driven by repository content. Two distinct exposures:
+**The threat model is milder than it first appears, and the honest statement of it is this:** archagent
+normally runs inside, or alongside, an agent session that already has read/write access to the repository
+and a shell. In that setting a claim command grants no capability the agent does not already have. An
+agent that wanted to do harm has far more direct means, and treating `rg -c '__tablename__'` as the
+dangerous part would be security theatre.
 
-- **The repository is not yours.** Its claims file was written by someone else. Running it is running
-  their code.
-- **The repository is yours, and the writer is an agent.** A command that is subtly wrong or subtly
-  dangerous reads exactly like one that is neither, and the whole point of the file is that nobody
-  re-derives its contents by hand.
+So **claim checking runs by default** (§5.5), and the rules below are not the reason it is safe to run.
+
+Two narrower exposures remain, and they are why the rules exist anyway:
+
+- **The non-agentic context.** `archagent drift` in CI is not an agent session. A CI runner holds
+  credentials a developer's laptop does not, and there the commands are genuinely new capability sourced
+  from repository content.
+- **The repository is yours, and the writer is an agent.** A command that is subtly wrong reads exactly
+  like one that is not, and the whole point of the file is that nobody re-derives its contents by hand.
+  This is a correctness problem before it is a security one.
+
+**Most of what follows earns its place on correctness grounds regardless of the threat model.** Executing
+without a shell removes quoting and globbing bugs, not just redirects. A fixed working directory and a
+scrubbed environment prevent *false drift*, which is the failure that gets a checker switched off. A cap
+on the recorded value stops a runaway command committing a megabyte of output. Read the section that way:
+these are the rules that make claim checking reliable, and they happen to also make it defensible in CI.
 
 **The governing rule, which decides every case below: prefer an uncomputed claim to an unsafe command.**
 A claim that cannot be established within these limits is written as ordinary prose without a `[C-nnn]`
@@ -286,6 +301,47 @@ A command that is entirely within the rules and still reads something it should 
 config/` returning matched lines. Defence 4's value scan is the only thing standing in front of that, and
 it is heuristic. For a target the operator does not control, the honest position is that `check` should
 refuse to run at all unless explicitly enabled for that repository, and say so.
+
+### 5.5 Defaults: on, with an opt-out
+
+**Claim checking runs by default.** A capability that has to be remembered is a capability that does not
+run, and the value here is entirely in it running every time rather than when someone thinks of it.
+
+| where | what happens |
+|---|---|
+| `describe` | writes and updates the claims file; every numeric or enumerable claim it puts in prose gets a row and a `[C-nnn]` reference |
+| `drift` | runs every claim command and reports divergences as drift findings — this is the mechanical half of drift the design exists to create |
+| `check` | reports divergences alongside invariant results, under their own heading (see the naming note below) |
+
+**Disabling** is `--no-claims` on any of the three, and `[claims] enabled = false` in `archagent.toml`
+for a repository that should never do it. Configuration lives in `archagent.toml` rather than in the
+artifact, consistent with how the project already splits configuration from described architecture.
+
+**One case where the default flips: a target the operator does not control.** In a non-agentic context —
+`archagent drift` in CI — the commands come from repository content and the runner holds credentials.
+There, running a claims file the operator has not looked at should require `--claims` explicitly rather
+than being the default. This is the one place the mild threat model of §5.4 does not carry.
+
+**A divergence is a finding, not a failure.** It does not exit non-zero by default and does not gate a
+build. A number moving because the code changed is the normal case and the expected one; treating it as a
+build break would train people to disable the whole thing. A malformed or unsafe *command*, by contrast,
+is a conformance failure (§4) — that is a defect in the artifact rather than a change in the code.
+
+### 5.6 A naming collision to resolve before building
+
+archagent already has a `check` command, and it checks **invariants** — the rules constraining the
+software. This design has used "`check`" throughout for claim verification, which constrains the
+**documentation**, and §2 exists precisely because those two are easy to confuse.
+
+Do not add a second top-level command. Claim results belong inside the existing surfaces:
+
+- `archagent check` gains a **Claims** section beneath its invariant results;
+- `archagent drift` reports claim divergences among its findings, which is where they most belong;
+- `--no-claims` suppresses that section in both.
+
+Within this document, "`check`" continues to mean the claim-verification operation because the design
+reads better that way. **In the implementation and in user-facing output it must not.** The word to use
+with a reader is *claim divergence*.
 
 ## 6. Alternative considered: a generated maintenance script
 
@@ -399,3 +455,8 @@ more than a silence someone re-derives in six months.
 
 - **2026-08-16** — `regenerate` removed (§5.2); the safety rules written out as five defences with the
   governing rule *prefer an uncomputed claim to an unsafe command* (§5.4); ESAA read and cited.
+- **2026-08-16** — threat model corrected (§5.4): archagent normally runs where an agent already has a
+  shell and write access, so claim commands grant no new capability and the rules stand on correctness
+  grounds rather than security ones. Claim checking therefore runs **by default** in `describe`, `drift`
+  and `check`, with `--no-claims` and a config key to disable, and the default inverted for a target the
+  operator does not control (§5.5). Naming collision with the existing `check` command recorded (§5.6).
