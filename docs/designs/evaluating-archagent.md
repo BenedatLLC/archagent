@@ -66,7 +66,8 @@ blinded reviewers, excluding the repository that prompted a change, recording wh
 - **Arm** — one condition in a comparison. Two arms of a prompt change means generating the artifact twice
   for the same target, once under each version of the prompt, and comparing (§10, §15).
 - **Noise floor** — how much a score moves between identical runs, from generation and judging variance
-  alone. Until it is measured, "significantly better" cannot be computed (§15).
+  alone; without it, "significantly better" cannot be computed. The judging half has been measured (§15);
+  the generation half has not.
 - **Objective vs subjective change** — an objective change is a defect fix whose correctness can be
   demonstrated without a judge; a subjective change is a prompt edit or a heuristic adjustment whose value
   is a matter of degree. They are accepted by different rules (§15).
@@ -530,6 +531,12 @@ one; an ambiguous bare basename resolves if any candidate supports it, since vag
 person; §11 is how that is established, and the agreement interval belongs next to any score quoted from
 this rubric.
 
+**How much these scores move on their own.** Measured: judging the same artifact six times, holding
+everything constant, the mean across criteria varies by a standard deviation of 0.10, while an individual
+criterion can move two points — `diagrams` was scored 2 by one run and 4 by another on identical input.
+**So quote the mean, with ±0.1, and treat a single criterion's score as a finding to read rather than a
+number to compare.** §15 has the method and the full table.
+
 **Anti-gaming.** Scores without a citation are discarded. The judging subagent is a separate invocation
 that sees the artifact and the code but not the previous scores, so it cannot anchor on them. Where we
 have ground truth — the labelled intended-family cases from the corpus pass — it is scored automatically
@@ -739,7 +746,7 @@ So the suite covers exactly one class:
   and no window size fixes it**: too tight raises false alarms on off-by-a-few citations, too loose passes
   a citation range that stops one line short of its own counterexample.
 
-Misreading is the residual, and §14 is what covers it.
+Misreading is what is left over, and §14 is what covers it.
 
 ### As built (2026-08-16)
 
@@ -755,27 +762,34 @@ python scripts/recurrence.py --list
 
 Three things came out of building it that the design above did not anticipate.
 
-**Citation assertions were not implemented.** The table above measures them at two real catches and two
-false passes, and both real catches — CORS and `CheckOrigin` — are covered by a text `require` on
-`Allow-Origin|CheckOrigin|CORS`, which does not depend on a proximity window and does not care which line
-the artifact happens to cite. A mechanism with a 50% false-pass rate is not worth carrying when the cheaper
-one subsumes its wins. The design's conclusion stands regardless: the class it was aimed at is omission,
-and text `require` covers omission.
+**The second mechanism — checking which lines of code the artifact cites — was not built.** The table above
+measures it at two real catches and two false passes. Both real catches are already covered by simply
+requiring the artifact to contain the words `Allow-Origin`, `CheckOrigin` or `CORS` somewhere, which does
+not depend on guessing how near a citation has to be to count, and does not care which line the artifact
+happened to cite. A mechanism that passes half the cases it is given is not worth carrying when a simpler
+one already catches everything it caught.
 
-**Entries need a self-check, because a bad entry is a silent pass.** Each entry was written from a defect
-confirmed in a specific artifact, and that artifact is kept unfixed as evidence — so every entry must
-*fail* on it. `test_every_entry_fires_on_the_artifact_it_came_from` asserts exactly that, and it caught two
-broken entries on the first run: a `forbid` whose proximity guess was twelve characters too tight to match
-the sentence it was written from, and a `require` on `ownership|tenant|user_id|scoped by` satisfied by
-`GET /{user_id}/{filename}` in a routes table. Both reported clean on known-bad input, which is the failure
-mode this whole document is organised around. A keyword is not evidence that a topic was addressed; the
-replacement requires the keyword *and* a word about enforcement within the same paragraph.
+**Entries need to be tested themselves, because a badly written entry quietly passes everything.** Each
+entry was written from a defect confirmed in a specific artifact, and that artifact is deliberately kept
+unrepaired as evidence — so every entry must *fail* when run against it. A test asserts exactly that, and
+it caught two broken entries the first time it ran:
 
-**One entry is not about the target.** `kind = "guard"` marks an assertion about the artifact's own text
-integrity rather than a fact about a revision — currently one: a paragraph emptied by shell
-command-substitution during an edit, leaving grammatical prose with no content. Guards are exempt from the
-positive-pair rule, since for a guard silence is the correct outcome. They are the exception, and the
-`kind` field exists so the exception has to be declared rather than assumed.
+- one searched for two phrases within forty characters of each other, and the sentence it was written from
+  puts fifty-two characters between them;
+- one asked that the artifact mention any of `ownership`, `tenant`, `user_id` or `scoped by`, and was
+  satisfied by the string `user_id` appearing inside a URL in a table of routes.
+
+Both reported a clean result on input already known to be wrong, which is the failure mode this whole
+document is organised around. A keyword appearing somewhere is not evidence that a topic was addressed;
+the replacement requires the keyword *and* a word about enforcement in the same paragraph.
+
+**One entry is not about the target at all.** `kind = "guard"` marks an assertion about whether the
+artifact's own text is intact, rather than a fact about the code. There is one so far: a paragraph that
+was emptied out during an edit — the filenames in it were written through a shell that executed them
+instead of quoting them — leaving a grammatical sentence with no content. A guard is exempt from the
+positive-pair rule, because for a guard, an artifact that never writes the damaged paragraph is correct
+and silence is the right outcome. The `kind` field exists so that exception has to be declared rather
+than assumed.
 
 ## 14. Per-repository checklists
 
@@ -790,9 +804,9 @@ prevent. Ask:
 > (`store/store.go:313-332`). Does the artifact convey this?
 > **correct / wrong / absent**
 
-That converts research into comparison. It is cheaper (the judge does not explore the codebase), more
-reproducible (fixed questions in a fixed order), and ternary rather than 1–5, so aggregation is simple and
-the variance is far below a five-point judgement.
+That turns a research task into a comparison. It is cheaper, because the judge never explores the
+codebase; it repeats better, because the questions and their order are fixed; and it asks for one of three
+answers rather than a number from one to five, which is a far easier judgement to make consistently.
 
 The reading was done once, by a human, during a calibration run. **The checklist is where that work is
 banked so it never has to be repeated.**
@@ -864,19 +878,20 @@ showing them no content at all. Format certainty with zero anchoring.
 the change is fitted to the test rather than to the problem. The same blinding rule as §15's exclusion of
 the prompting repository.
 
-**It is still a model reading prose.** More reproducible than open scoring, not immune. Expect the residual
-error in the boundary between `wrong` and `absent` — an artifact that gestures at the right topic without
-committing to a claim.
+**It is still a model reading prose.** More repeatable than open-ended scoring, not immune to error. Expect
+what error remains to sit on the line between `wrong` and `absent` — an artifact that gestures at the right
+topic without ever committing to a claim.
 
-**The open rubric must survive alongside it.** A checklist can only re-test known defects. If it replaces
-the open rubric, the next calibration finds nothing new and the suite stops growing. The open rubric
-explores, the checklist exploits, and every new defect the open rubric finds becomes a checklist entry for
-the round after.
+**The open rubric must survive alongside it.** A checklist can only re-test what is already known. If it
+replaces the open-ended rubric, the next calibration round finds nothing new and the checklist stops
+growing. The open rubric is what discovers; the checklist is what re-tests. Every new defect the open
+rubric turns up becomes a checklist item for the round after.
 
 ### As built (2026-08-16)
 
-`tests/checklist.py` and `scripts/checklist.py`, with keys in `<eval-home>/checklists/<target>.toml`.
-Fourteen items each for obstudio and wardrowbe.
+`tests/checklist.py` and `scripts/checklist.py`, with the answers stored in
+`<eval-home>/checklists/<target>.toml`. Started at fourteen items each for obstudio and wardrowbe; now
+seventeen and sixteen, after the change described below.
 
 ```
 python scripts/checklist.py render --target obstudio --artifact architecture --out worksheet.md
@@ -885,82 +900,100 @@ python scripts/checklist.py score worksheet.md --target obstudio
 
 Four decisions the design above left open.
 
-**Items are severity-weighted, and the two numbers are both reported.** An unweighted score treats a false
-security claim and a wrong file count identically. `serious` counts 3, `moderate` 2, `minor` 1, and both
-`accuracy` and `weighted` are printed, because a divergence between them is itself the finding: the same
-score reached by getting the small things right is a different artifact.
+**Items are weighted by how much they matter, and both the weighted and unweighted scores are reported.**
+Without weighting, a false claim about who can read a user's data counts the same as a wrong file count.
+A `serious` item counts 3, `moderate` 2, `minor` 1. Both numbers are printed, because a gap between them
+is itself worth seeing: an artifact that reaches a given score by getting the small things right is not the
+same artifact as one that reaches it by getting the important things right.
 
-**A `wrong` verdict requires a quote from the artifact.** This is the mechanism for the caution above — the
-`wrong`/`absent` boundary. Without it, `wrong` becomes the verdict for anything vague, and a vague artifact
-scores like a lying one. A `wrong` with no quote is *discarded*, counted as neither right nor wrong, and
-reported as discarded.
+**A `wrong` verdict requires the judge to quote the passage it is calling wrong.** This is how the
+`wrong`-versus-`absent` problem named above is held in check. Without the rule, `wrong` becomes the verdict
+for anything vague, and an artifact that merely fails to say something scores like one that says something
+false. A `wrong` with no quote is thrown out — counted as neither right nor wrong, and reported as thrown
+out rather than silently ignored.
 
-**A checklist may not be only past defects, and a test enforces it.** The third caution above says the
-suite stops growing if the checklist replaces the open rubric; the same thing happens one level down if the
-checklist is nothing but a defect list. Then its score can only fall, and it measures what §13 already
-measures. At least a quarter of each list must come from reading the code rather than from a finding —
-currently four items each, including the two most architecturally load-bearing facts either target has
-(obstudio's per-process telemetry retention; wardrowbe's arq queue and its retry contract). Neither has
-ever been the subject of a defect.
+**A checklist may not consist only of past defects, and a test enforces that.** The caution above warns
+that the checklist stops growing if it replaces the open-ended rubric. The same thing happens one level
+down if a checklist contains nothing but known mistakes: its score can then only go down, and it measures
+what the recurrence suite (§13) already measures. So at least a quarter of each list has to come from
+reading the code rather than from a past finding. Those items include the single most important fact about
+each system — for obstudio, that stored telemetry is discarded when the process that produced it exits;
+for wardrowbe, that image tagging runs through a background job queue. Neither has ever been the subject
+of a defect.
 
-**Count items are phrased conditionally.** *"If the artifact states a Go file count, is it 57?"* — not
-stating a number is `absent`, not a failure. An unconditional count item rewards an artifact for inventing
-numbers, which is the mechanism behind two of the defects on record.
+**Items about counts are phrased conditionally** — *"if the artifact states a Go file count, is it 57?"*
+An artifact that states no number is marked `absent`, not wrong. Asking for the count unconditionally would
+reward an artifact for inventing one, and inventing a number is exactly how two of the defects on record
+came about.
 
-The scorer refuses one silent failure explicitly: an unanswered worksheet reports `accuracy` as unset
-rather than 1.0, and a skipped item is listed as skipped rather than dropped.
+The scorer also refuses to report a clean-looking result it has not earned: a worksheet nobody answered
+reports no score at all rather than a perfect one, and an item a judge skipped is listed as skipped rather
+than quietly dropped.
 
-### First run: the instrument works, and one caution above was incomplete
+### Results so far (2026-08-16)
 
-Four blind judges — Opus and Sonnet on each artifact, none reading the source repository, the other judges,
-or any prior review. Full write-up in `docs/evaluations/checklists/RESULTS.md`.
+Two rounds of judging have been run, on the same two artifacts, with four judges each time: two different
+models (Opus and Sonnet) on each of the obstudio and wardrowbe artifacts. Every judge worked from the
+artifact and the worksheet alone — not the source repository, not the other judges' answers, not any
+earlier review. Full write-ups in `docs/evaluations/checklists/RESULTS.md` and `RESULTS-run2.md`.
 
-**Agreement is 26/28 = 0.93**, with obstudio unanimous at 14/14. Set that against the 1–5 rubric's floor
-measured on one of these same artifacts, where `diagrams` moved from 2 to 4 across two runs of one model
-and only two of six criteria were unanimous across six judgings. The claim that comparison varies less than
-research is now measured rather than argued, and the practical consequence is the one §15 needs: a
-checklist result can carry a per-item claim, where a per-criterion rubric score cannot.
+| | round 1 | round 2 |
+|---|---|---|
+| items per target | 14 / 14 | 17 / 16 |
+| **two judges gave the same verdict** | 26 of 28 (93%) | **31 of 33 (94%)** |
+| a judge repeating an earlier verdict on an unchanged item | — | 35 of 36 (97%) |
+| items describing a known defect that were scored `correct` | 0 of 20 | 0 of 22 |
 
-**No known defect scored `correct` — 0 of 20**, across both judges and both targets. Since both artifacts
-are kept unfixed, that is the construct-validity check: the worksheet is readable and the verdicts mean
-what they say.
+**Two judges given the same worksheet reach the same verdict about 94% of the time.** That is the number
+this whole section was built to produce. Compare it to the 1–5 rubric measured on one of these same
+artifacts, where a single criterion was scored 2 by one run and 4 by another with nothing about the
+artifact changed (§15). The practical consequence is that a checklist result can support a claim about one
+specific item, where a rubric score cannot support a claim about one specific criterion.
 
-**The residual is not only on the `wrong`/`absent` boundary.** One of the two disagreements is exactly
-where this section predicted. The other is `correct` vs `absent` on an item asserting *two* facts where the
-artifact carried one of them — one judge scored the half present, the other the half missing, and both
-flagged the call as hard without seeing each other's work. So there is a fifth rule, and it is the one that
-would have prevented both flagged hard calls:
+**No item describing a known defect was ever scored `correct`.** Both artifacts are deliberately left
+unrepaired, so every such item should come back `wrong` or `absent` — and every one did, from all four
+judges, in both rounds. This is the check that the worksheet is legible and the verdicts mean what they
+say: a judge that could not find the relevant passage would have produced `correct` out of charity, and a
+judge not reading carefully would have produced `absent` out of laziness. Neither happened once.
 
-**An item asserts one fact.** A compound item — a fact bundled with its rationale, or two facts about the
-same mechanism — has no correct ternary answer when an artifact splits it, and the two available answers
-differ by a full verdict. That is a defect in the item, not in the judge.
+**Round 1 found a defect in the items rather than in the judges, and fixing it is where the fifth rule
+came from.** One of that round's two disagreements was the `wrong`/`absent` case predicted above. The other
+was `correct` versus `absent`, on an item that asserted two facts — the retry limit is three, *and* the
+queue library only reschedules a job that raises a particular exception — where the artifact stated the
+first and not the second. One judge scored the half that was present, the other the half that was missing.
+Both flagged the call as hard, independently, without seeing each other's work.
 
-**The scores themselves are not yet quality scores for these artifacts,** because ten of fourteen items per
-target were written from those artifacts' own defects. Such a list can only produce a low number. The score
-becomes a measurement at the next generation of these targets, which is what banking the items is for.
+That is not a judge failing. An item asserting two facts has no correct answer on a three-way scale when
+the artifact carries one of them, and the two defensible answers are a full verdict apart. Hence:
 
-### Run 2: the split confirmed the rule
+**An item asserts one fact** — not a fact plus its rationale, not two facts about one mechanism. This joins
+the rules for writing items, which live with the checklists themselves in the evaluation data repository.
 
-Five compound items were split (obstudio 14→17, wardrowbe 14→16) and the same four judges re-ran.
-`docs/evaluations/checklists/RESULTS-run2.md`.
+**Round 2 applied that rule and the `correct`-versus-`absent` disagreements disappeared.** Five items that
+had bundled two facts together were split into ten. Both of the disagreements that remain are the
+`wrong`-versus-`absent` case this section predicted, and both have the same shape: the artifact describes
+the right topic using different words, one judge reading that as a contradiction and the other as silence.
+Neither judge is wrong about that, and it appears to be as good as this instrument gets.
 
-**Agreement 31/33 = 0.94, and the `correct`/`absent` class is gone.** Both remaining disagreements are the
-`wrong`/`absent` boundary this section named as the residual, and both are the same shape: an artifact
-renders the right topic under the wrong vocabulary, one judge calling that a contradiction and the other
-silence. Neither judge is wrong. That appears to be the floor.
+**Splitting the items moved verdicts in both directions, which is why the improvement is believable.** An
+instrument that only ever scored higher after its own repair would be measuring the repair. Instead:
 
-**Splitting moved verdicts in both directions, which is the evidence the change is real rather than
-flattering.** obstudio's `retention-is-scoped-to-the-producing-process` went from unanimous `absent` to
-unanimous `correct` — a `serious` item where the half the artifact lacked had been erasing the half it had.
-wardrowbe's `tagging-retries` went the other way: split into the bound and the mechanism, both halves come
-back unanimously `absent`, withdrawing a `correct` that had been generosity toward a compound item.
+- obstudio's item about telemetry being discarded when the process that produced it goes away moved from
+  *both judges say absent* to *both judges say correct*. The artifact does describe the discarding; what it
+  does not describe is that the two network transports notice a departed producer by different means.
+  Bundled into one item, the missing half was cancelling out the half that was there.
+- wardrowbe's item about retry limits moved the other way. Split into the limit itself and the mechanism
+  that enforces it, both halves came back `absent` from both judges — the artifact names the constant that
+  holds the limit without giving its value, and says nothing about the mechanism. The earlier `correct` had
+  been generosity toward a bundled item, and splitting it withdrew that.
 
-**Within-judge stability is 0.97** (35/36 on the items whose text was unedited, each judge against itself
-across the two runs). The single flip is the same item and model as one of the two between-judge
-disagreements, so one item on one boundary accounts for all observed instability. Between-judge 0.94,
-within-judge 0.97 — against a 1–5 rubric where one criterion spanned 2 to 4 on identical input.
-
-**Construct validity holds on the larger list**: 0 of 22 defect-derived items scored `correct`.
+**The scores themselves are not yet a measure of these two artifacts' quality, and should not be quoted as
+one.** Eleven of the items per target were written *from these artifacts' own confirmed defects*, so a low
+score is arithmetic rather than a finding. The numbers become meaningful the next time these targets are
+described, when the same items face an artifact they were not derived from — which is the entire reason for
+writing them down. The part that carries information today is the handful of items per target that came
+from reading the code rather than from a past defect: obstudio 4 of 6, wardrowbe 2 of 5, both unanimous
+across judges.
 
 ## 15. Accepting a change
 
@@ -1017,12 +1050,54 @@ there measures memorisation. This single rule does more than any other to keep p
 
 ### The noise floor is a prerequisite, not a refinement
 
-Rules 2 and 3 both contain "significant", and neither can be computed without knowing how much a score
-moves between *identical* runs. That number does not exist yet. It is obtained by generating the artifact
-for one target several times with everything held constant and measuring the spread of the scores.
+The rules above turn on the word "significant", and nothing can be called significant without knowing how
+much a score moves between runs where *nothing changed*. Half of that number has now been measured.
 
-**Until it is measured, this gate cannot be operated as written**, and any significance claimed would be
-decoration. Measuring it is the first item in the build order (Appendix D).
+**Method.** The wardrowbe artifact was judged six separate times against the 1–5 rubric of §9.2. The
+artifact, the code, the review brief and the prompt were identical every time, down to the byte; the only
+thing that varied was which model did the judging — four runs on Opus, two on Sonnet. Each ran
+independently and wrote to its own file without seeing the others. Full write-up: `docs/evaluations/noise-floor/RESULTS.md`.
+
+| criterion | opus ×4 | sonnet ×2 |
+|---|---|---|
+| accuracy | 3, 3, 3, 3 | 3, 3 |
+| completeness | 3, 3, 4, 3 | 4, 4 |
+| prose | 4, 4, 4, 4 | 4, 3 |
+| diagrams | 3, 3, 3, 3 | **2, 4** |
+| invariant strength | 3, 4, 3, 3 | 4, 3 |
+| invariant criticality | 3, 3, 3, 3 | 3, 3 |
+| **mean of the six** | 3.17, 3.33, 3.33, 3.17 | 3.33, 3.33 |
+
+**The average across criteria is stable; the individual criteria are not.** Six runs produced means from
+3.17 to 3.33 — a standard deviation of **0.10**. But `diagrams` was scored 2 by one run and 4 by another,
+on identical input: the full usable width of the scale. `completeness` and `invariant strength` each moved
+a point. Only two of the six criteria were unanimous across all six runs.
+
+Three consequences, and they are the reason this measurement had to come before the gate:
+
+1. **An overall score can gate a decision; a single criterion cannot.** A rule of the form "criterion X
+   must not decline" would be responding to chance rather than to the artifact. The gate above therefore
+   reads on the mean across criteria, and any mean quoted from this rubric carries ±0.1.
+2. **One earlier calibration statistic was measuring the noise, not the artifact.** Round 3 reported
+   *exact agreement between the human reviewer and the model judge: 1 of 6 criteria*. Against a floor where
+   criteria move one to two points between identical runs, that number was always going to be small.
+   Agreement within one point — 5 of 6 — was the meaningful figure the whole time.
+3. **The human-versus-judge gap survives.** Human mean 4.17, judges 3.28: a gap of 0.89, which is nine
+   times the floor. Whatever explains it, run-to-run variation does not.
+
+A secondary finding, and the reason the judging panels elsewhere in this document use two models rather
+than running one model twice: Sonnet varied more from run to run, *and* was the only one of the six runs to
+catch a real error — the artifact claims schemas exist for seven of eight data models where only five do.
+Those are two views of the same property. A model that answers less predictably also reaches conclusions
+the steadier model does not, and here two models between them found more than four runs of one.
+
+**What is still unmeasured.** This is judging variance — how much the *scoring* of a fixed artifact moves.
+Generation variance — whether describing the same repository twice produces artifacts of genuinely
+different quality — is the other half, and it costs a full describe pass per repeat. Until that is
+measured, the floor stated here is a lower bound on the total.
+
+The equivalent measurement for the checklist instrument of §14 is much tighter: two judges agree on 94% of
+items, and a judge repeating itself agrees with its earlier answer on 97%.
 
 ## 16. Evaluating the update path
 
@@ -1389,7 +1464,7 @@ build in. None of it is needed to understand the method.
 
 ## Appendix A — Where this stands
 
-*Current as of 2026-08-15. This is the only part of the document that goes stale by design.*
+*Current as of 2026-08-16. This is the only part of the document that goes stale by design.*
 
 ### What has evidence
 
@@ -1412,32 +1487,46 @@ an artifact at all. They cannot fire on the corpus however many repositories are
 that problem is an open item: synthetic injection into the fixture repos would give recall cheaply,
 precision still needs real repositories carrying real artifacts.
 
-**L2, the artifact quality — one agreement number.** Calibration round 2 (obstudio) produced the first:
-exact agreement 2/6, within one point 6/6, human mean 4.00 against a model judge's 3.67. On n=6 over one
-artifact the within-one figure is the only one worth reading. Both scorings were evidenced — no fabricated
-citations, unlike round 1 — but the judge found six defects the human did not, including the strongest of
-the round. Full write-up: `docs/evaluations/selfeval/obstudio/CALIBRATION.md`.
+**L2, the artifact quality — two calibration rounds and a variance measurement.** Round 2 (obstudio) gave
+the first agreement number against a human reviewer: exact agreement on 2 of 6 criteria, within one point
+on 6 of 6, human mean 4.00 against a model judge's 3.67. Round 3 (wardrowbe) repeated it at 1 of 6 exact
+and 5 of 6 within one point, human 4.17 against 3.28.
+
+Judging the wardrowbe artifact six times with nothing changed then established how much of that is noise
+(§15): the mean across criteria varies by only 0.10, but a single criterion can move two points. That
+retroactively explains the low exact-agreement figures — against a floor that wide, exact agreement was
+never going to be high, and the within-one-point number was the meaningful one all along. The human-judge
+gap of 0.89 is nine times the floor, so it is real.
+
+The checklist instrument built for exactly this problem (§14) reaches 94% agreement between two judges and
+97% when a judge repeats itself. Write-ups: `docs/evaluations/selfeval/obstudio/CALIBRATION.md`,
+`.../wardrowbe/`, `docs/evaluations/noise-floor/RESULTS.md`, `docs/evaluations/checklists/`.
 
 ### What is built and not yet running
 
 | Piece | State |
 |---|---|
 | deterministic rubric (§9.1) | works today; no agent, no model |
-| judged rubric (§9.2) | works; one agreement number, still uncalibrated for practical purposes |
+| judged rubric (§9.2) | works; two agreement numbers, and its variance is now measured |
 | spot-check worksheet + label store (§11) | works; holds 19 labels |
 | blind comparison (§10) | objective half works; generating the arms needs other sessions |
-| recurrence suite (§13) | **designed, not built** — nine confirmed obstudio defects are the seed |
-| per-repository checklists (§14) | **designed, not built** |
+| recurrence suite (§13) | **built and run** — 19 entries across two targets |
+| per-repository checklists (§14) | **built and run twice** — 33 items across two targets, four judges each |
 | the ledger (§17) | **designed, not built** |
 | update evaluation (§16) | machinery built, never run; blocked on the two-revision loop |
-| noise floor (§15) | **not measured** — this blocks the acceptance gate as written |
+| noise floor (§15) | judging half **measured**; generation half not |
 
 ### The binding constraint
 
-It has moved. It used to be the empty label store; that is no longer true. **It is now the noise floor.**
-Three of the acceptance rules in §15 contain the word "significant", and none of them can be evaluated
-until we know how far a score moves between identical runs. Nothing downstream — accepting a subjective
-change, gating an update, comparing two releases — can be operated as written until that number exists.
+It has moved twice. It was the empty label store, then the missing noise floor. **It is now the ledger
+(§17) and the number of calibration rounds.**
+
+The judging half of the noise floor is measured, so the acceptance gate in §15 can be operated on an
+overall score today. Two things still block the loop this document describes. First, there is nowhere to
+record a series of results, so each round informs the next only through whoever remembers it — that is the
+ledger, and it is the cheapest remaining piece. Second, two calibration rounds on fresh repositories is
+thin for any claim about how the tool performs in general; the target is around six, and each one consumes
+a repository nobody has read before.
 
 ### A pattern worth recording, because it recurred seven times
 
@@ -1534,7 +1623,7 @@ side effect of where a file sits.
 | 2 | Pinned-corpus regression (§6) | **done** — 3 of 5 repositories recorded |
 | 3 | Held-out defect study (§7) | **done, 4 runs** — 3 of 4 powered repositories pass |
 | 4 | Self-evaluation + rubric (§8, §9) | **deterministic half done**; judged half gated on 5; `run` blocked on the agent seam |
-| 5 | Human spot-check and calibration (§11) | **machinery done, no labels collected** |
+| 5 | Human spot-check and calibration (§11) | machinery done; 19 labels, 3 calibration rounds |
 | 6 | Blind comparison (§10) | **objective half done**; generation left to separate sessions; judged half needs 5 |
 | 7 | L3 task benchmark | not designed |
 
@@ -1547,8 +1636,11 @@ side effect of where a file sits.
 4. **Self-evaluation tool + rubric v1** (§8, §9) — the deterministic half is shipped and useful on its
    own. The judged half is gated on item 5, and `selfeval.py run` refuses rather than half-implementing
    the agent seam. The DeepEval trial of §12 belongs here and has not been run.
-5. **Human spot-check and calibration** (§11) — machinery shipped, **zero labels**. This is the binding
-   constraint on the whole L2 half, and it cannot be resolved by the person who built the checks.
+5. **Human spot-check and calibration** (§11) — machinery shipped; 19 labels collected and three
+   calibration rounds done. This was the binding constraint on the whole L2 half for a long time, and it
+   could not be resolved by the person who built the checks. What limits L2 now is the *number* of
+   calibration rounds: two on fresh repositories is thin, and each one consumes a repository nobody has
+   read before (Appendix A).
 6. **Blind comparison** (§10) — the objective half is shipped: identical hashed inputs, blinding and
    shuffling, and scoring against the ground-truth verdicts from the corpus pass. Generation is *not*
    automated, because one model writing all three arms and then grading them measures self-preference.
