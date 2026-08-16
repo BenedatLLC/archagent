@@ -761,6 +761,24 @@ the variance is far below a five-point judgement.
 The reading was done once, by a human, during a calibration run. **The checklist is where that work is
 banked so it never has to be repeated.**
 
+### The `accuracy` criterion selects against finding errors
+
+Round 3 produced the sharpest result the rubric has given, and it is about the rubric.
+
+The criterion says *"pick the five most load-carrying claims and check each against the code."* A human
+reviewer did exactly that, found five for five correct, and scored `accuracy` 5. A blind judge walked the
+artifact against the tree instead and found five contradicted claims — a schema inferred from a directory
+listing, a table count taken from a file count, a startup behaviour recalled rather than read. All five
+verified.
+
+**Load-bearing claims are the ones the author checked while writing.** Asking a reviewer to sample them
+selects for the claims most likely to be right. The errors were all in claims made in passing, and no
+amount of care in sampling would have surfaced them.
+
+So the criterion should ask for **coverage, not importance** — walk the documents against the tree — and
+a checklist (below) is how that becomes repeatable rather than a matter of how thorough a given reviewer
+felt.
+
 ### Three cautions
 
 **A checklist is an answer key.** Whoever authors a prompt change must not be reading it while doing so, or
