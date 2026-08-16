@@ -21,6 +21,29 @@ from .invariants import Invariant
 from .rules import parse_property
 
 
+#: Colour escapes in a tool's output, which every parser below has to survive.
+#:
+#: `FORCE_COLOR` is set in plenty of developer shells and CI images, and several of these tools honour it
+#: even when their output is a pipe. import-linter then prints `BND-001 BROKEN` wrapped in SGR codes, the
+#: status regex matches nothing, and the "the tool errored before checking" branch reports **every**
+#: invariant as passed — a real broken contract rendering as a clean run. `_no_colour` asks the child not
+#: to colourise and `_strip_ansi` handles the ones that do it anyway.
+_ANSI = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
+
+
+def _strip_ansi(text: str) -> str:
+    return _ANSI.sub("", text)
+
+
+def _no_colour(env: dict[str, str] | None = None) -> dict[str, str]:
+    e = dict(os.environ if env is None else env)
+    e.pop("FORCE_COLOR", None)
+    e.pop("CLICOLOR_FORCE", None)
+    e["NO_COLOR"] = "1"
+    e["TERM"] = "dumb"
+    return e
+
+
 @dataclass
 class Finding:
     file: str
@@ -68,14 +91,14 @@ def run_checks(
 def _run_import_linter(ids, config, by_id) -> list[CheckResult]:
     il_config = config.generated_dir / ".importlinter"
     tool = _tool_path("lint-imports")
-    env = dict(os.environ)
+    env = _no_colour()
     src = os.pathsep.join(str((config.project_root / p).resolve()) for p in config.python.source_paths)
     env["PYTHONPATH"] = src + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
     proc = subprocess.run(
         [tool, "--config", str(il_config)],
         cwd=config.project_root, env=env, capture_output=True, text=True,
     )
-    out = proc.stdout + "\n" + proc.stderr
+    out = _strip_ansi(proc.stdout + "\n" + proc.stderr)
     statuses = dict(re.findall(r"^(\S+)\s+(KEPT|BROKEN)\s*$", out, re.MULTILINE))
     if not statuses:  # import-linter errored before checking (e.g. an invalid contract)
         lines = [ln.strip() for ln in out.splitlines() if ln.strip() and not set(ln.strip()) <= set("╔╗╚╝║═╠╣╩╦╬▶◀│└┐┘┌ ")]
@@ -122,7 +145,8 @@ def _run_dependency_cruiser(ids, config, by_id) -> list[CheckResult]:
                             skipped_reason="npx/node not found") for i in ids]
     cmd = [npx, "--yes", "--package=dependency-cruiser", "--package=typescript",
            "depcruise", "--config", str(cfg), "--output-type", "json", *config.ts.source_paths]
-    proc = subprocess.run(cmd, cwd=config.project_root, capture_output=True, text=True, timeout=180)
+    proc = subprocess.run(cmd, cwd=config.project_root, env=_no_colour(),
+                          capture_output=True, text=True, timeout=180)
     try:
         data = json.loads(proc.stdout or "{}")
     except json.JSONDecodeError:
@@ -145,13 +169,19 @@ def _run_ast_grep(ids, config, by_id) -> list[CheckResult]:
     paths = [p for p in config.all_source_paths() if (config.project_root / p).exists()]
     proc = subprocess.run(
         [tool, "scan", "-c", str(sgconfig), "--json", *paths],
-        cwd=config.project_root, capture_output=True, text=True,
+        cwd=config.project_root, env=_no_colour(), capture_output=True, text=True,
     )
     by: dict[str, list[Finding]] = {i: [] for i in ids}
     try:
         matches = json.loads(proc.stdout or "[]")
     except json.JSONDecodeError:
-        matches = []
+        # Output we cannot read is not the same as no violations. Falling through to `matches = []` here
+        # reported every rule as passing whenever ast-grep printed anything unparseable, which is the
+        # failure ADR 0002 forbids: "nothing was checked" rendering exactly like "everything passed".
+        reason = (_strip_ansi(proc.stderr or proc.stdout).strip().splitlines() or
+                  ["ast-grep produced no JSON"])[-1]
+        return [CheckResult(i, "ast-grep", True, by_id[i].severity,
+                            skipped_reason=reason[:100]) for i in ids]
     for m in matches:
         rid = m.get("ruleId")
         if rid in by:
