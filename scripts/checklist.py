@@ -3,6 +3,7 @@
 
     python scripts/checklist.py render --target obstudio --artifact architecture > worksheet.md
     python scripts/checklist.py score  worksheet-answered.md --target obstudio
+    python scripts/checklist.py agree  judge-a.md judge-b.md --target obstudio
     python scripts/checklist.py list
 
 `render` writes the worksheet a judge fills in: fixed claims, fixed order, correct answer stated. `score`
@@ -105,6 +106,60 @@ def cmd_score(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_agree(args: argparse.Namespace) -> int:
+    """How much two judges disagree on the same artifact — the checklist's own noise floor.
+
+    §14 claims a ternary verdict against a stated answer varies far less than a 1–5 judgement, where the
+    measured floor spans two points on a single criterion. That is an argument, not a measurement, until
+    two judges answer the same worksheet. This is the measurement.
+
+    Disagreements are reported item by item rather than as a single number, because *where* judges differ
+    is the useful part: §14 predicts the residual sits on the `wrong`/`absent` boundary, and a disagreement
+    that lands somewhere else means something other than the predicted weakness is going on.
+    """
+    items = items_for(args.target)
+    a = parse(Path(args.a).read_text(), items)
+    b = parse(Path(args.b).read_text(), items)
+    na, nb = Path(args.a).stem, Path(args.b).stem
+
+    agreed, differed, incomparable = [], [], []
+    for it in items:
+        va = a.get(it.id).verdict if a.get(it.id) and not a[it.id].discarded else None
+        vb = b.get(it.id).verdict if b.get(it.id) and not b[it.id].discarded else None
+        if va is None or vb is None:
+            incomparable.append((it, va, vb))
+        elif va == vb:
+            agreed.append((it, va))
+        else:
+            differed.append((it, va, vb))
+
+    print(f"\nagreement — {args.target}: {na} vs {nb}\n")
+    for it, va, vb in differed:
+        boundary = {va, vb} == {"wrong", "absent"}
+        print(f"  DIFFER  {it.id:44} [{it.severity}]  {na}={va}  {nb}={vb}"
+              + ("   (the predicted wrong/absent boundary)" if boundary else ""))
+    for it, va, vb in incomparable:
+        print(f"  ---     {it.id:44} unscored by one judge  ({na}={va}, {nb}={vb})")
+
+    comparable = len(agreed) + len(differed)
+    if not comparable:
+        print("\nnothing comparable")
+        return 1
+    print(f"\n  agree {len(agreed)}/{comparable} = {len(agreed)/comparable:.2f}")
+    on_boundary = sum(1 for _, va, vb in differed if {va, vb} == {"wrong", "absent"})
+    if differed:
+        print(f"  of {len(differed)} disagreement(s), {on_boundary} on the wrong/absent boundary")
+
+    sa, sb = score(a, items), score(b, items)
+    print(f"\n  {na:24} accuracy {sa.accuracy if sa.accuracy is not None else float('nan'):.2f}"
+          f"   weighted {sa.weighted_accuracy if sa.weighted_accuracy is not None else float('nan'):.2f}")
+    print(f"  {nb:24} accuracy {sb.accuracy if sb.accuracy is not None else float('nan'):.2f}"
+          f"   weighted {sb.weighted_accuracy if sb.weighted_accuracy is not None else float('nan'):.2f}")
+    if sa.accuracy is not None and sb.accuracy is not None:
+        print(f"  {'spread':24} {abs(sa.accuracy - sb.accuracy):.2f}")
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -122,6 +177,12 @@ def main() -> int:
     p.add_argument("answers")
     p.add_argument("--target", required=True)
     p.set_defaults(fn=cmd_score)
+
+    p = sub.add_parser("agree", help="compare two completed worksheets — the checklist's noise floor")
+    p.add_argument("a")
+    p.add_argument("b")
+    p.add_argument("--target", required=True)
+    p.set_defaults(fn=cmd_agree)
 
     args = ap.parse_args()
     return args.fn(args)
