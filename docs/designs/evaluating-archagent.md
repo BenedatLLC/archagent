@@ -1174,6 +1174,50 @@ An update evaluation is two runs plus a link between them. Modelling it as a sec
 row leaves most of the table empty and cannot express a chain longer than two. `predecessor_run_id` on an
 ordinary row handles both, and keeps every run the same shape.
 
+### As built (2026-08-16)
+
+`tests/ledger.py` and `scripts/ledger.py`, writing `<eval-home>/ledger.csv`. Nineteen rows, backfilled from
+every run on record: three calibration rounds (six rows, since two of them were scored twice), one scoring
+run, the six noise-floor judgings, and the eight checklist judgings.
+
+```
+python scripts/ledger.py list [--target wardrowbe] [--kind checklist]
+python scripts/ledger.py trend judged_mean --kind noise-floor --judge opus
+python scripts/ledger.py add --run-id ... --target-commit ...
+```
+
+**The command that earns the file is `trend`, and what it mostly does is refuse.** Asked for a series of
+judged means across the calibration rounds it prints the rows and then:
+
+> NOT A TREND. These rows differ on `rubric_version`, so they are not measuring the same thing, and a
+> series across them would be a property of the table rather than of the artifacts.
+> `rubric_version: brief-v1, brief-v2, brief-v3`
+
+Those three means are 3.0, then 4.00, then 4.17 — a clean rising line, and the most tempting number in the
+whole record. They were produced under three different review briefs, and until now nothing anywhere
+recorded that. A ledger that would happily average them is worse than no ledger, because the number it
+produces looks like a result.
+
+**Two failure modes are kept separate, and collapsing them would make the tool useless.**
+
+- *The rows differ* on a comparability key — fatal. Refuse, name the key, name the values, and tell the
+  caller to narrow the selection. `--judge` and `--rubric` filters exist so the refusal is an instruction
+  rather than a dead end.
+- *A key was never recorded* — a caveat. Print the series with the gap named: "a difference between them
+  cannot be ruled out; this is shown because it is the only history there is, not because it is sound."
+
+That distinction is not theoretical. **Not one of the nineteen backfilled rows records which model
+generated the artifact**, because no run ever captured it — and this is the column §17 called the largest
+single source of variance. Under a strict rule the entire history would be excluded and the ledger would
+be empty on the day it was built. Under a lenient one it would read as sound. It is shown, and it says
+what is missing.
+
+**What the backfill exposed by trying to fill the columns in.** Three rounds of expensive work produced
+records that cannot answer basic questions: which model wrote each artifact, and in two cases which model
+judged it. Those facts existed at the time and were not written down, and they are not recoverable now.
+That is the argument for the ledger stated better than the design section above states it — the cost of
+not having one is not extra effort later, it is information that is simply gone.
+
 ---
 
 # Part IV — Discipline and limits
@@ -1512,21 +1556,26 @@ The checklist instrument built for exactly this problem (§14) reaches 94% agree
 | blind comparison (§10) | objective half works; generating the arms needs other sessions |
 | recurrence suite (§13) | **built and run** — 19 entries across two targets |
 | per-repository checklists (§14) | **built and run twice** — 33 items across two targets, four judges each |
-| the ledger (§17) | **designed, not built** |
+| the ledger (§17) | **built** — 19 rows, backfilled from every run on record |
 | update evaluation (§16) | machinery built, never run; blocked on the two-revision loop |
 | noise floor (§15) | judging half **measured**; generation half not |
 
 ### The binding constraint
 
-It has moved twice. It was the empty label store, then the missing noise floor. **It is now the ledger
-(§17) and the number of calibration rounds.**
+It has moved three times. It was the empty label store, then the missing noise floor, then the missing
+ledger. **It is now simply the number of calibration rounds.**
 
-The judging half of the noise floor is measured, so the acceptance gate in §15 can be operated on an
-overall score today. Two things still block the loop this document describes. First, there is nowhere to
-record a series of results, so each round informs the next only through whoever remembers it — that is the
-ledger, and it is the cheapest remaining piece. Second, two calibration rounds on fresh repositories is
-thin for any claim about how the tool performs in general; the target is around six, and each one consumes
-a repository nobody has read before.
+Everything the loop needs mechanically is now in place: the judging half of the noise floor is measured, so
+the acceptance gate in §15 can be operated on an overall score; the recurrence suite and the checklists
+turn past rounds into assets rather than memories; and the ledger records what makes two runs comparable.
+
+What is left is evidence. Two calibration rounds on genuinely fresh repositories is thin for any claim
+about how the tool performs in general. The target is around six, and each one permanently consumes a
+repository nobody has read before — so this constraint cannot be relieved by building anything.
+
+One thing the ledger made visible on its first day: **no run on record captured which model generated the
+artifact**, the column §17 identifies as the largest single source of variance. That information existed
+each time and is not recoverable. Rounds four through six can record it; rounds one through three cannot.
 
 ### A pattern worth recording, because it recurred seven times
 
