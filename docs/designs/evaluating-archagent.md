@@ -939,6 +939,29 @@ differ by a full verdict. That is a defect in the item, not in the judge.
 target were written from those artifacts' own defects. Such a list can only produce a low number. The score
 becomes a measurement at the next generation of these targets, which is what banking the items is for.
 
+### Run 2: the split confirmed the rule
+
+Five compound items were split (obstudio 14→17, wardrowbe 14→16) and the same four judges re-ran.
+`docs/evaluations/checklists/RESULTS-run2.md`.
+
+**Agreement 31/33 = 0.94, and the `correct`/`absent` class is gone.** Both remaining disagreements are the
+`wrong`/`absent` boundary this section named as the residual, and both are the same shape: an artifact
+renders the right topic under the wrong vocabulary, one judge calling that a contradiction and the other
+silence. Neither judge is wrong. That appears to be the floor.
+
+**Splitting moved verdicts in both directions, which is the evidence the change is real rather than
+flattering.** obstudio's `retention-is-scoped-to-the-producing-process` went from unanimous `absent` to
+unanimous `correct` — a `serious` item where the half the artifact lacked had been erasing the half it had.
+wardrowbe's `tagging-retries` went the other way: split into the bound and the mechanism, both halves come
+back unanimously `absent`, withdrawing a `correct` that had been generosity toward a compound item.
+
+**Within-judge stability is 0.97** (35/36 on the items whose text was unedited, each judge against itself
+across the two runs). The single flip is the same item and model as one of the two between-judge
+disagreements, so one item on one boundary accounts for all observed instability. Between-judge 0.94,
+within-judge 0.97 — against a 1–5 rubric where one criterion spanned 2 to 4 on identical input.
+
+**Construct validity holds on the larger list**: 0 of 22 defect-derived items scored `correct`.
+
 ## 15. Accepting a change
 
 Evaluation produces proposed changes. They are accepted by two different rules, and telling them apart is
