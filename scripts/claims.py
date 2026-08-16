@@ -47,9 +47,8 @@ def cmd_check(args) -> int:
     if s.diverged:
         print(f"\nDIVERGED — the artifact and the code disagree ({len(s.diverged)})\n")
         for r in s.diverged:
-            print(f"  {r.claim.id}  {r.claim.description}")
-            print(f"      artifact says: {r.claim.value}")
-            print(f"      code says:     {r.observed}")
+            print(f"  {r.claim.id}  [{r.claim.kind}]  {r.claim.description}")
+            print(f"      {r.why}")
             if r.claim.source:
                 print(f"      asserted in:   {r.claim.source}")
             print(f"      command:       {r.claim.command}")
@@ -65,7 +64,7 @@ def cmd_check(args) -> int:
         print("AGREED\n")
         for r in results:
             if r.ok:
-                print(f"  {r.claim.id}  {r.claim.description} = {r.observed}")
+                print(f"  {r.claim.id}  [{r.claim.kind}]  {r.claim.description}")
         print()
 
     print(f"{s.total} claims: {s.agreed} agree, {len(s.diverged)} diverge, {len(s.errored)} could not run")
