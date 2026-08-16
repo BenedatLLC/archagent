@@ -79,6 +79,21 @@ TIMEOUT_SECONDS = 30
 _REGEX_METACHARS = set("[]()*+?^$\\")
 
 
+#: Top-level directories that actually exist on a POSIX system. An absolute argument is only a path if it
+#: starts with one of these — `/api/validation/` is a URL prefix being matched, not a file, and the first
+#: version refused it. Checking for existence rather than for a leading slash is what tells them apart.
+_REAL_ROOTS = frozenset({"etc", "usr", "var", "home", "root", "bin", "sbin", "opt", "tmp", "dev",
+                         "proc", "sys", "private", "Users", "Library", "Applications", "System",
+                         "Volumes", "mnt", "media", "srv", "run"})
+
+
+def leaves_the_root(arg: str) -> bool:
+    if arg.startswith("~") or ".." in Path(arg).parts:
+        return True
+    parts = Path(arg).parts
+    return arg.startswith("/") and len(parts) > 1 and parts[1] in _REAL_ROOTS
+
+
 def split_pipeline(command: str) -> list[str]:
     r"""Split on `|` **outside quotes**.
 
@@ -265,7 +280,7 @@ def validate(command: str) -> list[str]:
         for a in argv[1:]:
             if set(a) & _REGEX_METACHARS:      # a pattern, not a path
                 continue
-            if a.startswith("/") or a.startswith("~") or ".." in Path(a).parts:
+            if leaves_the_root(a):
                 bad.append(f"path {a!r} may leave the target root")
     return bad
 
@@ -311,8 +326,6 @@ def run(command: str, root: Path) -> tuple[str | None, str | None]:
         return None, (err or "").strip().splitlines()[-1][:120] if err else \
             f"exit {procs[-1].returncode}"
     out = out.strip()
-    if len(out) > MAX_VALUE_CHARS:
-        return None, f"output exceeds {MAX_VALUE_CHARS} characters ({len(out)}) — narrow the command"
     leak = looks_like_a_secret(out)
     if leak:
         # Never return the output alongside the complaint: the caller writes results into a file, and a
@@ -350,6 +363,13 @@ def check(claims: list[Claim], root: Path) -> list[Result]:
     out = []
     for c in claims:
         observed, error = run(c.command, root)
+        if error is None and c.kind != "absent" and len(observed) > MAX_VALUE_CHARS:
+            # The cap exists to stop a runaway command committing a megabyte of output. It has to apply
+            # where the output is *recorded*, not where it is run: an `absent` claim records nothing when
+            # it passes and needs only a count when it fails, and capping at run time made every broad
+            # `absent` claim unrunnable — the kind the redesign leans on most.
+            error = f"output exceeds {MAX_VALUE_CHARS} characters ({len(observed)}) — narrow the command"
+            observed = None
         why = "" if error is not None else judge(c, observed or "")
         out.append(Result(claim=c, observed=observed, error=error, why=why))
     return out

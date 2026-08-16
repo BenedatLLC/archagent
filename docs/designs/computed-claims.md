@@ -1,5 +1,5 @@
 ---
-status: proposed — step 1 run 2026-08-16, gate not met; see §9
+status: proposed — predicate redesign passed step 1 on 2026-08-16; step 2 next
 date: 2026-08-16
 author: Jeff Fischer (proposal), written up with Claude
 ---
@@ -533,8 +533,40 @@ more than a silence someone re-derives in six months.
 |---|---|
 | 1 — retrospective divergence count | **8, against a predicted 17 — gate not met** |
 | 1 — facts left uncomputed under the safety rules | 22 of 56 (39%), none refused *by* the rules |
-| 2 — generation variance | not run, and should not be under the current design |
-| 3 — two arms | not run, and should not be under the current design |
+| 1 (predicates) — named defects caught | **12 of 12 predicted, plus 1 not predicted — gate passed** |
+| 1 (predicates) — authoring error rate | 7 of 35 commands (20%), down from 27% |
+| 2 — generation variance | not run — next |
+| 3 — two arms | not run |
+
+### Second attempt, with predicate claims (2026-08-16)
+
+The redesign — claims as predicates over closed sets and properties, never magnitudes — was
+pre-registered in `docs/evaluations/claims/PREREGISTRATION-2.md` with the 12 defects it should catch named
+individually, and the gate set at 10 of 12 by name rather than by count. Results:
+`docs/evaluations/claims/RESULTS-2.md`.
+
+**All 12 were caught, each by the claim and kind predicted for it**, plus one that was predicted *not* to
+be: the artifact citing the wrong file for the UI embed. Written as a `holds` claim it fails outright,
+because forcing an assertion into a form a command can refute is itself the mechanism — a mis-attribution
+does not need a prose-to-claim comparison after all. Thirteen of the 28 recorded defects are now reachable,
+against eight under the value-based design.
+
+**The authoring error rate fell from 27% to 20%**, and the residue is instructive. `absent` and `holds`
+removed the *reproduce an exact figure* class entirely; what remains is **scoping** — a command that looks
+in the right place and takes in more than the claim covers, like sweeping three enums where one was meant.
+That class does not go away with a different claim kind, and in production those errors would still be
+silent. Five of the seven are visible on sight once the command's *output* sits next to the claim, which
+settles that recording output is a requirement rather than a nicety.
+
+**Two prototype defects surfaced that no test had caught**, both in the safety layer and both would have
+shipped: a URL prefix (`/api/validation/`) refused as an absolute path — and it was the `absent` claim for
+the most valuable finding — and the output cap making broad `absent` claims unrunnable, because a failing
+`absent` claim legitimately produces a lot of output and only its emptiness matters. The cap belongs where
+evidence is recorded, not where the command runs.
+
+**What stays out of reach is unchanged**: omissions, presentation, judgements, and the incidental counts
+this design deliberately stops treating as claims. Both security findings in this project's history are
+omissions, and no version of this mechanism reaches them.
 
 **Step 1 ran on 2026-08-16 and the pre-registered gate was not met.** Full write-up:
 `docs/evaluations/claims/RESULTS.md`. Three results decide what happens next.

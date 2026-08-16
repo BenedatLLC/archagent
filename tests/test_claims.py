@@ -9,7 +9,8 @@ from pathlib import Path
 
 import pytest
 
-from claims import (Claim, judge, load, looks_like_a_secret, run, split_pipeline, validate)
+from claims import (Claim, check, judge, leaves_the_root, load, looks_like_a_secret, run,
+                    split_pipeline, validate)
 
 
 def _claim(**kw):
@@ -64,6 +65,15 @@ def test_a_regex_that_starts_with_a_slash_is_not_a_path():
 
 def test_a_path_leaving_the_target_root_is_refused():
     assert validate("wc -l ../../../etc/passwd")
+    assert validate("cat ~/.aws/credentials")
+
+
+def test_a_url_prefix_is_not_a_path():
+    """`rg -v '/api/validation/'` filters a route list. The first version read the leading slash as an
+    absolute path and refused the claim — and it was an `absent` claim about which routes mutate, which is
+    the most valuable kind."""
+    assert not leaves_the_root("/api/validation/")
+    assert leaves_the_root("/etc/passwd") and leaves_the_root("~/.ssh/id_rsa")
 
 
 # --- predicates fail for the right reason -----------------------------------------------------------
@@ -149,10 +159,16 @@ def test_a_command_finding_nothing_is_an_answer_not_an_error(tmp_path):
     out, err = run("rg nothinghere .", tmp_path)
     assert err is None and out == ""
 
-def test_an_oversized_output_is_refused(tmp_path):
+def test_an_oversized_output_is_refused_where_it_would_be_recorded(tmp_path):
+    """The cap belongs to recording, not to running. Applying it in `run` made every broad `absent` claim
+    unrunnable — the kind the redesign leans on most — because an `absent` claim needs only to know
+    whether the output was empty, and a failing one legitimately produces a lot of it."""
     (tmp_path / "big.txt").write_text("word " * 500)
-    out, err = run("cat big.txt", tmp_path)
-    assert out is None and "exceeds" in err
+    (r_set,) = check([_claim(kind="set", command="cat big.txt")], tmp_path)
+    assert r_set.observed is None and "exceeds" in r_set.error
+
+    (r_absent,) = check([_claim(kind="absent", command="cat big.txt")], tmp_path)
+    assert r_absent.error is None and "expected nothing" in r_absent.why
 
 def test_the_environment_is_scrubbed(tmp_path, monkeypatch):
     monkeypatch.setenv("MY_SECRET_TOKEN", "hunter2hunter2")
