@@ -1,5 +1,5 @@
 ---
-status: proposed — acceptance gated on the evaluation in §8
+status: proposed — step 1 run 2026-08-16, gate not met; see §9
 date: 2026-08-16
 author: Jeff Fischer (proposal), written up with Claude
 ---
@@ -531,10 +531,43 @@ more than a silence someone re-derives in six months.
 
 | Step | Result |
 |---|---|
-| 1 — retrospective divergence count | not run |
-| 1 — facts left uncomputed under the safety rules | not run |
-| 2 — generation variance | not run |
-| 3 — two arms | not run |
+| 1 — retrospective divergence count | **8, against a predicted 17 — gate not met** |
+| 1 — facts left uncomputed under the safety rules | 22 of 56 (39%), none refused *by* the rules |
+| 2 — generation variance | not run, and should not be under the current design |
+| 3 — two arms | not run, and should not be under the current design |
+
+**Step 1 ran on 2026-08-16 and the pre-registered gate was not met.** Full write-up:
+`docs/evaluations/claims/RESULTS.md`. Three results decide what happens next.
+
+**The count fell short because §3 asked the wrong question.** Its classification — *could a deterministic
+command settle this fact?* — was right about 17 of 28 defects. But a claims table only catches a defect
+when the artifact **commits to a value**, and most of those 17 were stated as prose behaviour: "logs
+rather than raises", "falls back to local auth", a diagram edge, *which* file embeds the UI. The mechanism
+as designed asks whether a recorded number still holds; most fabricated claims are not numbers.
+
+**The design that would reach them is a different one: a claim as a predicate rather than a value** — 
+"`validate_security` raises", settled by a command's exit status. That needs its own prediction before
+anything is built, not a reinterpretation of this one.
+
+**The safety rules turned out to be nearly free.** Exactly one command was ever refused by static
+validation, and rewriting it took seconds. The 22 uncomputed facts were beyond *any* command — import
+graphs, properties of every code path, reasons, hedges — not beyond the allowlist. That question is
+settled favourably and does not need revisiting.
+
+**The real risk was measured, and it is worse than the yield.** Of 37 commands written, **ten measured
+something other than what the prose meant** — counting `.d.ts` files, counting volume names as compose
+services, counting `os.Getenv` inside `_test.go`. In this retrospective those errors were loud, because
+the recorded value came from the prose. **In production they would be silent**, because the recorded value
+comes from the command: a command measuring the wrong thing records a plausible number, agrees with itself
+forever, and lends a fabricated claim the appearance of verification. §5.1 named this; step 1 measured it
+at 27% of first attempts. Storing the command's *output* rather than a bare count would have caught about
+half, and should be a requirement in anything built from this design.
+
+**Two findings argue the other way.** Two of the eight divergences had never been found — by four
+reviewers across two calibration rounds and eight checklist judgings. `skills/` ships nine skills where an
+invariant's rationale says eight; `k8s/` holds eleven manifests where `deployment.md` enumerates ten. Both
+cost seconds and no judge, and both are the kind of small factual error a reviewer's attention never
+reaches.
 
 ### Revisions
 
