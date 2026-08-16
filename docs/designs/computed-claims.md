@@ -37,6 +37,86 @@ divergence. Architecture prose then cites the claim rather than stating a number
 - **Invariants** — the ADL's existing table of checkable design rules. **Not the same thing**; see §2.
 - **Artifact / target / drift** — as defined in `evaluating-archagent.md`.
 
+## The workflow — what runs when
+
+Three moments in a claim's life: it is **authored**, it is **checked** repeatedly, and eventually it is
+**revised**. Different commands drive each, and only the first and the last write anything.
+
+### Authoring — during `describe`
+
+While writing the documents, the agent reaches a fact that is a count or an enumeration: *nineteen tables*,
+*four lifecycle states*, *three routes change state*. For each one:
+
+1. It writes a claim row — an id, a description, and the command that establishes the fact.
+2. archagent **validates the command statically** against §5.4's rules, and refuses it if it is malformed,
+   uses a tool outside the allowlist, or touches a path it should not.
+3. archagent **executes the accepted command** — parsed into pipeline stages, no shell — and records the
+   result as the claim's value.
+4. The agent writes the fact into prose with a `[C-nnn]` reference beside it.
+
+If step 2 refuses, or the agent judges that no safe command establishes the fact, **the fact goes into the
+prose as ordinary text with no reference.** That is the expected outcome for a fair number of claims and is
+not a failure (§5.4).
+
+This is the only place a value is written from a command, and it is the same act as writing the sentence
+that cites it — which is what distinguishes it from the update mode §5.2 removes.
+
+### Checking — during `drift`, `check`, and CI
+
+Nothing is written. Every command runs, each result is compared to its recorded value, and three things
+can come back:
+
+- **divergence** — `C-002: recorded 4, observed 5`. The code changed and the documents have not caught up.
+- **command failure** — the command errored or returned nothing. Usually a file moved; occasionally the
+  command was always wrong and nothing had changed enough to reveal it.
+- **conformance failure** — a `[C-nnn]` reference with no matching row, a row nothing references, or a
+  command that no longer passes static validation. These are defects in the artifact rather than changes
+  in the code, and they are reported separately for that reason.
+
+Divergences are findings. They do not fail a build (§5.5).
+
+### Revising — during an update pass
+
+The agent is given the divergences. For each, `Claims:` in subsystem front-matter names the documents that
+depend on it, so the work is scoped rather than a re-read of everything. The agent opens those documents,
+revises the prose, and **updates the recorded value in the same edit**.
+
+No command does that step. Clearing a divergence requires editing the document, which is the work that
+actually needed doing — see §5.2 for why a mode that did it automatically was removed.
+
+### The full loop
+
+```
+describe        →  claims file written, prose cites [C-nnn]
+     │
+     ▼
+code changes    →  a number moves; nobody notices yet
+     │
+     ▼
+drift / check   →  "C-002: recorded 4, observed 5"   ← every run, until fixed
+     │
+     ▼
+update pass     →  prose revised + value updated in one edit
+     │
+     └──────────→  back to checking
+```
+
+A divergence nobody acts on is reported again on every run and stays visibly stale. That is intended: the
+alternative is a number that quietly stops being true, which is the failure this design exists to remove.
+
+### Summary
+
+| command | claims behaviour | writes? |
+|---|---|---|
+| `init` | nothing; may set `[claims] enabled` in `archagent.toml` | — |
+| `describe` | authors new rows, computes their values, inserts `[C-nnn]` references | yes |
+| `drift` | runs every command; divergences appear among drift findings | no |
+| `check` | runs every command; divergences reported under their own heading, beneath invariants | no |
+| an update pass | revises prose and recorded values together | yes, by editing |
+
+All of it is on by default; `--no-claims` and `[claims] enabled = false` turn it off, and the default
+inverts for a target the operator does not control (§5.5).
+
 ## 1. What is proposed
 
 Alongside the architecture documents, archagent maintains one more file — say `claims.md`:
@@ -165,6 +245,11 @@ takes a reader.
 An earlier draft had a second mode that re-ran the commands and updated the recorded values, emitting a
 diff for someone to accept. **It is removed.** The argument for removing it is stronger than the argument
 for constraining it.
+
+To be precise about what is removed, since values plainly do get written somewhere: **authoring a new
+claim computes and records its value**, because that happens inside the act of writing the sentence that
+cites it. What is removed is *updating an existing value* — the operation whose whole purpose is to clear
+a divergence, and which can therefore be performed without touching the prose the divergence is about.
 
 **It is not needed.** `check` already computes the new value — that is how it detects a divergence. So it
 can simply report `C-002: recorded 4, observed 5`, and whoever is revising the documents copies it across
@@ -455,6 +540,8 @@ more than a silence someone re-derives in six months.
 
 - **2026-08-16** — `regenerate` removed (§5.2); the safety rules written out as five defences with the
   governing rule *prefer an uncomputed claim to an unsafe command* (§5.4); ESAA read and cited.
+- **2026-08-16** — workflow section added at the top: what runs during authoring, checking and revising,
+  and the distinction that authoring computes a new claim's value while nothing recomputes an existing one.
 - **2026-08-16** — threat model corrected (§5.4): archagent normally runs where an agent already has a
   shell and write access, so claim commands grant no new capability and the rules stand on correctness
   grounds rather than security ones. Claim checking therefore runs **by default** in `describe`, `drift`
