@@ -155,6 +155,21 @@ nobody checked it.
    contradicted the artifact's own declared scope, because the count was taken repo-wide by hand. Use
    `archagent status`, `git ls-files … | wc -l`, or similar, and cite it.
 
+**A relational subject needs a picture.** If a document's subject is a *set of relationships* — database
+tables and their foreign keys, an import cycle, which services call which during one request — prose about
+directionality is where a reader gives up. A reviewed artifact described 19 tables with no ER diagram, a
+two-node import cycle in words alone, and had a section headed "Topology" containing a table. Each is a
+two-line Mermaid graph.
+
+**If you call something a contract, enumerate it.** Naming a type as "the contract between X and Y" and
+not saying what its values are leaves the reader to open the file — and leaves the next person to guess.
+In one review, the reader who complained about exactly this omission then named the states wrongly.
+
+**Ask where ownership is enforced.** For any system with more than one user or tenant: which code path
+checks that a row belongs to the caller, is it a dependency or a hand-written argument at each call site,
+and what happens when one call site forgets? The six dimensions do not ask this and it is where the worst
+bugs live. Write the answer down even when the answer is "at every call site, by convention".
+
 **A state diagram is a set of claims, one per edge.** Each transition asserts "this event causes this
 change of state". Cite the code that raises the event for every edge you draw. A reviewed diagram had
 three edges the code did not have — telemetry arriving marked a store stale but started, cancelled and

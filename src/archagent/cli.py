@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -30,6 +31,9 @@ from .investigations import RATINGS, record as _record_inv
 from .init import KNOWN_AGENTS, detect_agents, init_project, upgrade_project
 from .invariants import parse_invariants
 from .status import status as run_status
+
+#: a `path.ext:line` or `path.ext` citation, the evidence a verified prose rule should carry
+_CITES = re.compile(r"[\w/.-]+\.[A-Za-z]{1,5}(?::\d+)?")
 
 app = typer.Typer(add_completion=False, help="Keep code adherent to a described architecture.")
 console = Console()
@@ -241,6 +245,18 @@ def check(
                       f"invariants.md, verified by nobody:")
         for inv_id, why in gen_result.skipped:
             console.print(f"  [yellow]{inv_id}[/]  {why}")
+
+    # A prose row marked `active` says the rule is in force while nothing can confirm it. Twice now a
+    # rule in that state was simply false — and in both cases the `Why` column held rationale with no
+    # evidence, so "does Why cite anything?" separates a verified assertion from an unverified one.
+    unevidenced = [i for i in invariants
+                   if i.tier == "prose" and i.status == "active" and not _CITES.search(i.why or "")]
+    if unevidenced:
+        console.print(f"\n[yellow]Asserted active with no recorded evidence ({len(unevidenced)})[/] — a "
+                      f"prose rule cannot be checked,\nso `active` is a claim someone made. Cite the "
+                      f"path:line you verified it at, or mark it `proposed`:")
+        for i in unevidenced:
+            console.print(f"  [yellow]{i.id}[/]  {(i.why or '(no why)')[:70]}")
 
     if failed:
         console.print(f"[red]{failed} invariant(s) violated.[/]")

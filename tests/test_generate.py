@@ -157,3 +157,23 @@ def test_an_all_prose_artifact_enforces_nothing(tmp_path):
     res = generate(parse_invariants(cfg.invariants_path), cfg)
     assert not (res.importlinter_ids or res.depcruiser_ids or res.astgrep_ids or res.pbt_ids)
     assert len(res.skipped) == 1
+
+
+def test_a_prose_row_asserted_active_without_evidence_is_detectable(tmp_path):
+    """`Status: active` on a prose row claims the rule is in force while nothing can confirm it. Twice a
+    rule in that state was simply false — obstudio's SKILL-002 and wardrowbe's SVC-001 — and in both the
+    `Why` held rationale with no citation. That is the separator between a verified assertion and an
+    unverified one, and it is mechanically checkable."""
+    import re
+    from archagent.config import load_config
+    from archagent.invariants import parse_invariants
+    cites = re.compile(r"[\w/.-]+\.[A-Za-z]{1,5}(?::\d+)?")
+    root = _repo_with_invariants(
+        tmp_path,
+        "| A-1 | STRUCTURAL | prose | python | one place to rate-limit | error | keeps copies from diverging | active |\n"
+        "| A-2 | STRUCTURAL | prose | python | the same rule | error | verified at `app/svc.py:31` | active |\n"
+        "| A-3 | STRUCTURAL | prose | python | a third rule | error | no evidence, but honest | proposed |\n")
+    invs = parse_invariants(load_config(root).invariants_path)
+    flagged = [i.id for i in invs
+               if i.tier == "prose" and i.status == "active" and not cites.search(i.why or "")]
+    assert flagged == ["A-1"], "only the unevidenced *active* row should flag"
