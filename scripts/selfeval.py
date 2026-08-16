@@ -31,7 +31,8 @@ sys.path.insert(0, str(ROOT / "src"))
 from evalhome import eval_dir   # noqa: E402
 
 from rubric import check_update_captured, score_deterministic   # noqa: E402
-from rubric_judged import render_brief, review_from, save as save_review   # noqa: E402
+from rubric_judged import (CRITERIA, parse_brief, render_brief, review_from,   # noqa: E402
+                           save as save_review)
 
 RESULTS = eval_dir("selfeval")
 
@@ -101,6 +102,42 @@ def do_brief(path: Path, second_run: bool, force: bool = False) -> None:
     print("uncited scores are discarded rather than averaged in.")
 
 
+def do_check_brief(review: Path, project: Path | None) -> None:
+    """Tell a reviewer whether their review can be read, without showing them anyone else's.
+
+    Two of the first three real reviews were unreadable — fields read to end-of-line in one, a score in
+    the heading in the other — and both were discovered only after submission, by which point the
+    reviewer had moved on. A sample review would have prevented that and cost something worse: showing a
+    filled-in example anchors the score, the kind of criticism, and the expected length, and round 3
+    demonstrated that method decides findings. This gives format certainty with no content at all.
+    """
+    root = project.resolve() if project else None
+    parsed = parse_brief(review.read_text(), root)
+    expected = [c.id for c in CRITERIA if not c.second_run_only]
+    print(f"\n{review.name}\n")
+    for cid in expected:
+        got = parsed.get(cid)
+        if not got:
+            print(f"  [ ] {cid:24} NOT READ — need a `## {cid} — …` heading with a score, or a `score:` line")
+        elif got.get("score") is None:
+            print(f"  [!] {cid:24} READ but discarded: {got['discarded']}")
+        else:
+            print(f"  [x] {cid:24} score {got['score']}"
+                  + (f"   ! {len(got['unresolved'])} citation(s) do not resolve" if got.get("unresolved") else ""))
+            for bad in got.get("unresolved", [])[:3]:
+                print(f"         {bad}")
+    ok = sum(1 for c in expected if parsed.get(c, {}).get("score") is not None)
+    print(f"\n  {ok} of {len(expected)} criteria readable")
+    if root is None:
+        print("  (citations were not resolved — pass --project <checkout> to check them too)")
+    if ok < len(expected):
+        print("\n  Formatting is lenient: a fenced block, bare `score:`/`evidence:`/`why:` lines, bold\n"
+              "  labels, or the score in the heading all work. `why:` runs to the next key, so indented\n"
+              "  lists and per-claim breakdowns survive. What is required is the criterion id in a level-2\n"
+              "  heading, a score digit, and at least one citation that resolves.")
+        raise SystemExit(1)
+
+
 def do_judged(path: Path, review: Path, by: str) -> None:
     root = path.resolve()
     # root is passed so citations are resolved against the tree, not merely pattern-matched
@@ -148,6 +185,8 @@ if __name__ == "__main__":
     s.add_argument("--rev", default=""); s.add_argument("--out")
     b = sub.add_parser("brief"); b.add_argument("path"); b.add_argument("--second-run", action="store_true")
     b.add_argument("--force", action="store_true", help="overwrite a completed review")
+    cb = sub.add_parser("check-brief"); cb.add_argument("review")
+    cb.add_argument("--project", help="checkout to resolve citations against")
     j = sub.add_parser("judged"); j.add_argument("path"); j.add_argument("--review", required=True)
     j.add_argument("--by", default="")
     r = sub.add_parser("run"); r.add_argument("url")
@@ -158,6 +197,9 @@ if __name__ == "__main__":
         do_run(args.url, args.rev_from, args.rev_to)
     if args.cmd == "brief":
         do_brief(Path(args.path), args.second_run, args.force); raise SystemExit(0)
+    if args.cmd == "check-brief":
+        do_check_brief(Path(args.review), Path(args.project) if args.project else None)
+        raise SystemExit(0)
     if args.cmd == "judged":
         do_judged(Path(args.path), Path(args.review), args.by); raise SystemExit(0)
     data = do_score(Path(args.path), args.arch_dir, args.rev)

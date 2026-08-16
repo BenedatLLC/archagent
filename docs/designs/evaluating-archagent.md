@@ -779,6 +779,24 @@ So the criterion should ask for **coverage, not importance** — walk the docume
 a checklist (below) is how that becomes repeatable rather than a matter of how thorough a given reviewer
 felt.
 
+### There is no sample review, deliberately
+
+Two of the first three reviews were unreadable — fields read to end-of-line in one, a score in the heading
+in the other — and the obvious fix is to ship a filled-in example. It is the wrong fix.
+
+Format and content are separable, and only format needs an example. A completed sample carries three
+biases, and the second is the one that matters:
+
+- **Score anchoring** — a visible `3` drags a reviewer toward 3.
+- **Finding anchoring** — showing a *kind* of criticism makes reviewers hunt that kind. Round 3 showed
+  that method decides findings: sampling five load-bearing claims found nothing, walking the tree found
+  five. A sample would quietly standardise whichever method it demonstrated.
+- **Effort anchoring** — a short sample produces short reviews, a long one produces performative length.
+
+Instead the parser accepts any reasonable markdown, and `selfeval check-brief` tells a reviewer whether
+their file reads *before* they hand it back — which criteria parsed, which citations resolve — while
+showing them no content at all. Format certainty with zero anchoring.
+
 ### Three cautions
 
 **A checklist is an answer key.** Whoever authors a prompt change must not be reading it while doing so, or
