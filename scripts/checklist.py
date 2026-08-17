@@ -93,7 +93,9 @@ def cmd_score(args: argparse.Namespace) -> int:
         print("\nnothing scored — an unanswered worksheet is not a passing one")
         return 1
     print(f"\n  accuracy {s.accuracy:.2f}   weighted {s.weighted_accuracy:.2f}"
-          f"   ({s.counts['correct']} correct of {s.answered} answered)")
+          f"   ({s.passed} of {s.answered} answered items pass"
+          + (f"; {s.counts['correct']} correct, {s.passed - s.counts['correct']} "
+             f"correctly silent on a conditional item)" if s.passed != s.counts['correct'] else ")"))
 
     # A checklist is only meaningful next to its own history; a single number says nothing about whether
     # the artifact improved. The ledger (§17) is where the series lives.

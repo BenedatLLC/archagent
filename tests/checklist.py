@@ -51,9 +51,21 @@ class Item:
     severity: str = "moderate"
     source: str = ""                  # which reading produced it — a round, a reviewer, a replicate
     note: str = ""
+    conditional: bool = False         # `absent` is a pass, not a miss — see below
 
     def ask(self) -> str:
         return self.question or "Does the artifact convey this?"
+
+    def passes(self, verdict: str) -> bool:
+        """`correct`, or `absent` on a conditional item.
+
+        A conditional item asks *if the artifact states a count, is it right?* — so an artifact that
+        declines to state an incidental count is answering correctly by saying nothing, and scoring that
+        `absent` as a miss marks it down for good judgement. Found in step 2: three regenerated artifacts
+        each lost two items this way, and the design those artifacts were following is the one that says
+        incidental counts should not be written at all.
+        """
+        return verdict == "correct" or (self.conditional and verdict == "absent")
 
 
 @dataclass
@@ -71,7 +83,8 @@ def load(path: Path) -> list[Item]:
     raw = tomllib.loads(path.read_text())
     return [Item(id=i["id"], target=i["target"], rev=i["rev"], ground_truth=i["ground_truth"],
                  question=i.get("question", ""), severity=i.get("severity", "moderate"),
-                 source=i.get("source", ""), note=i.get("note", ""))
+                 source=i.get("source", ""), note=i.get("note", ""),
+                 conditional=bool(i.get("conditional", False)))
             for i in raw.get("item", [])]
 
 
@@ -184,16 +197,19 @@ class Score:
     def answered(self) -> int:
         return sum(self.counts.values())
 
+    passed: int = 0                                          # correct, plus `absent` on a conditional item
+    weighted_passed: int = 0
+
     @property
     def accuracy(self) -> float | None:
         """Share of answered items the artifact got right. `None` rather than 1.0 when nothing was
         answered — an empty worksheet must not read as a perfect one."""
-        return self.counts.get("correct", 0) / self.answered if self.answered else None
+        return self.passed / self.answered if self.answered else None
 
     @property
     def weighted_accuracy(self) -> float | None:
         total = sum(self.weighted.values())
-        return self.weighted.get("correct", 0) / total if total else None
+        return self.weighted_passed / total if total else None
 
 
 def score(answers: dict[str, Answer], items: list[Item]) -> Score:
@@ -210,4 +226,7 @@ def score(answers: dict[str, Answer], items: list[Item]) -> Score:
             continue
         s.counts[a.verdict] += 1
         s.weighted[a.verdict] += WEIGHT.get(it.severity, 1)
+        if it.passes(a.verdict):
+            s.passed += 1
+            s.weighted_passed += WEIGHT.get(it.severity, 1)
     return s

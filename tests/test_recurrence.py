@@ -135,3 +135,18 @@ def test_every_forbid_has_a_require_where_the_topic_is_load_bearing(entries_file
     naked = [e.id for e in load(entries_file)
              if e.severity == "serious" and e.kind == "claim" and e.forbid and not e.require]
     assert not naked, f"serious forbid-only entries (silence passes them): {naked}"
+
+
+@pytest.mark.skipif(not _PAIRS, reason="no evaluation data repo — set ARCHAGENT_EVAL_HOME")
+@pytest.mark.parametrize("entries_file,artifact", _PAIRS)
+def test_no_entry_splits_one_obligation_across_several_require_patterns(entries_file, artifact):
+    """`require` is conjunctive, which reads wrongly to anyone writing one pattern per phrasing.
+
+    An entry once demanded both word orders of the same pair as separate patterns, meaning "either will
+    do" and enforcing "both must match" — an artifact that covered the topic properly, with its own ADR,
+    was reported as silent on it. Second entry defect on record, and like the first it cried wolf.
+    """
+    from recurrence import ambiguous_requires
+    bad = [(e.id, ambiguous_requires(e)) for e in load(entries_file)]
+    bad = [(i, why) for i, why in bad if why]
+    assert not bad, "\n".join(f"{i}: {why}" for i, why in bad)

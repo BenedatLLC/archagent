@@ -100,6 +100,35 @@ def artifact_text(arch: Path) -> str:
     return "\n".join(parts)
 
 
+def ambiguous_requires(entry: Entry) -> str:
+    """Why this entry's `require` list is likely to mean the opposite of what its author intended.
+
+    **`require` is conjunctive: every pattern must match.** That reads wrongly to anyone writing two
+    patterns for two spellings of the same idea, which is the natural thing to do — and it has now produced
+    a false alarm on a real artifact. An entry demanded `(ownership...)…(enforc…)` *and*
+    `(enforc…)…(ownership...)`, one per word order, meaning "either order will do"; because both had to
+    match, an artifact that stated the fact in one order was reported as silent on it. It had its own ADR
+    on the subject.
+
+    Two `require` patterns are legitimate when they are genuinely different obligations — say, name the
+    mechanism *and* name the consequence. They are a bug when each is an alternative phrasing of one
+    obligation, and the tell is that the patterns share their alternatives. Anything sharing a term is
+    flagged; the fix is one pattern with an `|` between the spellings.
+    """
+    if len(entry.require) < 2:
+        return ""
+    def terms(p: str) -> set[str]:
+        return {w.lower() for w in re.findall(r"[a-z][a-z_ -]{3,}", p)}
+    for i, a in enumerate(entry.require):
+        for b in entry.require[i + 1:]:
+            shared = terms(a) & terms(b)
+            if shared:
+                return (f"two `require` patterns share {sorted(shared)[:3]} — `require` is conjunctive, so "
+                        f"both must match. If these are two spellings of one obligation, join them with `|` "
+                        f"in a single pattern")
+    return ""
+
+
 def check(entries: list[Entry], arch: Path, target: str | None = None) -> list[Result]:
     text = artifact_text(arch)
     out = []

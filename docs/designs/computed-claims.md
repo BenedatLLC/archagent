@@ -536,7 +536,36 @@ more than a silence someone re-derives in six months.
 | 1 (predicates) — named defects caught | **12 of 12 predicted, plus 1 not predicted — gate passed** |
 | 1 (predicates) — authoring error rate | 7 of 35 commands (20%), down from 27% |
 | 2 — generation variance | **bounded at 1 checklist item in 16 — step 3 can proceed** |
-| 3 — two arms | not run — next |
+| 3 — two arms | **not run: instrument saturated, baseline nearly clean** |
+
+### Step 3: blocked on an instrument ceiling, not on the design (2026-08-16)
+
+Both step-2 instrument defects are fixed — conditional checklist items now score `absent` as a pass, and a
+guard flags recurrence entries whose `require` patterns split one obligation. Fixing the first changes the
+arm-A baseline: the three current-ADL artifacts score **1.00, 1.00 and 0.94** on the wardrowbe checklist.
+
+The pre-registered gate needed five items to move. **At most one can.** Two arms cannot be separated by
+five items when one is already at sixteen of sixteen, so step 3 was not run —
+`docs/evaluations/claims/RESULTS-step3.md`.
+
+Rather than assume there was nothing to find, the headroom was measured directly: fifteen predicate claims
+written against a freshly generated artifact's own assertions. **Fourteen hold; one is false**, and it is
+exactly the targeted class — *"the only place a third-party API is called: the OpenAI-compatible model
+endpoints and Open-Meteo"*, where the code also calls `nominatim.openstreetmap.org` and `exp.host`. An
+exhaustiveness claim with two members missing.
+
+So the mechanism works and the baseline is ~1 false assertion in 15. At that rate, three artifacts per arm
+gives about 3 defects against 0 — Fisher exact p ≈ 0.24. **Detecting the effect needs roughly ten times the
+sample**, which is not what step 3 was scoped to.
+
+Two honest ways forward, neither of which is "run it anyway":
+
+- **The drift experiment.** The claim that a claims file makes drift mechanical has never been tested, and
+  §16's machinery has never run. It is cheap, needs no generation, and covers the half of this proposal
+  that is not about accuracy.
+- **Two arms on obstudio**, whose checklist baseline is 0.24 and which archagent cannot analyse statically
+  at all. A repository the tool is *bad* at is where grounding claims in commands should pay — and it also
+  satisfies §18 better, since obstudio is not the repository whose defects shaped this design most.
 
 ### Step 2: generation variance (2026-08-16)
 
