@@ -535,8 +535,39 @@ more than a silence someone re-derives in six months.
 | 1 — facts left uncomputed under the safety rules | 22 of 56 (39%), none refused *by* the rules |
 | 1 (predicates) — named defects caught | **12 of 12 predicted, plus 1 not predicted — gate passed** |
 | 1 (predicates) — authoring error rate | 7 of 35 commands (20%), down from 27% |
-| 2 — generation variance | not run — next |
-| 3 — two arms | not run |
+| 2 — generation variance | **bounded at 1 checklist item in 16 — step 3 can proceed** |
+| 3 — two arms | not run — next |
+
+### Step 2: generation variance (2026-08-16)
+
+Three independent generations of the wardrowbe artifact, same model, prompt and revision, each in its own
+copy with the prior artifact removed first. Method fixed in advance in
+`docs/evaluations/claims/STEP2-METHOD.md`; results in `RESULTS-step2.md`.
+
+**Generation variance is no larger than judging variance.** Three independently generated artifacts differ
+on **one checklist item of sixteen** — the same magnitude as two judges reading one artifact. And both
+judges who scored that item `correct` flagged it, unprompted, as a borderline call on the
+`wrong`/`absent` boundary, so the single difference in the whole measurement may be the judge rather than
+the artifact. Generation variance is bounded above by 1 in 16 and may be smaller.
+
+**The deterministic rubric cannot see generation variance at all.** 0.889 / 0.888 / 0.888, from artifacts
+carving the system into 18, 17 and 14 subsystems, with 56 / 48 / 28 invariant rows. It measures
+conformance, all three conform, and it was never built to rank two conforming artifacts. **It must not be
+the score in a two-arm comparison**; it is a gate, and the checklist is the measure.
+
+**All three regenerated artifacts clear all 10 recurrence entries, where the original fails all 10**, and
+score 0.81–0.88 on the checklist against the original's 0.12. The original failing everything is
+arithmetic — the entries were written from its defects. The other side is not: three artifacts produced by
+a different route get 13–14 of 16 right on questions written from another artifact's mistakes, including
+all four `serious` items the original got wrong and both ownership items, the gap four reviewers named as
+its largest.
+
+Two instrument defects surfaced. A recurrence entry demanded both word orders of the same pair as separate
+`require` patterns, which means "all must match" and reported an artifact that covers ownership properly as
+silent on it — the second entry defect on record, both crying wolf. And the checklist scores an `absent` on
+a *conditional* item as a miss, so an artifact that sensibly declines to state an incidental count is
+penalised for it. That has to be fixed before step 3, or the arm following this design's own advice about
+incidental counts is marked down for taking it.
 
 ### Second attempt, with predicate claims (2026-08-16)
 
