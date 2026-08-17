@@ -586,6 +586,42 @@ Taking steps 1–3 and both drift experiments together:
   scoped to *the part of the system archagent cannot see* — which `describe` already has to identify, and
   which obstudio's artifact already documents in a dedicated section.
 
+### Both existing instruments are saturated, and the reason is how they were built (2026-08-17)
+
+`docs/evaluations/claims/RESULTS-obstudio-probe.md`. One fresh obstudio generation, one blind judge.
+
+| target | original artifact | fresh generation |
+|---|---|---|
+| wardrowbe | 0.12 | 1.00 / 1.00 / 0.94 |
+| obstudio | 0.24 | **0.88** |
+
+Both checklists are roughly two-thirds **defect-derived** — items written from what one artifact got wrong
+— and both collapse when a fresh artifact faces them, because current `describe` does not repeat those
+particular mistakes. **A defect-derived checklist cannot be the instrument for a two-arm comparison on any
+target.** On obstudio at most two items can move against a gate that needs five.
+
+The fix is the construction rather than the repository: a checklist built primarily from **reading the
+code** is not selected for what current `describe` happens to get right, so it does not saturate, and it is
+fair to both arms because neither was used to write it. §14 already asks for a quarter of items that way;
+a two-arm instrument needs most of them.
+
+**Step 3 therefore cannot run on either existing target**, and the way forward is calibration round 4 on a
+fresh repository with a code-derived checklist — which also supplies the generalisation test §18 wants and
+advances the constraint Appendix A names as binding.
+
+### A result about archagent rather than about this design
+
+The fresh obstudio artifact carries **both** security findings of calibration round 2 — the wide-open CORS
+policy and the unconditional WebSocket `CheckOrigin` — which the original artifact missed entirely and
+which neither the human reviewer nor the author found. It also gets every one of round 2's factual defects
+right, with **zero `wrong` verdicts** where the original had eight.
+
+Confounded, and worth stating as such: the originals were generated months earlier under earlier prompts,
+and several `describe` rules have been added since. This is consistent with those rules working and
+equally consistent with a stronger model or a longer run. One generation cannot separate them — but it is
+the first evidence in this project that the artifacts have got better, and it is why the calibration
+rounds measure a moving target.
+
 ## 9. Status
 
 **Proposed. Not accepted.** The next action is step 1, which is cheap and can retire the idea before any
@@ -605,6 +641,7 @@ more than a silence someone re-derives in six months.
 | 3 — two arms | **not run: instrument saturated, baseline nearly clean** |
 | drift experiment (wardrowbe) | **run: `drift` 3 of 8, claims 0 of 8 — the broad drift claim is not supported** |
 | drift experiment (obstudio) | **run: `drift` 0 of 1 and byte-identical, claims caught it — the blind-spot case holds** |
+| obstudio saturation probe | **run: 0.88 on a fresh artifact vs 0.24 on the original — saturation is systematic; no existing checklist can serve as a two-arm instrument** |
 
 ### Step 3: blocked on an instrument ceiling, not on the design (2026-08-16)
 
