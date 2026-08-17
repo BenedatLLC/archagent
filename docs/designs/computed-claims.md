@@ -520,6 +520,38 @@ enriched for precisely what this change fixes. A large improvement there is real
 of the effect on a repository nobody has looked at. An unbiased figure needs a fresh target — calibration
 round 4, which is scheduled regardless.
 
+### The drift justification did not survive its own experiment (2026-08-16)
+
+`docs/evaluations/claims/RESULTS-drift.md`. Real later history — wardrowbe v1.7.0 → v1.8.0, 21 commits, 95
+files — with the artifact and the claims file both fixed beforehand.
+
+**`drift` caught 3 of 8 staleness items. The claims file caught 0.**
+
+The reason is structural, and it is this design's own doing. The predicate redesign removed value
+comparison, which is exactly the capability that would have caught the counts that moved (routes 104→106,
+migrations 22→26, tests 401→470). It was removed for a good reason — those three are precisely the trivia
+that trains people to ignore a checker — but the consequence has to be stated: **§1's claim that this
+"makes much of the drift computation mechanical" is not supported.** Compare values and you detect drift
+that is mostly trivia; do not compare them and you detect no value drift at all. Neither version of this
+design resolves that.
+
+**One narrower justification does survive, and should replace the broad one.** A post-hoc check confirmed
+that a `set` claim over the settings fields would have caught the release's two new config keys — and
+`drift` structurally cannot, because pydantic-settings resolves field names to environment keys at
+runtime. Run 1's own `drift` output contains 56 "dangling config" findings that are all this false
+positive. So: **a claims file earns its place where it covers a closed collection archagent's static
+analysis cannot see.** That is a real gap, already documented in the artifacts as a tool limitation, and
+nothing else fills it. It is much narrower than "drift becomes mechanical", and it points at the same
+targets §3's evidence does — repositories in languages the tool cannot parse.
+
+**And the boundary is worth recording once, plainly.** The most consequential staleness in the release was
+the stale-item sweep being rewritten from a blind time-based condemn to a Redis job-state check — inside a
+file that did not move, changing no declaration and no count the artifact asserts. It is invisible to
+`drift`, to computed claims, to the recurrence suite and to the checklist. **Every mechanical instrument
+this project has built would report that artifact as clean.** That is not an argument against any of them.
+It is the boundary of the whole approach, and it is why §14's judged checklists and the calibration rounds
+are not optional extras.
+
 ## 9. Status
 
 **Proposed. Not accepted.** The next action is step 1, which is cheap and can retire the idea before any
@@ -537,6 +569,7 @@ more than a silence someone re-derives in six months.
 | 1 (predicates) — authoring error rate | 7 of 35 commands (20%), down from 27% |
 | 2 — generation variance | **bounded at 1 checklist item in 16 — step 3 can proceed** |
 | 3 — two arms | **not run: instrument saturated, baseline nearly clean** |
+| drift experiment | **run: `drift` 3 of 8, claims 0 of 8 — the broad drift claim is not supported** |
 
 ### Step 3: blocked on an instrument ceiling, not on the design (2026-08-16)
 
