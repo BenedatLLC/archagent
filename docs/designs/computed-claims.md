@@ -552,6 +552,40 @@ this project has built would report that artifact as clean.** That is not an arg
 It is the boundary of the whole approach, and it is why §14's judged checklists and the calibration rounds
 are not optional extras.
 
+### The blind-spot case holds, tested where it should bite (2026-08-16)
+
+`docs/evaluations/claims/RESULTS-obstudio-drift.md`. obstudio declares `python` and `typescript`, so its
+entire Go codebase is outside archagent's static analysis. Real history, `88aebe8` → `17797b9`: two
+commits adding a fifth `obstudio install` target.
+
+**`drift`'s output was byte-identical before and after. The claims file caught it**, naming `windsurf` as
+the missing member and the three documents that assert the old set — a table, a command line, and a
+sentence in the constitution.
+
+**The coverage number is the stronger result, and it does not depend on the change at all: `drift` can
+check 0 of the 16 Go closed collections the artifact asserts.** Not few — none. And its 22 findings on this
+target are all false positives *that the artifact itself predicts*, because the empty Go import graph
+cannot confirm any declared edge. On obstudio a claims file is not an improvement on `drift`; it is the
+only mechanical check that functions.
+
+Disclosed: the fifteen other claims predate this diff, the install-target claim does not. So this
+demonstrates the mechanism on the class rather than estimating a rate, and the coverage figure is the part
+that is independent of the change.
+
+### What the evidence now supports, which is narrower than §1
+
+Taking steps 1–3 and both drift experiments together:
+
+- **`set` claims over closed collections are the load-bearing kind.** They caught the defects in step 1,
+  they caught this, and they are the only kind that has caught anything no reader found first.
+- **The value proposition is coverage of blind spots, not drift in general.** Where archagent parses the
+  language, `drift` already does the structural work and the value drift claims would add is mostly the
+  trivia this design's own rule says not to write. Where it does not parse the language, a claims file is
+  the only mechanical check available.
+- **That suggests a cheaper shape than the full design.** Rather than claims for everything, a claims file
+  scoped to *the part of the system archagent cannot see* — which `describe` already has to identify, and
+  which obstudio's artifact already documents in a dedicated section.
+
 ## 9. Status
 
 **Proposed. Not accepted.** The next action is step 1, which is cheap and can retire the idea before any
@@ -569,7 +603,8 @@ more than a silence someone re-derives in six months.
 | 1 (predicates) — authoring error rate | 7 of 35 commands (20%), down from 27% |
 | 2 — generation variance | **bounded at 1 checklist item in 16 — step 3 can proceed** |
 | 3 — two arms | **not run: instrument saturated, baseline nearly clean** |
-| drift experiment | **run: `drift` 3 of 8, claims 0 of 8 — the broad drift claim is not supported** |
+| drift experiment (wardrowbe) | **run: `drift` 3 of 8, claims 0 of 8 — the broad drift claim is not supported** |
+| drift experiment (obstudio) | **run: `drift` 0 of 1 and byte-identical, claims caught it — the blind-spot case holds** |
 
 ### Step 3: blocked on an instrument ceiling, not on the design (2026-08-16)
 
