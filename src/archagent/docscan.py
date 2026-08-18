@@ -13,6 +13,24 @@ The checks target the classes of error actually seen in the wild:
   - `state-label-colon` — a `stateDiagram(-v2)` transition label (`A --> B : text`) with a *second* colon.
     Mermaid treats everything after the first `:` as the label; a second `:` (a port `:5300`, a time
     `10:30`, a ratio) breaks the parser. This is the specific, well-known gotcha worth naming.
+
+It also checks **invariant-ID integrity across documents**, which is not about Mermaid but belongs to the
+same job: catching what `check` structurally cannot. `check` reads `invariants.md` and nothing else, so a
+subsystem document is free to cite an ID that does not exist, or to attach a different rule to one that
+does. Calibration round 4 produced both in one artifact — a doc presenting `PAR-001` as a table row when
+the rule is `BND-006`, and `UI-002` meaning one thing in the table and something unrelated in a subsystem
+doc. A reader chasing either lands nowhere, and every existing check passes.
+
+  - `unknown-invariant-id` — an ID cited in a subsystem doc with no matching row in `invariants.md`.
+
+**The other half of that defect is not checked, deliberately.** `UI-002` meant one thing in the table and
+something unrelated in a subsystem doc, and a check for it was built and then removed. Comparing the words
+of a citation against the words of its row cannot tell "restated in other words" from "describes something
+different": a DSL row (`forbid a -> b`) names modules where the prose names concepts, so they share no
+vocabulary however faithful the restatement is; and a row that only cross-references another rule has no
+rule text to compare. Three successive narrowings left it at three false positives out of four findings.
+A check at that rate gets switched off, and switching one off is worse than never having it. Detecting a
+redefined ID needs a reader.
 """
 
 from __future__ import annotations
@@ -114,6 +132,61 @@ def lint_text(text: str, doc: str = "") -> list[DocIssue]:
     return out
 
 
+#: `ABC-001` — the ID shape the ADL uses. Bounded deliberately: a looser pattern matches version strings,
+#: HTTP codes and Mermaid node names.
+_INV_ID = re.compile(r"\b([A-Z][A-Z0-9]{1,7}-\d{3})\b")
+
+def _invariant_rows(text: str) -> dict[str, str]:
+    """`{ID: rule text}` from the invariants table. The Rule column is the fifth cell."""
+    rows: dict[str, str] = {}
+    for line in text.splitlines():
+        if not line.strip().startswith("|"):
+            continue
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        if len(cells) < 5:
+            continue
+        m = _INV_ID.fullmatch(cells[0])
+        if m:
+            rows[cells[0]] = cells[4]
+    return rows
+
+
+def lint_invariant_ids(arch: Path, root: Path | None = None) -> list[DocIssue]:
+    """IDs cited in subsystem docs against the rows in `invariants.md`.
+
+    `doc` paths are relative to `root`, matching the Mermaid issues — the CLI groups findings by `doc`,
+    and two conventions in one list silently split one file into two groups.
+    """
+    root = root or arch
+    table = arch / "invariants.md"
+    if not table.is_file():
+        return []
+    try:
+        rows = _invariant_rows(table.read_text())
+    except OSError:
+        return []
+    if not rows:
+        return []
+
+    issues: list[DocIssue] = []
+    for doc in sorted(arch.rglob("*.md")):
+        if doc.name.endswith("_TEMPLATE.md") or doc.name == "invariants.md":
+            continue
+        try:
+            lines = doc.read_text().splitlines()
+        except OSError:
+            continue
+        rel = doc.relative_to(root).as_posix()
+        for n, line in enumerate(lines, 1):
+            for cid in set(_INV_ID.findall(line)):
+                if cid not in rows:
+                    issues.append(DocIssue(
+                        doc=rel, line=n, code="unknown-invariant-id",
+                        message=f"{cid} is cited here but has no row in invariants.md"))
+                    continue
+    return issues
+
+
 def lint_docs(config: Config) -> list[DocIssue]:
     """Lint every Mermaid block in every `.md` under the architecture dir (skipping the template)."""
     arch = config.architecture_dir
@@ -130,4 +203,5 @@ def lint_docs(config: Config) -> list[DocIssue]:
             continue
         rel = doc.relative_to(root).as_posix()
         issues.extend(lint_text(text, rel))
+    issues.extend(lint_invariant_ids(arch, root))
     return issues

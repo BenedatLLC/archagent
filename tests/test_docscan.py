@@ -74,3 +74,41 @@ def test_lint_docs_skips_template(tmp_path):
                  python=PythonConfig(source_paths=["src"]), ts=TSConfig())
     issues = lint_docs(cfg)
     assert {i.doc for i in issues} == {"architecture/subsystems/svc.md"}
+
+
+# --- invariant-ID integrity -------------------------------------------------------------------------
+
+def _arch(tmp_path, invariants: str, **docs):
+    a = tmp_path / "architecture"
+    (a / "subsystems").mkdir(parents=True)
+    (a / "invariants.md").write_text(invariants)
+    for name, text in docs.items():
+        (a / "subsystems" / name).write_text(text)
+    from archagent.config import Config, PythonConfig, TSConfig
+    return Config(project_root=tmp_path, languages=["python"],
+                  python=PythonConfig(root_package="p", source_paths=["src"]), ts=TSConfig())
+
+
+_TABLE = """# Invariants
+
+| ID | Type | Tier | Applies-to | Rule | Severity | Why | Status |
+|----|------|------|-----------|------|----------|-----|--------|
+| BND-006 | BOUNDARY | prose | python | parsers do not import views | error | layering | active |
+| UI-002 | STRUCTURAL | prose | typescript | components call services, not http | warn | one seam | active |
+"""
+
+
+def test_an_invariant_id_cited_in_a_subsystem_doc_must_exist(tmp_path):
+    """Round 4's third defect: `parsers.md` presented `PAR-001` as a table row, and no such row exists —
+    the rule is `BND-006`. A reader chasing the ID finds nothing, and `check` never sees it because it
+    reads only `invariants.md`."""
+    from archagent.docscan import lint_docs
+    cfg = _arch(tmp_path, _TABLE, **{"parsers.md": "## Invariants\n\n- PAR-001 — parsers stay pure.\n"})
+    codes = {(i.code, i.doc) for i in lint_docs(cfg)}
+    assert ("unknown-invariant-id", "architecture/subsystems/parsers.md") in codes
+
+
+def test_an_id_that_exists_is_not_flagged(tmp_path):
+    from archagent.docscan import lint_docs
+    cfg = _arch(tmp_path, _TABLE, **{"parsers.md": "## Invariants\n\n- BND-006 — holds at HEAD.\n"})
+    assert not [i for i in lint_docs(cfg) if i.code == "unknown-invariant-id"]
