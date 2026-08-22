@@ -119,7 +119,10 @@ the user first, and never overwrite their existing content.
    always show `layer-skip`, and flat peer capabilities under one orchestrator show skips whenever the
    orchestrator calls a capability directly — both are correct. Consider modelling flat peer subsystems as a
    single `domain` tier rather than forcing a strict `ui → app → domain → infra` ladder.
-8. **Index + log.** Refresh `architecture/index.md` and append a line to `architecture/log.md`. The index
+8. **Index + log.** Refresh `architecture/index.md` and append a line to `architecture/log.md` —
+   **including the target revision and the archagent version** (`archagent --version`), because every
+   claim here is relative to both. A reader who hits a command this artifact cites but their build lacks
+   must be able to tell version skew from a stale document; that confusion cost a calibration round. The index
    is where a newcomer lands, so it must orient before it catalogs — open with what the system *is*, what
    to read first, and how ADRs relate to invariants (an ADR is prose explaining *why* and binds nobody; an
    invariant row is a mechanical rule `check` enforces). Configuration notes go at the bottom, not the top.

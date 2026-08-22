@@ -37,6 +37,16 @@ from rubric_judged import (CRITERIA, parse_brief, render_brief, review_from,   #
 RESULTS = eval_dir("selfeval")
 
 
+def _rev(root: Path) -> str:
+    """The target revision, as a tag when it has one. A brief that names the tool must name the target
+    too, or half the provenance is recorded."""
+    for args in (["describe", "--tags", "--exact-match"], ["rev-parse", "--short", "HEAD"]):
+        r = subprocess.run(["git", *args], cwd=root, capture_output=True, text=True)
+        if r.returncode == 0 and r.stdout.strip():
+            return r.stdout.strip()
+    return ""
+
+
 def _source_files(root: Path) -> set[str]:
     from archagent.config import load_config
     from archagent.drift import _source_files as sf
@@ -96,7 +106,10 @@ def do_brief(path: Path, second_run: bool, force: bool = False) -> None:
             f"{out.with_name('review-<date>-completed.md').relative_to(ROOT)}\n"
             f"or pass --force if you are certain it is recoverable from git.")
     # repo-relative, not absolute: the brief is committed and read by someone on another machine
-    out.write_text(render_brief(arch, root.name, second_run))
+    from toolinfo import tool_info
+    tool = tool_info()
+    out.write_text(render_brief(arch, root.name, second_run, tool=tool.stamp(),
+                                target_rev=_rev(root)))
     print(f"wrote {out}")
     print("Hand this to a reviewer or a separate agent session. Every score needs a file:line citation;")
     print("uncited scores are discarded rather than averaged in.")

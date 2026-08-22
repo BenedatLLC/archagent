@@ -28,7 +28,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 sys.path.insert(0, str(ROOT / "tests"))
 
 from evalhome import eval_home                                          # noqa: E402
-from ledger import COLUMNS, Row, compare, load, save, validate          # noqa: E402
+from ledger import COLUMNS, Row, compare, load, save, tool_skew, validate   # noqa: E402
 
 
 def ledger_path() -> Path:
@@ -98,6 +98,11 @@ def cmd_show(args) -> int:
                 v = getattr(r, c)
                 if v:
                     print(f"{c:22} {v}")
+            skew = tool_skew(r)
+            if skew:
+                print(f"\n  note: two archagents — {skew}.\n"
+                      f"  Not an error, but a command the artifact cites may be absent from the "
+                      f"reviewing build.")
             return 0
     print(f"no such run_id: {args.run_id}", file=sys.stderr)
     return 1
