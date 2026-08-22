@@ -19,6 +19,12 @@ table into their configs instead of reimplementing boundary analysis.
 **Config:** none required. Behaviour comes from `archagent.toml` in the target repo (see
 `subsystems/config.md`); the tool itself reads no environment variables.
 
+It does *set* two for the checkers it launches: `NO_COLOR=1` on, `FORCE_COLOR` and `CLICOLOR_FORCE` off.
+That is not configuration but a correctness measure. `FORCE_COLOR` is set in plenty of developer shells
+and CI images, several of these tools honour it, and `check` parses their output — so an inherited
+environment variable made a pattern stop matching, and a pattern that matches nothing reports no
+violations, which is indistinguishable from a passing run.
+
 ## What it writes into a target repository
 
 - `<arch-dir>/` — the artifact, authored by a person or an agent, committed.

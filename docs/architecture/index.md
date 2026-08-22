@@ -71,9 +71,15 @@ The fix is to pull the plumbing into a leaf module both can import._
 | `subsystems/evaluate.md` | system-level smell signals, including the history checks |
 | `subsystems/extraction.md` | the static scanners the other subsystems read facts from |
 | `subsystems/scaffolding.md` | `init` / `upgrade` and the shipped prompts |
-| `subsystems/reporting.md` | coverage, module map, Mermaid lint |
+| `subsystems/reporting.md` | coverage, completeness, system map, doc lint |
 | `decisions/` | ADRs — why the structure is the way it is |
 | `investigations/` | what an `evaluate` finding turned out to mean (ADL-SPEC §6a) |
+
+**Coverage: 30 of 30 source files, across 8 subsystem documents, and all 30 are named in some document.**
+The second number is the one worth watching. A `**Covers:**` glob claims a file; it does not describe it,
+and an artifact can sit at 100% coverage with a whole mechanism unmentioned. `archagent status` reports
+both, and the depth column beside them, so a reader can tell a document that is short from one that is
+missing.
 
 This artifact lives at `docs/architecture/` rather than the default `architecture/`; `archagent.toml`
 records that with `architecture_dir`, and every command resolves the location from there.

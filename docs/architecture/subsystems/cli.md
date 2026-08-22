@@ -21,15 +21,19 @@ The commands group by lifecycle stage: `init`/`upgrade` (scaffold), `gen`/`check
 Fifteen in seven groups, and the count is worth stating because it drifted: this document said fourteen
 until `investigate` and `history-profile` were added, and nothing checks a number written in prose.
 
+Above the commands sits one root callback carrying `--version` / `-V`. It is a callback rather than a
+command on purpose — `--version` is the conventional spelling, and an `archagent version` subcommand would
+be a sixteenth entry in the list above for something that is not a lifecycle step.
+
 ## Key abstractions
 
 **Result objects, rendered late.** `run_evaluate()` returns an `EvaluationResult`; the CLI renders it
-twice, as text and as JSON, from the same object (`cli.py:375`). Adding a field to a finding does not
+twice, as text and as JSON, from the same object (`cli.py:476-486`). Adding a field to a finding does not
 touch the command.
 
 **The JSON is a superset of the text, not a parallel format.** `--json` emits every field the rendered
 report shows and some it does not — each inactive family carries the `signs` it stands for
-(`cli.py:423`), so an agent can check the coverage report against the findings list rather than reading
+(`cli.py:499`), so an agent can check the coverage report against the findings list rather than reading
 prose. The text view collapses that to a label because a person reading a terminal does not need it.
 
 **A clean report must mean something was checked.** `check` lists every rule `gen` skipped under *Not
@@ -40,7 +44,18 @@ of them false, where `check` printed an empty table and "All invariants hold." �
 arriving through the report rather than through a scan.
 
 **Findings carry their own next step.** A finding marked `investigate` prints the exact command that acts
-on it (`cli.py:441`). A reader who cannot act on a finding drops it.
+on it (`cli.py:538`). A reader who cannot act on a finding drops it.
+
+**Output is written for a pipe, not only for a terminal.** `--version` prints with a bare `print()` rather
+than through rich, which would highlight a bare version as a number and emit colour codes into whatever is
+capturing it. The same concern runs the other way in `check`, which strips ANSI from the tools it shells
+out to: a subprocess that decides it is talking to a terminal returns coloured text, and a parser matching
+on that text silently stops matching.
+
+**The version is read from the installed distribution, never hard-coded.** `__init__.py` asks
+`importlib.metadata` and falls back to `0+unknown` from a bare source tree. A constant in the source could
+disagree with the wheel that is running, which defeats the reason the flag exists: `docs/RELEASING.md`
+verifies a release by invoking the CLI, and that only proves *a* build starts unless it can say which one.
 
 ## State and tiering
 

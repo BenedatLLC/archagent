@@ -68,6 +68,22 @@ matrix, not writing an analyser.
 every `check`. Editing one by hand is pointless by construction — which is the property the tool's own
 scattered-source-of-truth check exists to protect elsewhere.
 
+**A rule nothing can compile is still a row.** `prose`-tier rows are parsed and carried but never
+generated or run, so a rule stays documented and greppable while it waits for a checker. That creates the
+ambiguity two optional columns close: **`Verification`** names the test, command or audit that confirms
+the rule — `none` is a legitimate answer, and a more useful one than a blank — and **`Graduation path`**
+says what would make it mechanical, or that nothing would. Without them, "archagent cannot generate a
+checker for this" and "nobody checks this at all" are the same empty cell. `invariants.py` exposes the
+distinction as `is_prose` and `unverified` rather than leaving it to a reader to infer from two blanks.
+
+**Everything that could not run is reported as skipped, never as passing.** The failure this guards
+against is not a wrong answer but a clean one: when the ast-grep JSON failed to parse, the branch handling
+it returned `passed=True` for every invariant it touched, and the report was indistinguishable from a run
+where all the rules genuinely held. `check.py` also strips ANSI escapes from every tool's output and asks
+the subprocesses not to colourise in the first place, because a checker that decides it is talking to a
+terminal returns text a pattern no longer matches — and a pattern that matches nothing reports no
+violations, which again reads as a pass.
+
 ## State and tiering
 
 `invariants.md` in the artifact (durable, authored). `.archagent/generated/` (derived, disposable).

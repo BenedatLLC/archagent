@@ -830,12 +830,14 @@ def status(project: Path = typer.Option(Path("."), help="Target repo root")) -> 
                        str(d.diagrams), str(d.types), note)
         console.print(t2)
         if thin:
+            # No hard-wrapped newlines here: rich wraps to the real terminal width, and a manual break
+            # lands mid-sentence on any width but the one it was written for.
             console.print("  [yellow]thin[/] — under half the density of the median document here. A terse "
-                          "house style is fine;\n         one document far below its siblings is usually a "
+                          "house style is fine; one document far below its siblings is usually a "
                           "subsystem nobody has written up yet.")
         if undiagrammed:
             console.print("  [yellow]no diagram[/] — covers five or more type or table declarations and "
-                          "draws nothing. A document\n         whose subject is a set of relationships is "
+                          "draws nothing. A document whose subject is a set of relationships is "
                           "where prose about directionality loses the reader.")
 
     # Assignment is not description. A `**Covers:**` glob proves a file is claimed; it says nothing about
@@ -880,7 +882,7 @@ def lint_docs_cmd(
     as_json: bool = typer.Option(False, "--json", help="Emit issues as JSON (for the describe skill / tooling)"),
     exit_code: bool = typer.Option(False, "--exit-code", help="Exit 1 if any issue is found (for CI / hooks)"),
 ) -> None:
-    """Lint the Mermaid diagrams in the architecture docs for syntax errors (no Node required)."""
+    """Lint the architecture docs: Mermaid syntax (no Node required) + invariant IDs cited in prose."""
     config = load_config(project.resolve())
     issues = lint_docs(config)
     if as_json:
@@ -892,7 +894,9 @@ def lint_docs_cmd(
         return
 
     if not issues:
-        console.print("[green]No Mermaid syntax problems found.[/]")
+        # Naming both checks: this command also validates invariant-ID citations, and a message that
+        # mentions only Mermaid reads as "the ID check did not run".
+        console.print("[green]No problems found — diagrams parse and every cited invariant ID exists.[/]")
         return
     console.print(f"[bold]Mermaid issues[/] ({len(issues)}) — malformed diagrams in the architecture docs\n")
     by_doc: dict[str, list] = {}

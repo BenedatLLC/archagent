@@ -25,6 +25,18 @@ touches nothing else. This is why upgrading never overwrites an authored `invari
 encode: how to describe a system, how to judge findings, how to write a report. They ship in the wheel and
 are the only place a model's instructions live.
 
+**One neutral prompt, four destinations.** The same skill bodies are written to `.claude/skills/`,
+`.cursor/skills/`, `.agents/skills/` (Codex) or `.openhands/microagents/` depending on which agents are
+selected. Adding an agent is adding an entry to `KNOWN_AGENTS` and a directory to the map, not writing
+another set of prompts — the thing that would drift.
+
+**Detection and support are separate questions, and Codex is where they come apart.** Auto-detection works
+by finding a per-repo directory, and Codex keeps none: its config lives under `~/.codex/`, which says
+nothing about *this* repository. So Codex is fully supported and opt-in — `--agents codex` — rather than
+detected. Guessing from a user-level signal would install skills into repositories that never asked for
+them, and the alternative of leaving Codex out entirely would be worse: it also reads a root `AGENTS.md`
+from the repo root down, so `--wire` alone gives it a working integration with no skills installed.
+
 ## State and tiering
 
 Writes into the target repository once, then gets out of the way.

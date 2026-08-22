@@ -1,19 +1,21 @@
 # reporting — describe-time helpers
 
-**Covers:** `src/archagent/status.py`, `src/archagent/graph.py`, `src/archagent/docscan.py`
+**Covers:** `src/archagent/status.py`, `src/archagent/described.py`, `src/archagent/graph.py`, `src/archagent/docscan.py`
 **Tier:** domain
 **Connects:** config via import, drift via import, extraction via import
 
 ## Purpose
 
-Three small commands that support the *describe* step rather than enforcement: how much of the code is
-documented, what the system map looks like, and whether the diagrams parse.
+A few small commands that support the *describe* step rather than enforcement: how much of the code is
+documented, how much of it the documents actually discuss, what the system map looks like, and whether
+the docs are internally consistent.
 
 | Module | Command | Answers |
 |---|---|---|
 | `status.py` | `archagent status` | per-package coverage — how much code a subsystem doc claims |
+| `described.py` | `archagent status` (the Described section) | of the code claimed, how much is actually named somewhere |
 | `graph.py` | `archagent graph` | a Mermaid system map generated from `**Covers:**` and `**Connects:**` |
-| `docscan.py` | `archagent lint-docs` | do the Mermaid blocks parse, without needing Node |
+| `docscan.py` | `archagent lint-docs` | do the Mermaid blocks parse, and does every cited invariant ID exist |
 
 ## Key abstractions
 
@@ -27,10 +29,32 @@ The thinness bar is *relative* — under half the median density of the artifact
 absolute words-per-file threshold would punish a terse house style everywhere; one document far below its
 siblings is a claim about this artifact rather than about prose in general.
 
-**This subsystem is itself flagged `no diagram`, and that is the right behaviour.** It covers six type
-declarations and draws nothing, so the check asks the question. The answer here is no: `status`, `graph`
-and `lint-docs` are three independent commands rather than a set of relationships, and a diagram would
-restate the table above it. The flag is a prompt, not a verdict — the same rule every other signal in
+**Assignment is not description, and `described.py` is the third question.** A `**Covers:**` glob proves a
+file is *claimed*; it says nothing about whether the claiming document mentions it. A reviewed artifact
+scored 727 of 727 files assigned and 1.00 on the deterministic rubric while a 17-line module wiring an
+optional whole-ORM read cache — which changes staleness reasoning in the permission and search paths the
+artifact documents in detail — appeared nowhere in any document. The reviewer found it by running
+`grep -r cachalot architecture/` and getting nothing back. That grep is this module.
+
+Mention is a weak proxy taken alone: a module named once in a table row is not described. Two things keep
+it honest. Modules under `MIN_LINES` are excluded, so a bare `__init__` is not a finding — but the floor
+is *low* (10 lines), because size turned out to be a bad proxy for significance: the 17-line cache module
+above was excluded by the first version's 40-line floor, while the largest unmentioned files by line count
+were UI components the artifact describes deliberately as a group. And the result is reported as a
+**grouped list of units, not a score**, so a reader judges the list rather than a number judging them.
+
+**`lint-docs` checks invariant-ID integrity as well as Mermaid.** The two look unrelated and share a job:
+catching what `check` structurally cannot. `check` reads `invariants.md` and nothing else, so a subsystem
+doc is free to cite an ID no row defines, and every existing check still passes while a reader chasing the
+citation lands nowhere. Only the *unknown ID* half is checked. A citation that describes a rule
+differently from its row was implemented and then removed — a DSL row names modules where prose names
+concepts, so a faithful restatement shares no vocabulary with the row it restates, and three of four
+findings were false positives.
+
+**This subsystem is itself flagged `no diagram`, and that is the right behaviour.** It covers eight type
+declarations and draws nothing, so the check asks the question. The answer here is no: `status`,
+`described`, `graph` and `lint-docs` are independent commands rather than a set of relationships, and a
+diagram would restate the table above it. The flag is a prompt, not a verdict — the same rule every other signal in
 this tool follows, and leaving it standing is cheaper than adding a decorative diagram to silence it.
 
 **Coverage is a prompt, not a score.** `status` exists to show an author where the artifact is thin. The

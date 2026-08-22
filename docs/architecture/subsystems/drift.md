@@ -35,6 +35,17 @@ cases forced this, both found on a Go-majority repository: a wildcard **Covers:*
 nothing because Go is not analysed. Saying "this names code that no longer exists" about a file sitting
 in the tree is worse than saying nothing.
 
+Two later false positives came from the same direction. **A literal path can contain glob
+metacharacters** — every Next.js App Router dynamic segment does, `[id]`, `[...path]`, `[[...slug]]` — and
+routing anything bracketed to glob matching turns those brackets into a character class that matches none
+of them, so a file sitting in the tree was reported missing. A pattern that matches nothing now falls
+through to the ordinary lookups. And **a bare extension in backticks is not a file reference**: prose like
+"the suite is `` `.ts` `` only" was read as naming code that no longer exists, a dangling finding against
+a document that cited no file at all.
+
+Both were found by describing a repository unlike anything in the corpus, which is the argument for
+keeping the corpus varied rather than large.
+
 (Written without a sample filename on purpose. A made-up path in backticks is indistinguishable from a
 real citation, so this check flags it — twice, while this paragraph was being written, including once in
 the sentence explaining the problem.)

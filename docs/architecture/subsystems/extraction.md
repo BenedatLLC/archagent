@@ -11,7 +11,7 @@ returns data; none of them judges.
 
 | Module | Fact extracted |
 |---|---|
-| `configscan.py` | environment keys the code reads (`os.getenv`, `process.env`) |
+| `configscan.py` | environment keys the code reads — `os.getenv` / `process.env` / `import.meta.env`, helper wrappers, and pydantic-settings fields |
 | `deployscan.py` | services declared in docker-compose / k8s / Procfile |
 | `webapi.py` | HTTP routes, from the code or an OpenAPI spec |
 | `datamap.py` | table definitions and datastore touch points |
@@ -32,6 +32,18 @@ reads and the fact it hands back:
 map to locations: its only consumer compares it against `declared_config_keys`, the keys named under
 `**Config:**` in `deployment.md`. A key read but never declared is drift; a key declared but never read is
 dead configuration.
+
+A literal `os.getenv` is only one of three ways a real codebase reads the environment, and finding only
+that spelling produces the worst available result: a short list that looks like a complete one. So
+`configscan` also resolves **helper wrappers** — a function whose body reads `os.environ` and whose callers
+pass the key — and **pydantic-settings** classes, where the key is a field name, an `env_prefix` and an
+alias rather than a string literal anywhere. On one reviewed repository the literal-only scan found 98
+keys and the full scan found 228.
+
+Two constraints keep that from over-reaching. The wrapper rule requires the receiver to be `os.environ`
+itself; accepting any `.get(param)` made every `dict.get` in the codebase look like an env wrapper and
+dragged in names like `Document` and `Checksum`. And test paths are skipped, because a repository's own
+test fixtures set environment keys that are not part of its configuration surface.
 
 **`webapi`** — given `@app.get("/orders/{order_id}")`, `extract_routes` returns
 `Route(method="GET", path="orders/{}")`, keeping the original string in `raw` and the file in `source`.

@@ -20,7 +20,7 @@ Each is a family of signals sharing an evidence source.
 | A | declared data ownership | `duplicated-source-of-truth`, `shared-persistency`, `service-intimacy`, `shared-library` |
 | B | the import/connector graph and git co-change | `layer-inversion`, `layer-skip`, `unstable-dependency`, `unstable-interface`, `implicit-coupling`, `extraneous-adjacent-connector` |
 | C | subsystem shape | `god-component`, `cycle-*`, `distributed-monolith` |
-| D | deployment, observability and exposure scans | `hardcoded-endpoint`, `no-request-tracing`, `trace-chain-gap`, `permissive-origin` |
+| D | deployment, observability and exposure scans | `hardcoded-endpoint`, `no-request-tracing`, `trace-chain-gap`, `permissive-origin`, `server-side-fetch` |
 | E | git history per file | `change-prone-file` |
 | F | duplicated decisions in source | `scattered-source-of-truth`, `enum-value-escape` |
 
@@ -28,7 +28,7 @@ A, C and D are computed from the artifact and the code alone. E needs git histor
 half-and-half**, which is worth stating precisely because getting it wrong produced a bug: B's layering
 signals are static while `implicit-coupling` and `unstable-interface` come from co-change, and F's
 `scattered-source-of-truth` needs history to rank duplications while `enum-value-escape` is a pure code
-scan that runs with no git at all (`evaluate.py:305-307`).
+scan that runs with no git at all (`evaluate.py:310-312`).
 
 That last one is easy to get wrong. The coverage report used to name `B/E/F — git history` as inactive
 under `--no-history`, so a run could report an enum escape and, in the same output, say the family it
@@ -70,6 +70,23 @@ re-runs, so a label or an investigation attaches to the finding rather than to a
 **Severity is mechanical; a rating is not.** `severity` counts files and commits. Whether something is
 minor, moderate or critical depends on what it *causes*, which only reading the code establishes — so
 findings that might have consequences are marked for investigation rather than rated.
+
+**The two exposure signals in group D are architectural findings, not a security scan.** Both ask a
+question about the shape of the system that no linter positioned inside one file can ask, and both refuse
+to state more than the evidence supports.
+
+`permissive-origin` fires on a wildcard `Access-Control-Allow-Origin`, an unconditional WebSocket
+`CheckOrigin`, or wildcard CORS middleware — but it is only rated high when the *same service* also
+registers a state-changing route. That pairing is the whole finding: a permissive origin on a read-only
+surface is a different thing from one on a surface that accepts writes, and only the subsystem model knows
+which service a route belongs to. The severity rule deliberately gives no weight to "it binds to
+localhost", because that is not a restriction — a browser on any site can reach `127.0.0.1`.
+
+`server-side-fetch` reports request input reaching an outbound HTTP call, and reports it *together with
+whatever guard it found* rather than as a verdict. The distinction the finding exists to draw is that a
+scheme or prefix check constrains what the string looks like and never where the request goes, so a guard
+being present is not evidence the shape is safe — but a reader cannot judge that without being shown the
+guard, and a finding that hides it invites both dismissal and panic.
 
 ## State and tiering
 

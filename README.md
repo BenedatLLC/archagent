@@ -15,6 +15,61 @@ code, and the `describe` skill classifies each, verifies it against the code, an
 enforceable table. Intent that was buried in prose becomes a checked rule — and a stated rule the code
 *violates* is surfaced as drift (a real bug, or a stale design).
 
+## Quickstart
+
+Five minutes, in a repo you already have. You need [uv](https://docs.astral.sh/uv/) and a coding agent
+(Claude Code, Cursor, Codex or OpenHands).
+
+**1. Install the tool and scaffold the repo.**
+
+```bash
+uv tool install archagent
+cd your-repo
+archagent init .
+```
+
+`init` detects your languages and your coding agent, asks where the architecture docs should live, and
+writes `archagent.toml` plus an empty `architecture/` scaffold. Open `archagent.toml` and check
+`root_package` and `source_paths` — a wrong `root_package` scopes the boundary checks to nothing, and it
+guesses.
+
+**2. See what is already there.**
+
+```bash
+archagent scan-invariants     # rules your docs and code already state, but nothing checks
+archagent status              # how big the repo is, and how much of it is described (nothing, yet)
+```
+
+**3. Let your agent describe the architecture.** In your coding-agent session:
+
+```
+/archagent-describe
+```
+
+It reads your README, design docs and code, verifies what it finds against the source, and writes the
+constitution, one document per subsystem, and a first set of invariants — including the ones step 2
+surfaced. This is the long step; on a mid-sized repo expect it to work for a while. When it finishes,
+read `architecture/index.md`.
+
+**4. Check the code against those invariants.**
+
+```bash
+archagent check
+```
+
+Each invariant reports PASS, WARN, FAIL or **skipped**. An invariant whose checker could not run is never
+counted as passing.
+
+**5. Make it stick.**
+
+```bash
+archagent install-hook        # run `check` on every commit
+```
+
+From here on: `archagent drift` tells you where the docs and the code have diverged, `archagent evaluate`
+judges the architecture itself for system-level smells, and re-running `/archagent-describe` updates the
+artifact. See [Workflow](#workflow) for when to reach for each.
+
 ## Install
 
 archagent installs once (from outside your repos) and scaffolds into each project (like Spec-Kit).
@@ -32,7 +87,8 @@ Prefer the latest unreleased code? Install from the repo instead:
 uv tool install git+https://github.com/BenedatLLC/archagent
 ```
 
-Then run it inside a project (see **Workflow** below).
+`archagent --version` prints what you have. Worth quoting in any bug report: what a command reports
+depends on which build produced it.
 
 ## Upgrading
 
@@ -78,6 +134,8 @@ Two tiers, on purpose: the **hot** files are loaded into the agent every session
 The **cold** files (subsystem docs, ADRs) are retrieved only when relevant, so they can be full
 narrative — written so a new engineer can learn a subsystem by reading one doc, without chasing links.
 
+The format is specified in full in [`docs/ADL-SPEC.md`](docs/ADL-SPEC.md).
+
 ### See a real one: [`docs/architecture/`](docs/architecture/)
 
 **archagent describes itself.** That directory is not a sample — it is this repository's own artifact,
@@ -86,11 +144,11 @@ evaluation harness. Reading it is the fastest way to see what the output actuall
 
 - [`index.md`](docs/architecture/index.md) — the entry narrative and a generated Mermaid system map
 - [`constitution.md`](docs/architecture/constitution.md) — the layering rules, in the terse always-loaded form
-- [`invariants.md`](docs/architecture/invariants.md) — ten enforced rules, each verified by planting a
+- [`invariants.md`](docs/architecture/invariants.md) — the enforced rules, each verified by planting a
   violation and watching `check` fail
 - [`subsystems/drift.md`](docs/architecture/subsystems/drift.md) — a cold subsystem doc, with the diagram
   and the caption saying what to notice
-- [`decisions/`](docs/architecture/decisions/) — three ADRs, including one recording a dependency cycle
+- [`decisions/`](docs/architecture/decisions/) — ADRs, including one recording a dependency cycle
   the tool found in itself and has not yet fixed
 
 That last point is the honest part: `evaluate` reports a `drift ↔ extraction` cycle in this codebase, and
@@ -129,14 +187,16 @@ how the system is deployed and configured — lives in `deployment.md`:
   `docker-compose` / k8s / `Procfile`), listed under a `**Services:**` manifest.
 - **Configuration** — the environment keys the system reads, declared under a `**Config:**` manifest (or a
   committed `.env.example`). This is where configuration is modeled: `drift` compares the keys actually
-  read in code (`os.getenv`, `process.env`) against what's declared, and a config-access boundary can be
-  enforced as an invariant (e.g. only a `config` module may read the environment).
+  read in code against what's declared, and a config-access boundary can be enforced as an invariant
+  (e.g. only a `config` module may read the environment).
 
 These tie back to the subsystems through a few optional metadata fields on each `subsystems/<name>.md`:
 `**Covers:**` (the code it owns), `**Service:**` (which deployment service it runs as), `**Tier:**` (its
 layer), and `**Connects:** … via <kind>` (its dependencies, typed by connector — `import` / `sync-call` /
 `async-event` / `shared-data` / `pipe`). `drift` and `evaluate` read these to check topology, layering,
-data ownership, and deployment coupling.
+data ownership, and deployment coupling. Every one of these fields is optional; the artifact is valid
+without them and each one you add turns on another check. The full field syntax is in
+[ADL-SPEC §4.2](docs/ADL-SPEC.md).
 
 ## Invariants are a markdown table
 
@@ -149,7 +209,7 @@ data ownership, and deployment coupling.
 | STR-002 | STRUCTURAL | structural | python | `forbid-pattern print($$$)` | warn | [0009](decisions/0009-no-io.md) | active |
 
 - **Type** (the dimension it protects): BOUNDARY · INTERFACE · DATAFLOW · STRUCTURAL · PURPOSE.
-- **Tier** (how it's enforced, cheapest first): structural · contract · pbt · model-check.
+- **Tier** (how it's enforced, cheapest first): structural · contract · pbt · model-check · **prose**.
 - **Rule** (compact DSL):
   - `forbid <a> -> <b>[, <c>...]` — BOUNDARY (must not import *directly*).
   - `forbid-pattern <ast-grep pattern> [in|outside <scope>]` — STRUCTURAL (a code shape that must not
@@ -165,6 +225,15 @@ data ownership, and deployment coupling.
     random operation sequences checked against invariants, the right tool for state/data-layer bugs.
 - **Severity**: `error` fails `check`; `warn` is reported but doesn't fail.
 - **Why**: a link to the ADR with the rationale.
+
+**Record every rule as a row, including the ones nothing can check yet.** Give those **Tier `prose`**:
+they live in the table but are never generated or run, so they stay documented, greppable, and ready to
+graduate. Two optional columns exist for exactly these rows — **`Verification`** (the test, command or
+audit that confirms it, where `none` is a legitimate and more useful answer than a blank) and
+**`Graduation path`** (what would make it mechanical, or that nothing would). Without them, "archagent
+cannot generate a checker for this" and "nobody checks this" look identical in the table.
+
+Full column and DSL reference: [ADL-SPEC §6](docs/ADL-SPEC.md).
 
 ## How it works
 
@@ -190,181 +259,75 @@ Adding a language is adding a column, not rewriting anything. Generated configs 
 The one other file archagent writes is `.archagent/history-profile.json`: how *this* repo words its bug-fix
 commits, learned from your commit guidelines and a sample of real subjects (`archagent history-profile
 --write`). Unlike the generated configs, **commit it** — it's small, it makes the history-based `evaluate`
-signals reproducible across machines and CI, and it's the file to hand-edit (or let an agent rewrite from
-`--evidence`) when the inferred recognizer misreads your convention. `evaluate` reads it if present and
-otherwise infers one in memory; it never writes it.
+signals reproducible across machines and CI, and it's the file to hand-edit when the inferred recognizer
+misreads your convention.
 
 ## Workflow
 
-**Set up the architecture (once per repo):**
-
-1. **`archagent init .`** — scaffold `archagent.toml`, the `architecture/` templates, and the phase
-   skills. It **auto-detects which agents you use** (`.claude/`, `.cursor/`, `.openhands/`) and installs
-   skills for those; override with `--agents claude,cursor` / `all` / `none`. **Codex is opt-in** —
-   `--agents codex` — because it keeps no per-repo directory to detect. It also detects languages
-   and guesses `root_package` / `source_paths` — check those in `archagent.toml`. It asks **where the
-   architecture docs should live** (default `architecture/`, or a combo it finds like `docs/architecture` —
-   set it directly with `--arch-dir`, or `--yes` to take the default), and records it as `architecture_dir`.
-   It **never creates or overwrites your top-level `CLAUDE.md` / `AGENTS.md`**; the full instructions go in
-   `<arch-dir>/AGENTS.md`. Add `--wire` to append a small additive pointer to your top-level file(s).
-2. **`/archagent-describe`** (in your coding agent) — document the *current* architecture: it locates your
-   docs (via README/`AGENTS.md`/`CLAUDE.md` and any `designs/`/`spec/` dirs), **verifies them against the
-   code**, and writes the constitution, the per-subsystem docs (the six dimensions), and an initial set of
-   invariants — including ones it **mines from your existing design docs and code** (`archagent
-   scan-invariants` surfaces the candidates; see below).
-3. **`archagent check`** (or `/archagent-check`) — verify the code against those invariants.
+**Set up the architecture (once per repo)** — this is the [Quickstart](#quickstart) above:
+`archagent init .`, then `/archagent-describe` in your coding agent, then `archagent check`.
 
 **Keep it honest as you work:**
 
-- **Every commit** — `archagent install-hook` drops a git pre-commit hook that runs `archagent check` on
-  each commit (add `--skip-pbt` to run only the fast static tiers and leave the property tests to your test
-  suite). `check` exits nonzero on an error-severity violation, so it also drops straight into CI.
+- **Every commit** — `archagent install-hook` runs `check` on each commit (`--skip-pbt` for the fast
+  static tiers only). `check` exits nonzero on an error-severity violation, so it drops straight into CI.
 - **Add an invariant** — **`/archagent-invariant`**, or edit `architecture/invariants.md` by hand, to
   encode a new rule (from a design decision, or lifted from a subsystem doc); `check` confirms it catches
   the right thing.
 - **Mine stated invariants** — `archagent scan-invariants` surfaces rules already written in your docs and
-  code (`INVARIANT:` markers, asserts/contracts, and modal prose like "must never" / "only X may"); the
-  `describe` skill classifies each, verifies it, and lifts the checkable ones into the table (capturing the
-  rest as cited prose rows).
-- **See what drifted** — `archagent drift` reflexion-diffs the `architecture/` docs against the code:
-  **dangling references**, **stale docs** (git), **undocumented modules** (via `**Covers:**`),
-  **undeclared/stale subsystem dependencies** (declared `**Connects:**` `import`-kind edges vs the actual
-  import graph), **undocumented entry points**, the **web-route surface** (Flask/FastAPI/Django routes vs a committed
-  OpenAPI spec, else the docs), **configuration** (env keys read vs a `.env.example` / `**Config:**`
-  manifest), **deployment topology** (IaC services vs a `**Services:**` list), and **connector-kind
-  mismatches** (a `**Connects:** … via async-event` the code contradicts with a blocking HTTP call).
-  Informational — its
-  output (`--json` for tooling) is the update work-list.
+  code; the `describe` skill classifies each, verifies it, and lifts the checkable ones into the table
+  (capturing the rest as cited prose rows).
+- **See what drifted** — `archagent drift` diffs the docs against the code: dangling references, stale
+  docs, undocumented modules, undeclared subsystem dependencies, entry points, the web-route surface,
+  configuration keys, deployment topology, and connector-kind mismatches. Informational; its output
+  (`--json` for tooling) is the update work-list.
 - **Evaluate the architecture** — `archagent evaluate` (or **`/archagent-evaluate`**) judges the *model
-  itself* for **system-level** smells and recommends fixes: **data & source-of-truth** (shared persistency,
-  duplicated ownership, cross-service data intimacy, shared libraries — via `**Service:**` maps),
-  **shotgun surgery** and **unstable interfaces** (from git **co-change** history), **change-prone complex
-  files** and a **scattered single source of truth** (one decision re-implemented across files, ranked by
-  the churn of the files involved), **God Components**,
-  **circular subsystem/service dependencies** (with shape + severity), **unstable dependencies** (Martin's
-  `I = Ce/(Ca+Ce)`), **leaky abstractions** (layer inversion/skip, via `**Tier:**`), **distributed monolith**
-  (a synchronous service cycle — from typed `**Connects:**` edges *and* sync-call edges inferred from the
-  code, so it works with no annotation) and **extraneous adjacent connectors**,
-  **hard-coded endpoints**, and **cross-boundary observability** (services that call each other but can't
-  trace a request across the boundary). It emits *candidate* signals (`--json`); the skill judges them in
-  context, clusters to roots, and prioritizes. Advisory (not a commit gate). Runs at design-review +
-  periodically.
+  itself* for system-level smells: source-of-truth and data-ownership problems, God Components, dependency
+  cycles, leaky abstractions, distributed-monolith shapes, observability and exposure gaps, and
+  git-history signals like shotgun surgery and change-prone complex files. It emits *candidate* signals;
+  the skill judges them in context, clusters to roots, and prioritizes. Advisory, not a commit gate.
 - **Update the architecture** (a new design, or the code changed) — re-run **`/archagent-describe`**:
   it's *build-**or-update***. Start from `archagent drift` (reconcile doc-vs-code), then `archagent evaluate`
   (assess system-level health); refresh the subsystem(s) that changed and reconcile the invariants. Drift
   items are record fixes; evaluate findings are design decisions — change the structure or accept it with an
-  ADR, and graduate the fixes you want to hold into `check` invariants. Do this at **design-review time**
-  (does the proposed design fit — and does it introduce a smell?) and **periodically** as the code evolves;
-  record decisions as ADRs in `architecture/decisions/`.
-- **Upgrade the prompts** — update the tool, then `archagent upgrade` (refreshes the skills +
-  `architecture/AGENTS.md` only, leaving your config and architecture content untouched). See
-  [Upgrading](#upgrading).
+  ADR, and graduate the fixes you want to hold into `check` invariants.
+- **Upgrade the prompts** — update the tool, then `archagent upgrade`. See [Upgrading](#upgrading).
 
-> Cadence: `describe` + `evaluate` at design-review + periodically; `check` on every commit. archagent
-> enforces *your system's* design rules and flags *system-level* smells (candidates its skill judges in
-> context) — it isn't a generic metrics dashboard (cycle counts, coupling scores).
+> Cadence: `describe` + `evaluate` at design-review time and periodically; `check` on every commit.
+> archagent enforces *your system's* design rules and flags *system-level* smells (candidates its skill
+> judges in context) — it isn't a generic metrics dashboard.
 
-The skills come from one neutral source and are installed per agent — Claude Code `.claude/skills/`,
-Cursor `.cursor/skills/`, Codex `.agents/skills/`, OpenHands `.openhands/microagents/` — plus
-`architecture/AGENTS.md` (the full instructions, archagent-owned). Codex also reads a root `AGENTS.md`
-from the repo root down, so `--wire` alone gives it a working integration even with no skills installed. In Claude Code, invoke a skill directly
-as `/archagent-describe` (etc.) or just describe the task and Claude activates it.
+In Claude Code, invoke a skill directly as `/archagent-describe` (etc.) or just describe the task and
+Claude activates it. Skills are installed per agent — Claude Code `.claude/skills/`, Cursor
+`.cursor/skills/`, Codex `.agents/skills/`, OpenHands `.openhands/microagents/` — plus
+`architecture/AGENTS.md`, the full instructions, which archagent owns.
 
 ## Commands
 
-CLI:
-- `archagent help` — concise overview of the lifecycle and the command/skill for each step.
-- `archagent init [PATH]` — scaffold `archagent.toml` + the architecture templates + agent skills.
-  Auto-detects agents (`--agents auto`); override with `--agents claude,cursor` / `all` / `none`.
-  `--arch-dir docs/architecture` picks where the docs live (skips the prompt); `-y` / `--yes` is
-  non-interactive throughout. `--wire` adds an additive pointer to top-level `CLAUDE.md`/`AGENTS.md`;
-  `--force` re-scaffolds everything, **clobbering your edits to user-owned files** — use `upgrade` instead.
-- `archagent check` — regenerate configs, run the checkers, report per invariant (exit 1 on an
-  error-severity failure). `--skip-pbt` runs only the fast static tiers (BOUNDARY + STRUCTURAL).
-- `archagent install-hook` — install a git pre-commit hook that runs `archagent check` on every commit
-  (`--skip-pbt` for the static-only variant). Native `.git/hooks/pre-commit`, idempotent, composes with an
-  existing hook.
-- `archagent drift` — reflexion-diff the `architecture/` docs against the code: dangling references,
-  stale docs (git), undocumented modules (via `**Covers:**`), undeclared/stale subsystem dependencies
-  (declared `**Connects:**` `import`-kind edges vs the actual import graph — Python `ast` + JS/TS regex), undocumented entry
-  points (`[project.scripts]` + `package.json` `bin`), the **web-route surface** (Flask/FastAPI/Django +
-  Express/Fastify/NestJS, static, vs a committed OpenAPI spec if present, else the docs), and
-  **configuration** (env keys read in code vs a `.env.example` / `**Config:**` manifest), and **deployment
-  topology** (services from docker-compose/Procfile/k8s vs a `**Services:**` list, plus code cross-service
-  dependencies vs compose `depends_on` via subsystem `**Service:**` mappings), and **connector-kind
-  mismatches** (declared `via async-event` vs a synchronous HTTP call inferred from the code). Informational; `--json` for
-  tooling/agents, `--exit-code` to fail CI on any drift, and `--until` / `--as-of <tag>` to bound the git
-  staleness comparison to a past revision (same semantics as `evaluate`, below).
-- `archagent evaluate` — judge the architecture for **system-level** smells (candidates for
-  `/archagent-evaluate`): **data & source-of-truth** (shared persistency, duplicated ownership, cross-service
-  data intimacy, shared libraries — from a static datastore→service map via `**Service:**`; silent on a
-  single-service repo, where none of these can apply), God Components,
-  circular subsystem/service dependencies (shape + severity), unstable dependencies (`I = Ce/(Ca+Ce)`,
-  `DoUD ≥ 0.30`), leaky abstractions (layer inversion/skip via `**Tier:**`), **distributed monolith** +
-  **extraneous adjacent connectors** (from typed `**Connects:**` edges), hard-coded service endpoints, and
-  **cross-boundary observability** (no request tracing at all, and gaps in an otherwise-traced chain),
-  and a **permissive cross-origin policy** (`Access-Control-Allow-Origin: *`, an unconditional WebSocket
-  `CheckOrigin`, wildcard CORS middleware) — rated high only when the same service also registers a
-  state-changing route, because "binds to localhost" is not a restriction: a browser on any site can reach
-  `127.0.0.1`. This one scans every language, not just the configured ones), and a **server-side fetch of a
-  caller-supplied URL** (the SSRF shape: request input reaching an outbound HTTP call, reported with the
-  guard it found — a scheme check constrains what the string looks like, never where the request goes);
-  plus **git-history** signals —
-  **shotgun surgery** / implicit coupling and **unstable interface** (subsystem co-change),
-  **change-prone complex files** (per-file churn × indentation complexity, both as within-repo
-  percentiles), and **scattered single source of truth** — either inferred (one decision's value set
-  branched on across several files, likely owner inferred, ranked by churn) or **declared** (an enum
-  bypassed by comparisons against its raw member strings; the one signal here that needs no git, so it
-  still runs under `--no-history`).
-  `--json`, `--group A|B|C|D|E|F`, `--min-severity`, `--no-history`, `--since`, `--until`, `--as-of`,
-  `--exit-code`. `--until` / `--as-of <tag>` bound the history so a run can be reproduced *as of* a past
-  revision; they do not check anything out, and the run warns if your tree is newer than the window.
-- `archagent investigate <finding-id>` — print an investigation brief for one `evaluate` finding: what the
-  concept is, how many times it is declared, whether the copies have drifted, whether any code path
-  actually misbehaves, and whether it fails loudly or silently. `evaluate`'s severity counts files and
-  commits; a **minor / moderate / critical** rating requires reading the code. `--record <file.md>
-  --rating <level> [--by NAME]` stores the result in the artifact under `<arch-dir>/investigations/`, so
-  the next run reports the verdict instead of asking again. Pass the same `--until` the run used, so the
-  brief describes the finding as it stood when it was reported.
-- `archagent history-profile` — learn how *this* repo words its bug-fix commits (`Fixed #123` vs
-  `fix(scope):` vs free-form), which the history signals above rely on. Prints what it inferred; `--write`
-  caches it to `.archagent/history-profile.json`, `--evidence` dumps the raw facts (commit guidelines,
-  leading-word frequencies, per-pattern match rates) for an agent to judge. A cached profile always wins.
-- `archagent scan-invariants` — scan docs + code for **stated invariants** (explicit `INVARIANT`/
-  `@invariant`/assert/contract markers, plus modal language like MUST/NEVER/"only X may") and emit them as
-  candidates for `/archagent-describe` to classify, verify, and lift into `invariants.md`. `--json`,
-  `--markers-only`.
-- `archagent status` — repo-scale + coverage snapshot: per top-level package, how many source files a
-  subsystem's `**Covers:**` claims, **and how much each subsystem document actually says about the code it
-  claims** — prose words per file, diagrams, and type/table declarations covered. Coverage answers "is
-  this described by something"; depth answers "is the description usable", and the two come apart: an
-  artifact can be at 100% coverage while a reader cannot trace a change through it. Flags a document under
-  half the median density of its siblings (relative, so a terse house style is not punished) and one that
-  covers five or more type declarations with no diagram. Use it to size a `describe` pass (a fixed "document 3 and stop" is wrong
-  for a large repo) and to state coverage in `index.md` as an "N of M" count.
-- `archagent graph` — generate a Mermaid system map (one node per subsystem, one edge per typed
-  `**Connects:**`) from the metadata the docs already declare. `--write` splices it into `index.md` between
-  the `<!-- archagent:graph -->` markers (idempotent), so the diagram stays in sync instead of being
-  hand-redrawn.
-- `archagent lint-docs` — lint the Mermaid diagrams in the architecture docs for syntax errors (a stray
-  second `:` in a `stateDiagram-v2` label, an unclosed/empty block, an unknown diagram type) — deterministic,
-  no Node required. `--json`, `--exit-code`.
-- `archagent modules` — diagnostic: how each Python source file resolves to an import module, flagging
-  top-level **name collisions** (two packages that install under the same name, which quietly breaks
-  import-linter scoping).
-- `archagent gen` — regenerate only the checker configs from `architecture/invariants.md` (`check` does
-  this for you).
-- `archagent upgrade` — refresh the archagent-owned prompts (skills + the artifact's `AGENTS.md`) to the
-  latest; leaves your config and architecture content untouched. `--agents` scopes which are refreshed.
+Full reference with every option: **[`docs/COMMANDS.md`](docs/COMMANDS.md)**.
 
-Every command takes `--project PATH` (default `.`) to run against a repo other than the current directory.
+| Command | What it does |
+|---------|--------------|
+| `archagent help` | overview of the lifecycle and the command/skill for each step |
+| `archagent init [PATH]` | scaffold `archagent.toml` + the architecture templates + agent skills |
+| `archagent upgrade` | refresh the archagent-owned prompts to match the installed tool |
+| `archagent check` | run the checkers, report per invariant (exit 1 on an error-severity failure) |
+| `archagent gen` | regenerate only the checker configs (`check` does this for you) |
+| `archagent install-hook` | install a git pre-commit hook that runs `check` |
+| `archagent drift` | diff the architecture docs against the code — informational |
+| `archagent evaluate` | judge the architecture for system-level smells — advisory |
+| `archagent investigate <id>` | turn one `evaluate` finding into a verdict, and record it |
+| `archagent status` | coverage, depth, and how much of the code the docs actually name |
+| `archagent graph` | generate the Mermaid system map from the docs' metadata |
+| `archagent lint-docs` | lint Mermaid syntax and invariant-ID citations in the docs |
+| `archagent scan-invariants` | find rules the docs and code already state but nothing checks |
+| `archagent history-profile` | learn how this repo words its bug-fix commits |
+| `archagent modules` | diagnostic: module resolution and top-level name collisions |
 
-Agent skills (invoke in your coding agent; Claude Code slash form shown):
-- `/archagent-describe` — build or update the architecture artifact.
-- `/archagent-check` — run `archagent check` and resolve violations.
-- `/archagent-invariant` — add or change a checkable invariant.
-- `/archagent-evaluate` — judge the architecture for system-level smells and recommend fixes.
-- `/archagent-help` — overview of the lifecycle and which command/skill to use at each step.
+Every command takes `--project PATH` (default `.`). `archagent --version` prints the installed version.
+
+Agent skills: `/archagent-describe` · `/archagent-check` · `/archagent-invariant` ·
+`/archagent-evaluate` · `/archagent-help`.
 
 ## Configuration
 
@@ -414,6 +377,7 @@ archagent/
 │   ├── architecture/         archagent's own artifact — it describes itself (archagent.toml points here)
 │   ├── designs/              one design doc per feature, with `status:` frontmatter
 │   ├── evaluations/          what the evaluation runs concluded (the data lives in a separate repo)
+│   ├── COMMANDS.md           the full CLI reference
 │   ├── ROADMAP.md            planned future work, grouped by theme (checkable)
 │   ├── ADL-SPEC.md           the architecture-artifact format, as a standards-style spec
 │   └── RELEASING.md          how to cut a new release to PyPI
@@ -430,8 +394,9 @@ archagent/
 │   ├── dupdecide.py          duplicated branch-value sets: the scattered-source-of-truth check
 │   ├── investigations.py     recorded verdicts on findings, stored in the artifact
 │   ├── status.py             per-package coverage snapshot: the `status` command
+│   ├── described.py          which assigned modules a document actually names
 │   ├── graph.py              Mermaid system map from metadata: the `graph` command
-│   ├── docscan.py            Mermaid diagram linter: the `lint-docs` command
+│   ├── docscan.py            doc linter (Mermaid syntax, invariant IDs): the `lint-docs` command
 │   ├── <extraction scanners> configscan · deployscan · webapi · datamap · cochange · connscan · obsscan
 │   │                         (static, no-execution extractors: env keys, IaC, routes, datastores,
 │   │                          git co-change + per-file churn, connector kinds, observability)
@@ -439,11 +404,12 @@ archagent/
 │       ├── architecture/     the artifact scaffold (constitution, invariants, subsystems, deployment…)
 │       └── agent/phases/     the neutral skill prompts (describe · check · invariant · evaluate)
 ├── examples/                 sample_py, sample_ts — end-to-end fixtures
-├── scripts/                  evaluation CLIs: selfeval · defect_study · spotcheck · blindcomp
+├── scripts/                  evaluation CLIs: selfeval · defect_study · spotcheck · blindcomp · ledger
 │                             (evalhome.py resolves where their output goes)
 ├── tests/                    the pytest suite, and the evaluation harness it exercises
 │   ├── rubric.py             the deterministic half of the artifact rubric
 │   ├── rubric_judged.py      the judged half: anchored criteria, resolved citations
+│   ├── ledger.py             one row per evaluation run; refuses to compare incomparable rows
 │   ├── defect_study.py       rate ratios, bootstrap intervals, churn-decile stratification
 │   ├── corpus.py             pinned-repo regression  ·  spotcheck.py · blindcomp.py
 │   ├── golden/               projected `evaluate` output for the built-in fixture repos
