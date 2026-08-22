@@ -35,6 +35,23 @@ and the order matters.*
   nothing anywhere said so.
 - [ ] **[#17](https://github.com/BenedatLLC/archagent/issues/17) — separate assigned from described.**
   Built and wired into `status`; needs a look at its output on a couple of targets before closing.
+- [ ] **[#10](https://github.com/BenedatLLC/archagent/issues/10) — `configscan` is blind to
+  pydantic-settings.** Detection spiked at 22 lines and finds all 25 fields on `fastapi-template`: a class
+  whose bases end in `Settings`, its top-level annotated attributes, plus `env_prefix` from
+  `model_config`. Remaining work is `class Config:` as the older prefix idiom, case handling (pydantic
+  matches env vars case-insensitively), wiring beside the literal and wrapper paths, and tests. **~2–3
+  hours**, budgeted for the correction rounds this class of change has needed every time — the wrapper
+  fix took four and `described.py` six, all of them heuristics that looked right and over-fired on real
+  code.
+
+  Worth doing pre-1.0 because the payoff is larger than one more pattern: `drift` reports **18 dangling
+  config keys on `fastapi-template` that are all false**, and because nothing is detected as read,
+  `undocumented_config` can never fire either — so **the config half of `drift` is entirely inert on any
+  pydantic-settings project**, which is most modern FastAPI code. It also completes a config story that is
+  otherwise half-done, since `configscan` grew the helper-wrapper hop this week.
+
+  **Stop rule:** unlike an ADL change this carries no format-compatibility cost, so if the corrections run
+  past ~3 hours, ship it in 1.1 rather than delaying the release.
 
 ### 2. Documentation
 
@@ -80,9 +97,6 @@ release is how round 4's instruments ended up saturated. Batched so **round 6 ca
 - **[#20](https://github.com/BenedatLLC/archagent/issues/20)** — canonical invariant IDs. Half shipped as
   `lint-docs`' `unknown-invariant-id`; the other half needs generated references, a larger ADL change that
   belongs with the step-5 batch if it happens at all.
-- **[#10](https://github.com/BenedatLLC/archagent/issues/10)** — `configscan` and pydantic-settings. The
-  helper-wrapper fix does not touch it: pydantic-settings has no call to find, only typed class
-  attributes. Genuinely open.
 - **[#9](https://github.com/BenedatLLC/archagent/issues/9)** — the corpus cannot evaluate service-shaped
   signals. Evaluation infrastructure; no user impact.
 - **Computed claims** (`docs/designs/computed-claims.md`) — **deferred**, not rejected. The mechanism works
