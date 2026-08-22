@@ -1531,6 +1531,14 @@ an artifact at all. They cannot fire on the corpus however many repositories are
 that problem is an open item: synthetic injection into the fixture repos would give recall cheaply,
 precision still needs real repositories carrying real artifacts.
 
+**L2, the artifact quality — two usable calibration rounds, and a fourth that failed procedurally.**
+Round 4 (paperless-ngx, `docs/evaluations/selfeval/paperless-ngx/CALIBRATION.md`) produced no calibration
+number: one review brief was generated, the blind judge filled it in, and the human reviewer was then given
+that same file. The returned review is an edit pass over the judge's, so it measures recall rather than
+agreement — the anchoring §14 predicts when it argues against shipping a sample review. The fresh
+repository is spent and the count of usable rounds is still two. The fix is one line of procedure:
+**generate two briefs to two paths, and never give a reviewer a path a judge has touched.**
+
 **L2, the artifact quality — two calibration rounds and a variance measurement.** Round 2 (obstudio) gave
 the first agreement number against a human reviewer: exact agreement on 2 of 6 criteria, within one point
 on 6 of 6, human mean 4.00 against a model judge's 3.67. Round 3 (wardrowbe) repeated it at 1 of 6 exact
