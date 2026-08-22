@@ -10,6 +10,21 @@ How to cut a new release to [PyPI](https://pypi.org/project/archagent/). Keep it
 
 ## Steps
 
+## 0. Is a release warranted?
+
+```bash
+python scripts/usage-delta.py     # exit 1 = the documented usage surface changed
+```
+
+A release is not required before every evaluation — usage should not change that fast, and if it does
+that is the bigger problem. It *is* warranted when the commands, their required arguments, or the commands
+the phase prompts tell an agent to run have changed since the last one. Prompt wording alone does not
+count: `archagent upgrade` ships prompt bodies into a repo independently of the package version.
+
+This also checks its own baseline. **`0.3.0` was published to PyPI and never tagged**, so `git tag`
+reported `v0.2.0` as newest while `pyproject.toml` said `0.3.0` — a delta against "the last tag" silently
+spanned two releases. Tag the release commit (step below) or the next run inherits the same problem.
+
 1. **Bump the version.** Edit `version` in `pyproject.toml` (semver: patch for fixes, minor for features).
    Update `docs/ROADMAP.md` / any changelog notes if relevant.
 
@@ -56,7 +71,9 @@ How to cut a new release to [PyPI](https://pypi.org/project/archagent/). Keep it
    uvx archagent@<version> --version   # must print <version>
    ```
 
-8. **Commit the bump, tag, and push.**
+8. **Commit the bump, tag, and push.** The tag is not bookkeeping — `scripts/usage-delta.py` uses it as
+   the baseline for the *next* release decision, and `0.3.0` shipping untagged is why step 0 has to check
+   its own inputs. If you skip it here, the next run compares against the release before last.
    ```bash
    git commit -am "release: v<version>"
    git tag -a v<version> -m "archagent <version>"
