@@ -246,3 +246,97 @@ def test_a_framework_name_is_not_a_missing_file(tmp_path):
     from rubric_judged import unresolved_citations
     assert unresolved_citations("The Next.js route handler and the Node.js runtime.", tmp_path) == []
     assert unresolved_citations("See invented.js for details.", tmp_path) != []
+
+
+# --- the evaluate section (design: findings judged as a report, not adjudicated) ---------------------
+
+def _cap(findings=None, inactive=None, **kw):
+    from findings import Capture
+    base = dict(repo="demo", target_rev="v1.0", archagent="archagent 0.3.0", captured_at="2026-08-22",
+                findings=findings or [], inactive=inactive or [])
+    return Capture(**{**base, **kw})
+
+
+def test_the_evaluate_section_is_absent_when_nothing_was_captured():
+    """Omitted entirely rather than included and blank. An unanswered section is indistinguishable from
+    one the reviewer skipped, and this instrument turns on that distinction everywhere else."""
+    text = render_brief("architecture/", "demo")
+    assert "finding_actionability" not in text and "archagent evaluate" not in text
+
+
+def test_the_evaluate_section_appears_when_a_capture_is_passed():
+    text = render_brief("architecture/", "demo", findings=_cap())
+    for c in ("finding_actionability", "finding_restraint", "finding_coverage_honesty"):
+        assert c in text
+
+
+def test_no_evaluate_criterion_asks_whether_a_finding_is_true():
+    """The blinding boundary, asserted rather than trusted to a comment. The brief shows every finding
+    with its severity, so a question about correctness here would measure agreement with our own prior
+    and return it as precision. That question belongs in the blinded spot-check."""
+    from rubric_judged import EVALUATE_CRITERIA
+    banned = ("is it correct", "is this correct", "true or false", "is it real", "precision",
+              "do you agree")
+    for c in EVALUATE_CRITERIA:
+        blob = (c.question + " " + " ".join(c.anchors.values())).lower()
+        for b in banned:
+            assert b not in blob, f"{c.id} asks the blinded question: {b!r}"
+
+
+def test_the_brief_says_the_reviewer_is_judging_the_report():
+    text = render_brief("architecture/", "demo", findings=_cap())
+    assert "judging the report, not adjudicating" in text
+
+
+def test_an_empty_finding_set_is_not_presented_as_a_clean_result():
+    """Zero findings is a result, not a blank — and it is only readable next to the list of families that
+    never ran."""
+    text = render_brief("architecture/", "demo", findings=_cap())
+    assert "That is a result, not a blank" in text
+
+
+def test_severity_is_labelled_mechanical_where_it_is_shown():
+    """The reviewer is asked whether the report is restrained about severity; showing it unlabelled here
+    would put the defect in the instrument rather than in what it measures."""
+    f = {"sign": "god-component", "group": "C", "severity": "high", "title": "God component",
+         "subjects": ["cli"], "detail": "", "recommendation": "", "id": "x:y:z"}
+    text = render_brief("architecture/", "demo", findings=_cap(findings=[f]))
+    assert "(mechanical)" in text
+
+
+def test_a_failed_history_mine_is_stated_in_the_brief():
+    text = render_brief("architecture/", "demo", findings=_cap(mining_failed=True))
+    assert "History mining FAILED" in text
+
+
+def test_the_two_means_are_computed_separately():
+    """Folding the evaluate scores into `mean` would redefine what that number measures while leaving its
+    name and its ledger column unchanged — the exact shape of the defect the ledger exists to prevent."""
+    text = """
+## accuracy — Accuracy
+score: 4
+evidence: src/a.py:10
+why: fine
+
+## finding_actionability — Finding actionability
+score: 2
+evidence: src/a.py:12
+why: generic advice
+"""
+    r = review_from(text, "demo", "", "tester")
+    assert r.mean == 4.0
+    assert r.evaluate_mean == 2.0
+
+
+def test_a_review_with_no_evaluate_section_reports_no_evaluate_mean():
+    r = review_from("## accuracy — Accuracy\nscore: 4\nevidence: a.py:1\nwhy: ok\n", "demo", "", "t")
+    assert r.evaluate_mean is None and r.evaluate_coverage == (0, 0)
+    assert "evaluate_mean" not in r.to_dict()
+
+
+def test_the_brief_records_its_own_rubric_versions():
+    """`rubric_version` was hand-typed into the ledger until now, and a version key entered by hand can
+    disagree with the brief it names without anything noticing."""
+    from rubric_judged import ARTIFACT_RUBRIC_VERSION, EVALUATE_RUBRIC_VERSION
+    text = render_brief("architecture/", "demo", findings=_cap())
+    assert ARTIFACT_RUBRIC_VERSION in text and EVALUATE_RUBRIC_VERSION in text

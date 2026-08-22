@@ -96,6 +96,9 @@ class Criterion:
     anchors: dict[int, str]          # what 1, 3 and 5 look like
     evidence: str                    # what a citation must point at for this criterion
     second_run_only: bool = False
+    #: "artifact" — what `describe` wrote. "evaluate" — what `evaluate` reported about it. Kept apart so
+    #: the two means are versioned and compared separately; see `EVALUATE_RUBRIC_VERSION`.
+    section: str = "artifact"
 
 
 CRITERIA: list[Criterion] = [
@@ -204,18 +207,98 @@ CRITERIA: list[Criterion] = [
     ),
 ]
 
-BY_ID = {c.id: c for c in CRITERIA}
+#: Bumped when the artifact criteria change in any way a score depends on. Recorded in the brief and
+#: copied into the ledger's `rubric_version`, which was hand-typed until now — a version key entered by
+#: hand can disagree with the brief it names, and the disagreement is invisible.
+ARTIFACT_RUBRIC_VERSION = "brief-v3"
+
+#: The `evaluate` half, versioned separately **so the artifact series survives**. Folding these criteria
+#: into the artifact brief would bump `rubric_version`, and the ledger would then correctly refuse to put
+#: any future round in a series with rounds 1 through 5 — right behaviour, expensive outcome. Two
+#: sections, two version keys, two means, one brief, one run.
+EVALUATE_RUBRIC_VERSION = "eval-v1"
+
+
+#: What `evaluate` reported, judged as a **report** rather than as a set of claims.
+#:
+#: The line these deliberately do not cross is whether a finding is *true*. That question needs the
+#: reviewer not to have seen the tool's severity and confidence first — `spotcheck.py`'s entire design is
+#: withholding them — and this brief displays every finding with its severity attached. Asking "are these
+#: right?" here would produce a number that looks like precision and is agreement with our own prior.
+#: Precision stays in the spot-check, where the blinding is handled; these three ask what can be asked in
+#: the open.
+EVALUATE_CRITERIA: list[Criterion] = [
+    Criterion(
+        id="finding_actionability",
+        label="Finding actionability",
+        question=("Take each finding in turn. Could you act on it — change something, or decide not to — "
+                  "without redoing the analysis that produced it?"),
+        anchors={
+            1: ("Findings name a smell and a location and stop. You would have to re-derive the problem "
+                "yourself before you could do anything about it."),
+            3: ("The recommendation is generic advice that would fit any finding of that kind — 'reduce "
+                "coupling', 'introduce an interface' — rather than advice about this code."),
+            5: ("Each finding names the specific code, what about it is the problem, and what a fix would "
+                "change. Enough to open a pull request, or to decide against one and say why."),
+        },
+        evidence="a finding, and the code it points at — say whether the two matched",
+        section="evaluate",
+    ),
+    Criterion(
+        id="finding_restraint",
+        label="Restraint about what was established",
+        question=("`evaluate`'s severity is mechanical: it counts files and commits, never consequences. "
+                  "Does the report say only what it actually established?"),
+        anchors={
+            1: ("Findings assert consequences — this causes outages, this is a security hole — on "
+                "evidence that is only a count."),
+            3: ("Severity is stated without being labelled mechanical, so a reader takes HIGH to mean "
+                "serious when it means large."),
+            5: ("Mechanical severity is named as mechanical; findings whose consequences are unknown are "
+                "marked for investigation rather than rated; and where a guard was found it is reported "
+                "beside the risk instead of omitted."),
+        },
+        evidence="a severity or a claim in the report, and the evidence the report offers for it",
+        section="evaluate",
+    ),
+    Criterion(
+        id="finding_coverage_honesty",
+        label="Honesty about what was not checked",
+        question=("Can you tell from the report which checks did not run? A group that emitted nothing "
+                  "for lack of metadata is indistinguishable, from the count alone, from a clean one."),
+        anchors={
+            1: ("An empty group reads as health. Nothing says which families never ran, or why."),
+            3: ("Inactive families are listed, but the finding count could still be read as a complete "
+                "inventory — a capped list or a failed history mine goes unmentioned."),
+            5: ("Every family that could not run is named with its reason; a capped list says what it was "
+                "capped from; and a failed history mine voids its signals loudly rather than quietly."),
+        },
+        evidence="the coverage or inactive section of the report, and a group whose silence it explains "
+                 "or fails to explain",
+        section="evaluate",
+    ),
+]
+
+BY_ID = {c.id: c for c in [*CRITERIA, *EVALUATE_CRITERIA]}
 
 
 # --- the brief a judge works through ---------------------------------------------------------
 
 def render_brief(artifact_path: str, repo: str, second_run: bool = False,
-                 tool: str = "", target_rev: str = "") -> str:
+                 tool: str = "", target_rev: str = "", findings: "object | None" = None) -> str:
+    """The brief a reviewer fills in.
+
+    Pass `findings` (a `findings.Capture`) to append the `evaluate` section. It is omitted entirely when
+    no capture exists rather than included and left blank: an unanswered section is indistinguishable
+    from a section the reviewer skipped, and the whole instrument turns on that distinction elsewhere.
+    """
     crit = [c for c in CRITERIA if second_run or not c.second_run_only]
     lines = [
         f"# Architecture artifact review — {repo}",
         "",
         f"Artifact: `{artifact_path}/` (relative to the repository root)",
+        f"Rubric: `{ARTIFACT_RUBRIC_VERSION}`"
+        + (f" · evaluate section `{EVALUATE_RUBRIC_VERSION}`" if findings is not None else ""),
     ]
     if target_rev:
         lines.append(f"Target revision: `{target_rev}`")
@@ -285,7 +368,93 @@ def render_brief(artifact_path: str, repo: str, second_run: bool = False,
             "",
             "---",
         ]
+    if findings is not None:
+        lines += _evaluate_section(findings)
     return "\n".join(lines) + "\n"
+
+
+def _evaluate_section(cap) -> list[str]:
+    """The `evaluate` half of the brief: the findings, then three questions about the report.
+
+    The findings are shown **with** their severities, which is exactly why none of the three questions
+    asks whether a finding is correct. A reviewer who has read `HIGH` cannot then give an unanchored
+    judgement of the same finding's truth, and pretending otherwise would launder our own prior into a
+    precision figure. The blinded version of that question lives in the spot-check.
+    """
+    lines = [
+        "",
+        f"# `archagent evaluate` — the report on {cap.repo} @ {cap.target_rev}",
+        "",
+        f"Produced by **{cap.archagent}** on {cap.captured_at}.",
+        "",
+        "**You are judging the report, not adjudicating the findings.** Whether each finding is *true* is",
+        "a separate exercise, run blind — you have been shown the severities, so an opinion formed here",
+        "would measure agreement with the tool rather than the tool's accuracy. The three questions below",
+        "ask whether a reader could act on this, whether it claims more than it showed, and whether it is",
+        "clear about what never ran.",
+        "",
+        f"## The findings ({len(cap.findings)})",
+        "",
+    ]
+    if not cap.findings:
+        lines += ["_None reported._ That is a result, not a blank: read the coverage list below before "
+                  "concluding anything from it.", ""]
+    for f in cap.findings:
+        subjects = ", ".join(f.get("subjects", [])) or "—"
+        lines += [
+            f"### `{f['sign']}` — {f.get('title', '')}  ",
+            f"**group** {f.get('group', '?')} · **severity** {f.get('severity', '?')} (mechanical) · "
+            f"**confidence** {f.get('confidence', '?')} · **id** `{f['id']}`  ",
+            f"**subjects:** {subjects}  ",
+            "",
+            f.get("detail", "") or "_no detail recorded_",
+            "",
+            f"*Recommended:* {f.get('recommendation', '') or '_none given_'}",
+            "",
+        ]
+    lines += ["## What did not run", ""]
+    if cap.inactive:
+        for e in cap.inactive:
+            # An empty `signs` means degraded rather than absent — the family still emits, on weaker
+            # evidence. Printing that under a "covers:" label would read as "covers nothing", which is
+            # the opposite of what it means.
+            note = (f"covers: {', '.join(e['signs'])}" if e.get("signs")
+                    else "still emitting, on weaker evidence")
+            lines.append(f"- **{e['family']}** — {e['reason']}  \n  {note}")
+    else:
+        lines.append("- _Nothing was reported as inactive._")
+    if cap.truncated:
+        lines += ["", "Capped output:"]
+        lines += [f"- {t[0]}: showing {t[1]} of {t[2]}" for t in cap.truncated]
+    if cap.mining_failed:
+        lines += ["", "**History mining FAILED — every history-based signal above is void.**"]
+    for c in cap.cautions:
+        lines.append(f"- caution: {c}")
+    lines += ["", "---"]
+    for c in EVALUATE_CRITERIA:
+        lines += [
+            "",
+            f"## {c.id} — {c.label}",
+            "",
+            c.question,
+            "",
+            "| score | what it looks like |",
+            "|---|---|",
+            f"| 1 | {c.anchors[1]} |",
+            f"| 3 | {c.anchors[3]} |",
+            f"| 5 | {c.anchors[5]} |",
+            "",
+            f"*Cite:* {c.evidence}",
+            "",
+            "```",
+            "score:",
+            "evidence:",
+            "why:",
+            "```",
+            "",
+            "---",
+        ]
+    return lines
 
 
 _FIELDS = ("score", "evidence", "why")
@@ -369,10 +538,29 @@ class JudgedReview:
     dated: str
     scores: dict[str, dict] = field(default_factory=dict)
 
+    def _mean(self, section: str) -> float | None:
+        vals = [s["score"] for cid, s in self.scores.items()
+                if s.get("score") is not None and BY_ID[cid].section == section]
+        return sum(vals) / len(vals) if vals else None
+
     @property
     def mean(self) -> float | None:
-        vals = [s["score"] for s in self.scores.values() if s.get("score") is not None]
-        return sum(vals) / len(vals) if vals else None
+        """The **artifact** mean, and only the artifact.
+
+        The evaluate criteria are excluded rather than averaged in. Mixing them would silently redefine
+        what this number measures while leaving its name and its ledger column unchanged, which is the
+        same shape as the three calibration means that formed a rising line across three different
+        briefs — the mistake the ledger exists to make impossible.
+        """
+        return self._mean("artifact")
+
+    @property
+    def evaluate_mean(self) -> float | None:
+        return self._mean("evaluate")
+
+    def _coverage(self, section: str) -> tuple[int, int]:
+        got = {cid: s for cid, s in self.scores.items() if BY_ID[cid].section == section}
+        return sum(1 for s in got.values() if s.get("score") is not None), len(got)
 
     @property
     def discarded(self) -> dict[str, str]:
@@ -380,9 +568,12 @@ class JudgedReview:
 
     @property
     def coverage(self) -> tuple[int, int]:
-        """(scores kept, criteria answered) — the denominator the mean is really over."""
-        kept = sum(1 for s in self.scores.values() if s.get("score") is not None)
-        return kept, len(self.scores)
+        """(scores kept, criteria answered) for the artifact half — the denominator its mean is over."""
+        return self._coverage("artifact")
+
+    @property
+    def evaluate_coverage(self) -> tuple[int, int]:
+        return self._coverage("evaluate")
 
     @property
     def unresolved(self) -> dict[str, list[str]]:
@@ -397,11 +588,22 @@ class JudgedReview:
             # it looks like one — a low number reads as "judged harshly", not "mostly discarded"
             caveat += (f"; and it averages {kept} of {answered} answered criteria — the rest were "
                        f"discarded, so it is not a score of the whole artifact")
-        return {"repo": self.repo, "rev": self.rev, "judged_by": self.judged_by, "dated": self.dated,
-                "mean": None if self.mean is None else round(self.mean, 2),
-                "scored": kept, "answered": answered,
-                "calibrated": False, "caveat": caveat,
-                "unresolved": self.unresolved, "discarded": self.discarded, "scores": self.scores}
+        e_kept, e_answered = self.evaluate_coverage
+        out = {"repo": self.repo, "rev": self.rev, "judged_by": self.judged_by, "dated": self.dated,
+               "rubric_version": ARTIFACT_RUBRIC_VERSION,
+               "mean": None if self.mean is None else round(self.mean, 2),
+               "scored": kept, "answered": answered,
+               "calibrated": False, "caveat": caveat,
+               "unresolved": self.unresolved, "discarded": self.discarded, "scores": self.scores}
+        if e_answered:
+            # Only present when the evaluate section was actually answered. An `evaluate_mean` of null
+            # sitting beside a real one in the record invites averaging the two rounds, and a section
+            # nobody was asked about must not look like a section nobody could score.
+            out |= {"evaluate_rubric_version": EVALUATE_RUBRIC_VERSION,
+                    "evaluate_mean": None if self.evaluate_mean is None
+                    else round(self.evaluate_mean, 2),
+                    "evaluate_scored": e_kept, "evaluate_answered": e_answered}
+        return out
 
 
 def save(path: Path, review: JudgedReview) -> Path:

@@ -58,7 +58,49 @@ def _arch_dir(root: Path) -> str:
     return load_config(root).arch_dir
 
 
-def do_score(path: Path, arch_dir: str | None, rev: str = "", changed: set[str] | None = None) -> dict:
+def do_findings(path: Path, repeat: bool = False, until: str | None = None) -> Path | None:
+    """Capture `evaluate` output beside the artifact, and run the judge-free checks over it.
+
+    Called from `score` rather than left as an optional extra, because the output is not recoverable
+    later: the history signals are computed from the log as it stood, and a run that did not record them
+    cannot get them back. Capturing costs one `evaluate` run and is worth it even in a round that never
+    scores the findings — it is the difference between having group-B data to label and having to mount
+    an expedition to produce some.
+    """
+    import datetime
+
+    from findings import capture, check, save
+    from toolinfo import tool_info
+    root = path.resolve()
+    try:
+        cap = capture(root, repo=root.name, archagent=tool_info().stamp(),
+                      captured_at=datetime.date.today().isoformat(), until=until)
+    except ValueError as e:                       # not a git checkout at a nameable revision
+        print(f"\n  findings NOT captured: {e}")
+        return None
+
+    dest = save(RESULTS / root.name / f"findings-{cap.target_rev}.json", cap)
+    rpt = check(cap, root, repeat=capture(root, repo=root.name, archagent=tool_info().stamp(),
+                                          captured_at=cap.captured_at, until=until) if repeat else None)
+
+    print(f"\n{root.name} @ {cap.target_rev} — evaluate findings\n")
+    print(f"  {rpt.summary()}")
+    for p in rpt.problems:
+        print(f"  [{p.kind}] {p.finding_id or '-'}: {p.detail}")
+    if rpt.silent:
+        # Not defects. Printed so that a family which could not run is on the record next to the
+        # findings, rather than reaching a later reader as health.
+        print("\n  produced nothing for lack of metadata (not proof of health):")
+        for s in rpt.silent:
+            print(f"    {s}")
+    if cap.mining_failed:
+        print("\n  history mining FAILED — every history-based signal in this capture is void")
+    print(f"\n  written to {dest}")
+    return dest
+
+
+def do_score(path: Path, arch_dir: str | None, rev: str = "", changed: set[str] | None = None,
+             skip_findings: bool = False, repeat: bool = False) -> dict:
     root = path.resolve()
     arch = arch_dir or _arch_dir(root)
     card = score_deterministic(root, _source_files(root), repo=root.name, rev=rev, arch_dir=arch)
@@ -76,6 +118,8 @@ def do_score(path: Path, arch_dir: str | None, rev: str = "", changed: set[str] 
     if data["gates_failed"]:
         print(f"  GATES FAILED: {', '.join(data['gates_failed'])} — the judged half of the rubric would "
               f"not be meaningful on this artifact")
+    if not skip_findings:
+        do_findings(path, repeat=repeat)
     return data
 
 
@@ -87,6 +131,18 @@ def _is_completed(path: Path) -> bool:
     """Has someone filled this brief in? A blank template has `score:` with nothing after it."""
     return path.is_file() and bool(re.search(r"^\s*score\s*:\s*\d", path.read_text(errors="replace"),
                                              re.MULTILINE))
+
+
+def _latest_capture(root: Path):
+    """The capture for the revision under review, or None.
+
+    Matched on the revision rather than on modification time: a brief must show the findings for the tree
+    it is about, and picking the newest file would silently pair a review of one revision with findings
+    from another — the round-4 skew defect in a new place.
+    """
+    from findings import load
+    p = RESULTS / root.name / f"findings-{_rev(root)}.json"
+    return load(p) if p.is_file() else None
 
 
 def do_brief(path: Path, second_run: bool, force: bool = False) -> None:
@@ -108,9 +164,15 @@ def do_brief(path: Path, second_run: bool, force: bool = False) -> None:
     # repo-relative, not absolute: the brief is committed and read by someone on another machine
     from toolinfo import tool_info
     tool = tool_info()
+    cap = _latest_capture(root)
     out.write_text(render_brief(arch, root.name, second_run, tool=tool.stamp(),
-                                target_rev=_rev(root)))
+                                target_rev=_rev(root), findings=cap))
     print(f"wrote {out}")
+    if cap is None:
+        print("  no evaluate capture found — the brief has no findings section. Run "
+              "`selfeval.py findings <path>` first if you want one.")
+    else:
+        print(f"  includes {len(cap.findings)} evaluate finding(s) captured at {cap.target_rev}")
     print("Hand this to a reviewer or a separate agent session. Every score needs a file:line citation;")
     print("uncited scores are discarded rather than averaged in.")
 
@@ -168,8 +230,15 @@ def do_judged(path: Path, review: Path, by: str) -> None:
             print(f"  {s['score']}/5   {cid:24} {s['why'].splitlines()[0][:70]}")
         for bad in s.get("unresolved", []):
             print(f"         ! {bad}")
-    print(f"\n  mean: {'n/a' if r.mean is None else round(r.mean, 2)}  "
+    print(f"\n  artifact mean: {'n/a' if r.mean is None else round(r.mean, 2)}  "
           f"(over {kept} of {answered} answered criteria)")
+    e_kept, e_answered = r.evaluate_coverage
+    if e_answered:
+        # Printed as a separate number, never folded in. The two are versioned separately and compared
+        # under different keys — an artifact score does not depend on the archagent build and a findings
+        # score does — so a single combined mean would be uninterpretable in both directions.
+        print(f"  evaluate mean: {'n/a' if r.evaluate_mean is None else round(r.evaluate_mean, 2)}  "
+              f"(over {e_kept} of {e_answered} answered criteria)")
     if answered and kept < answered:
         print(f"  NOT A SCORE OF THE ARTIFACT: {answered - kept} of {answered} criteria were discarded, "
               f"so this mean\n  describes the part that survived, not the artifact")
@@ -196,6 +265,13 @@ if __name__ == "__main__":
     sub = ap.add_subparsers(dest="cmd", required=True)
     s = sub.add_parser("score"); s.add_argument("path"); s.add_argument("--arch-dir")
     s.add_argument("--rev", default=""); s.add_argument("--out")
+    s.add_argument("--no-findings", action="store_true",
+                   help="skip the evaluate capture (it is on by default — the output is not recoverable later)")
+    s.add_argument("--repeat", action="store_true",
+                   help="capture twice and check the two runs agree (costs a second evaluate run)")
+    fi = sub.add_parser("findings", help="capture evaluate output on its own, without scoring")
+    fi.add_argument("path"); fi.add_argument("--repeat", action="store_true")
+    fi.add_argument("--until", help="bound the history, as evaluate --until")
     b = sub.add_parser("brief"); b.add_argument("path"); b.add_argument("--second-run", action="store_true")
     b.add_argument("--force", action="store_true", help="overwrite a completed review")
     cb = sub.add_parser("check-brief"); cb.add_argument("review")
@@ -215,7 +291,10 @@ if __name__ == "__main__":
         raise SystemExit(0)
     if args.cmd == "judged":
         do_judged(Path(args.path), Path(args.review), args.by); raise SystemExit(0)
-    data = do_score(Path(args.path), args.arch_dir, args.rev)
+    if args.cmd == "findings":
+        do_findings(Path(args.path), args.repeat, args.until); raise SystemExit(0)
+    data = do_score(Path(args.path), args.arch_dir, args.rev,
+                    skip_findings=args.no_findings, repeat=args.repeat)
     if args.out:
         out = Path(args.out); out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(json.dumps(data, indent=2) + "\n")

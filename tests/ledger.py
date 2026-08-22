@@ -30,7 +30,50 @@ from pathlib import Path
 UNKNOWN = {"unknown", "?"}
 
 #: Differ on any of these and two rows are measuring different things. This is the whole point of the file.
+#:
+#: These are the keys for metrics about the **artifact** — what a describe run produced. The generating
+#: model dominates, and `archagent_commit` is recorded but deliberately does not gate: an artifact is the
+#: model's output, and the tool that scored it afterwards does not change what the model wrote.
 COMPARABILITY_KEYS = ("rubric_version", "judge_model", "generating_model")
+
+#: And these are the keys for metrics about **`evaluate` output**, where the asymmetry runs the other way.
+#: Findings are the *tool's* output, so the archagent build gates a comparison exactly as the generating
+#: model gates an artifact comparison — a changed threshold or a new signal makes two finding sets
+#: incomparable with identical models on both sides. Meanwhile the artifact's rubric version is irrelevant
+#: to them, so gating on it would refuse sound comparisons.
+FINDINGS_KEYS = ("evaluate_rubric_version", "judge_model", "archagent_commit")
+
+#: Which key set governs which metric. There is no default on purpose. A metric absent from this table is
+#: one nobody has decided the comparability of, and quietly comparing it under the artifact keys is the
+#: precise mistake the whole file exists to prevent — it is how three calibration means across three
+#: different briefs came to look like a rising line.
+METRIC_KEYS: dict[str, tuple[str, ...]] = {
+    "judged_mean": COMPARABILITY_KEYS,
+    "deterministic_score": COMPARABILITY_KEYS,
+    "checklist_correct": COMPARABILITY_KEYS,
+    "checklist_wrong": COMPARABILITY_KEYS,
+    "checklist_absent": COMPARABILITY_KEYS,
+    "recurrence_pass": COMPARABILITY_KEYS,
+    "evaluate_mean": FINDINGS_KEYS,
+    "findings_count": FINDINGS_KEYS,
+}
+
+
+def keys_for(metric: str) -> tuple[str, ...]:
+    """The comparability keys governing one metric, or a refusal naming it.
+
+    Raising beats guessing. The cost of the error this prevents is a number that looks like a finding,
+    and the cost of the refusal is one line added to `METRIC_KEYS` by whoever knows what the new metric
+    measures — which is the person adding it, at the moment they know.
+    """
+    try:
+        return METRIC_KEYS[metric]
+    except KeyError:
+        raise ValueError(
+            f"no comparability keys declared for metric {metric!r}. Add it to METRIC_KEYS: use "
+            f"COMPARABILITY_KEYS if it scores the artifact, FINDINGS_KEYS if it scores `evaluate` "
+            f"output. Comparing it under a guess is how an artifact of the table becomes a trend."
+        ) from None
 
 
 @dataclass
@@ -63,24 +106,35 @@ class Row:
     checklist_wrong: str = ""
     checklist_absent: str = ""
     checklist_items: str = ""
+    #: The `evaluate` half. Captured on every describe run from 2026-08-22 onward, because the output is
+    #: not recoverable afterwards — the history signals are computed from the log as it stood.
+    findings_capture: str = ""       # path of the capture, relative to the data repo; "" = not captured
+    findings_count: str = ""
+    findings_deterministic: str = "" # yes / no / "" for not checked — never silently assumed
+    evaluate_rubric_version: str = ""
+    evaluate_mean: str = ""
+    evaluate_scored: str = ""        # same two denominators as the artifact half, for the same reason:
+    evaluate_answered: str = ""      #   a mean over part of a review is not a score of the output
     predecessor_run_id: str = ""     # set on the second run of an update pair (§16)
     notes: str = ""
 
-    def comparable(self) -> bool:
-        return all(self.key(k) is not None for k in COMPARABILITY_KEYS)
+    def comparable(self, metric: str = "judged_mean") -> bool:
+        return all(self.key(k) is not None for k in keys_for(metric))
 
     def key(self, name: str) -> str | None:
         """The value of a comparability key, or `None` if it was never recorded."""
         v = (getattr(self, name) or "").strip()
         return None if not v or v.lower() in UNKNOWN else v
 
-    def signature(self) -> tuple:
-        return tuple(self.key(k) for k in COMPARABILITY_KEYS)
+    def signature(self, metric: str = "judged_mean") -> tuple:
+        return tuple(self.key(k) for k in keys_for(metric))
 
 
 COLUMNS = [f.name for f in fields(Row)]
 
-RUN_KINDS = {"calibration", "scoring", "noise-floor", "checklist", "recurrence"}
+#: `precision` is a spot-check round: findings labelled by a reviewer who did not build the checks, with
+#: the tool's severity and confidence withheld. Distinct from `calibration`, which scores an artifact.
+RUN_KINDS = {"calibration", "scoring", "noise-floor", "checklist", "recurrence", "precision"}
 
 
 def tool_skew(row: Row) -> str:
@@ -150,6 +204,7 @@ class Comparison:
     excluded: list[tuple[Row, str]]              # row, why — only ever "no <metric>"
     differs_on: list[str]                        # keys with two different recorded values — fatal
     unverifiable_on: list[str]                   # keys unrecorded on some row — a caveat, not fatal
+    keys: tuple[str, ...] = COMPARABILITY_KEYS   # which key set governed this comparison
 
     @property
     def sound(self) -> bool:
@@ -168,13 +223,19 @@ def compare(rows: list[Row], metric: str) -> Comparison:
     obstudio artifact, and that is unrecoverable now. Excluding them entirely would throw away the only
     history there is; presenting them as sound would launder an unknown into a trend. So they are shown,
     with the gap named.
+
+    **Which keys apply depends on the metric**, and getting that wrong in either direction is a real
+    error. Gating an artifact score on the archagent build would refuse sound comparisons; not gating a
+    findings score on it would compare output from two different tools. `keys_for` decides, and refuses
+    a metric nobody has classified rather than guessing.
     """
+    keys = keys_for(metric)
     usable, excluded = [], []
     for r in rows:
         (usable if getattr(r, metric, "") else excluded).append(
             r if getattr(r, metric, "") else (r, f"no {metric}"))
     differs, unverifiable = [], []
-    for k in COMPARABILITY_KEYS:
+    for k in keys:
         seen = {r.key(k) for r in usable}
         if None in seen:
             unverifiable.append(k)
@@ -182,4 +243,4 @@ def compare(rows: list[Row], metric: str) -> Comparison:
         if len(seen) > 1:
             differs.append(k)
     return Comparison(rows=usable, excluded=excluded,
-                      differs_on=differs, unverifiable_on=unverifiable)
+                      differs_on=differs, unverifiable_on=unverifiable, keys=keys)

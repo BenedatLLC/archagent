@@ -25,6 +25,23 @@ artifact. The archagent test suite does not read it — all tests pass with the 
 | [`selfeval/obstudio/README.md`](selfeval/obstudio/README.md) | Judged rubric, round 2 setup: a Go-majority repo neither of us wrote, and the three archagent bugs running on it exposed. |
 | [`spotcheck/worksheet-2026-08-01-item-12-explanation.md`](spotcheck/worksheet-2026-08-01-item-12-explanation.md) | The worked example of what a finding write-up should look like — litellm's drifted `CallTypes` vocabulary leaving a security hook scanning nothing and reporting success. |
 
+## Evaluating `evaluate` as well as the artifact
+
+Every describe evaluation from 2026-08-22 also captures `evaluate` output and runs four judge-free checks
+over it (design §22). The capture is not optional housekeeping: the history signals are computed from the
+git log as it stood, so a run that does not record its findings cannot get them back, and every round
+before this one discarded them.
+
+Three signals of roughly twenty have ever been checked against anything outside our own judgement —
+`change-prone-file` by the defect study, `scattered-source-of-truth` and `enum-value-escape` by the first
+spot-check round. Groups A, B, C and D have none. The capture does not fix that; it makes the data to fix
+it accumulate by default rather than requiring a fresh expedition.
+
+The three judged criteria added to the review brief ask about the **report** — is it actionable, is it
+restrained about what it established, is it clear about what never ran. They deliberately do not ask
+whether a finding is true, because the brief shows the reviewer every severity, and that question asked
+in the open measures agreement with our own prior. It stays in the blinded spot-check.
+
 ## What lives where
 
 **Code and conclusions here; measurements there.** The rule is one question:
@@ -37,13 +54,13 @@ measurement of someone else's repository, so it belongs in the data repo.
 
 | Kind | Where | Why |
 |---|---|---|
-| Harness modules (`tests/rubric.py`, `rubric_judged.py`, `defect_study.py`, `corpus.py`, `spotcheck.py`, `blindcomp.py`) | archagent | code |
+| Harness modules (`tests/rubric.py`, `rubric_judged.py`, `findings.py`, `defect_study.py`, `corpus.py`, `spotcheck.py`, `blindcomp.py`) | archagent | code |
 | Runner CLIs (`scripts/*.py`) | archagent | code |
 | The reviewer brief a judge fills in (`render_brief`) | archagent | it is the instrument, generated fresh per run |
 | Manifests pinning what to run (`tests/*_manifest.toml`, `blindcomp_truth.toml`) | archagent | inputs, versioned with the code that reads them |
 | **Regression baselines** (`tests/corpus/*.json`, `tests/golden/*.json`) | archagent | the awkward case: they *are* recorded `evaluate` output, but their job is "fail if archagent's behaviour changes". They move when the tool moves. |
 | These write-ups | archagent | conclusions, useless without the reasoning around them |
-| Flagged sets, outcome measurements, labels, worksheets, completed reviews, generated artifact snapshots, scorecards | archagent-evaluations | measurements of target repositories |
+| Flagged sets, outcome measurements, labels, worksheets, completed reviews, generated artifact snapshots, scorecards, **`evaluate` captures** | archagent-evaluations | measurements of target repositories |
 
 Nothing evaluation-related ships in the wheel: neither `scripts/` nor the harness modules are installed by
 `pip install archagent`.

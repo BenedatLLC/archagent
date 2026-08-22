@@ -156,6 +156,78 @@ def test_a_run_with_no_review_is_silent():
     assert tool_skew(_row(archagent_commit="abc1234", reviewing_tool="")) == ""
 
 
+# --- comparability depends on the metric ------------------------------------------------------------
+
+def test_two_finding_sets_from_different_archagents_are_not_comparable():
+    """The asymmetry this section exists for. Findings are the *tool's* output, so a threshold change or
+    a new signal makes two sets incomparable even with identical models on both sides."""
+    c = compare([_row(run_id="a", archagent_commit="abc1234", evaluate_mean="3.5",
+                      evaluate_rubric_version="eval-v1"),
+                 _row(run_id="b", archagent_commit="def5678", evaluate_mean="4.0",
+                      evaluate_rubric_version="eval-v1")], "evaluate_mean")
+    assert c.differs_on == ["archagent_commit"] and not c.sound
+
+
+def test_two_artifact_scores_from_different_archagents_are_still_comparable():
+    """And the same difference must NOT gate the artifact half. An artifact is the model's output; the
+    tool that scored it afterwards did not change what the model wrote. Gating here would refuse sound
+    comparisons — round 4 already had two builds six weeks apart and its scores were still the
+    artifact's."""
+    c = compare([_row(run_id="a", archagent_commit="abc1234"),
+                 _row(run_id="b", archagent_commit="def5678")], "judged_mean")
+    assert c.sound and c.differs_on == []
+
+
+def test_the_artifact_rubric_version_does_not_gate_a_findings_comparison():
+    """The other direction: the review brief changing says nothing about whether two finding sets are
+    measuring the same thing."""
+    c = compare([_row(run_id="a", rubric_version="brief-v3", evaluate_mean="3.5",
+                      evaluate_rubric_version="eval-v1"),
+                 _row(run_id="b", rubric_version="brief-v9", evaluate_mean="4.0",
+                      evaluate_rubric_version="eval-v1")], "evaluate_mean")
+    assert c.sound
+
+
+def test_a_findings_comparison_reports_which_key_set_it_used():
+    """So a reader can tell that a clean result was checked against the right keys rather than the
+    default ones."""
+    from ledger import FINDINGS_KEYS
+    c = compare([_row(evaluate_mean="3.5")], "evaluate_mean")
+    assert c.keys == FINDINGS_KEYS
+
+
+def test_a_metric_nobody_classified_is_refused_rather_than_guessed():
+    """The refusal that keeps the table honest. Falling back to the artifact keys for an unknown metric
+    is exactly how three means across three different briefs came to look like a rising line."""
+    with pytest.raises(ValueError, match="no comparability keys declared"):
+        compare([_row()], "vibes_score")
+
+
+def test_every_metric_column_that_holds_a_number_is_classified():
+    """A guard on the table rather than on one call: a metric added to `Row` and forgotten in
+    `METRIC_KEYS` fails here at development time instead of at the moment someone tries to plot it."""
+    from ledger import METRIC_KEYS
+    numeric = {"deterministic_score", "judged_mean", "recurrence_pass", "checklist_correct",
+               "checklist_wrong", "checklist_absent", "evaluate_mean", "findings_count"}
+    assert numeric <= set(METRIC_KEYS), sorted(numeric - set(METRIC_KEYS))
+
+
+# --- the evaluate half ------------------------------------------------------------------------------
+
+def test_a_row_records_whether_determinism_was_checked_not_just_the_result():
+    """Three states, and collapsing them loses the one that matters: checked-and-agreed, checked-and-
+    disagreed, and never checked. An empty column must not read as a pass."""
+    assert _row().findings_deterministic == ""
+    assert _row(findings_deterministic="yes").findings_deterministic == "yes"
+
+
+def test_a_precision_run_is_a_recognized_kind():
+    """A spot-check round labels findings with the tool's severity withheld. It is not a calibration —
+    calibration scores an artifact — and forcing it into that kind would put two different measurements
+    under one name."""
+    assert validate(_row(run_kind="precision", target_commit="abc"), []) == []
+
+
 def test_the_reviewing_tool_is_not_a_comparability_key():
     """Two rows reviewed against different builds are still comparable — the scores are the artifact's,
     not the reviewing tool's. It is recorded to be legible, not to gate."""

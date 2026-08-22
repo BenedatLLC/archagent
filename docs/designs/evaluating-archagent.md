@@ -1517,6 +1517,102 @@ with a counter-criterion or left out of the gate.
 Operational detail: current status, what we build versus adopt, where the outputs live, and what order to
 build in. None of it is needed to understand the method.
 
+## 22. Evaluating `evaluate`, in every describe round
+
+Everything numbered above measures the **artifact** — what `describe` wrote. `evaluate` output has been
+measured three times, covering three signals of roughly twenty: the held-out defect study (§7.1) for
+`change-prone-file`, the first spot-check round (§11) for `scattered-source-of-truth` and
+`enum-value-escape`, and the threshold sensitivity run (§18) over four group-F constants. Groups A, B, C
+and D have no evidence outside our own judgement at all, and the two newest signals — the group-D
+exposure pair — have the least of any.
+
+The regression baselines under `tests/corpus/` and `tests/golden/` are not evidence about quality. They
+fail when archagent's behaviour *changes* and stay green on a signal that is confidently wrong.
+
+So from 2026-08-22 every describe evaluation also captures and checks `evaluate`.
+
+### 22.1 Capture, because it is not recoverable later
+
+`evaluate` output cannot be reconstructed after the fact. The group B, E and F signals are computed from
+the git log as it stood; `--until` bounds the window but assumes the tree matches it, and `evaluate`
+itself warns when it does not. Every round so far has discarded its findings.
+
+`selfeval.py score` therefore captures by default (`--no-findings` to skip, `--repeat` to capture twice).
+The capture stores the coverage report and the cautions beside the findings, because a findings list read
+without them says "eight problems" where the run meant "eight problems, four families never ran, and the
+history mining failed".
+
+This is worth doing in rounds that never score the findings. It turns "get precision labels on group B
+someday" from an expedition into a filter over data already on disk, pinned to a revision, sitting next
+to the artifact the same run produced.
+
+### 22.2 Four checks that need no judge
+
+None of these is a quality score. Each is a defect that holds regardless of anyone's opinion:
+
+| Check | What it catches |
+|---|---|
+| `unresolved-subject` | a finding naming a file that is not in the tree at that revision |
+| `nondeterminism` | two captures of one revision disagreeing — labels cannot attach to findings the next run does not produce |
+| `inactive-conflict` | a sign reported among the findings while its family is listed as inactive |
+| *silences* | families that produced nothing **for lack of metadata** — not a defect, recorded because unrecorded silence reaches a later reader as health |
+
+Only path-shaped subjects are checked against the filesystem. Most subjects are subsystem or service
+names, and reporting one as a missing file is the false positive `drift` needed two rounds to stop
+producing.
+
+### 22.3 Three judged criteria — about the report, not the findings
+
+`finding_actionability`, `finding_restraint` and `finding_coverage_honesty`. They ask whether a reader
+could act on the report, whether it claims more than it established, and whether it is clear about what
+never ran.
+
+**None of them asks whether a finding is true, and that boundary is the design.** §11 withholds severity,
+confidence and the recommendation from a spot-check reviewer precisely so that the labels measure reality
+rather than agreement with our own prior. This brief shows every finding with its severity attached, so a
+correctness judgement collected here would be that prior coming back as a precision figure. Precision
+stays in the blinded spot-check. A test asserts no evaluate criterion asks the blinded question, rather
+than leaving it to a comment somebody edits later.
+
+### 22.4 Two version keys, two means, one brief
+
+The evaluate criteria are a **separate section with its own version** (`eval-v1`), not new entries in the
+artifact brief. Folding them in would bump `rubric_version`, and §17's ledger would then correctly refuse
+to place any future round in a series with rounds 1 through 5 — right behaviour, and it would buy the
+evaluate series by restarting the artifact one.
+
+`JudgedReview.mean` therefore stays artifact-only and `evaluate_mean` is computed beside it. Both rubric
+versions are now emitted by the brief itself; they were hand-typed into the ledger until now, and a
+version key entered by hand can disagree with the brief it names without anything noticing.
+
+### 22.5 Comparability depends on the metric
+
+This is the substantive change to §17, and getting it wrong in either direction is a real error.
+
+**For artifact scores**, `generating_model` dominates and `archagent_commit` is recorded but deliberately
+does not gate: an artifact is the model's output, and the tool that scored it afterwards did not change
+what the model wrote. Round 4 used two builds six weeks apart and its scores were still the artifact's.
+
+**For findings scores, that inverts.** The findings *are* the tool's output, so the archagent build gates
+a comparison exactly as the generating model gates an artifact comparison — a changed threshold or a new
+signal makes two finding sets incomparable with identical models on both sides. Meanwhile the artifact's
+rubric version is irrelevant to them, and gating on it would refuse sound comparisons.
+
+So `compare(rows, metric)` reads `METRIC_KEYS`, which has **no default**. A metric nobody has classified
+is refused by name rather than compared under a guess: falling back to the artifact keys for an unknown
+metric is precisely how three means across three different briefs came to look like a rising line.
+
+A new `precision` run kind records a spot-check round, which is not a calibration — calibration scores an
+artifact — and forcing the two under one name would put different measurements in one series.
+
+### 22.6 What this still does not do
+
+It does not measure whether a finding is true. Three signals of twenty have that evidence and this
+changes none of it. What it changes is that the data to produce it now accumulates by default instead of
+being thrown away, and that a round which never asks the question says so out loud.
+
+---
+
 ## Appendix A — Where this stands
 
 *Current as of 2026-08-16. This is the only part of the document that goes stale by design.*

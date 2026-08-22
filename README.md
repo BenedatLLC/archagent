@@ -410,6 +410,7 @@ archagent/
 │   ├── rubric.py             the deterministic half of the artifact rubric
 │   ├── rubric_judged.py      the judged half: anchored criteria, resolved citations
 │   ├── ledger.py             one row per evaluation run; refuses to compare incomparable rows
+│   ├── findings.py           capture `evaluate` output per run, and the checks needing no judge
 │   ├── defect_study.py       rate ratios, bootstrap intervals, churn-decile stratification
 │   ├── corpus.py             pinned-repo regression  ·  spotcheck.py · blindcomp.py
 │   ├── golden/               projected `evaluate` output for the built-in fixture repos

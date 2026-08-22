@@ -69,11 +69,17 @@ def cmd_add(args) -> int:
     rows.append(row)
     save(path, rows)
     print(f"added {row.run_id} ({len(rows)} rows)")
-    if not row.comparable():
-        # Not an error — historical runs genuinely did not record this. But saying nothing here is how a
-        # row that can never be compared ends up looking like one that can.
-        missing = [k for k in ("rubric_version", "judge_model", "generating_model") if row.key(k) is None]
-        print(f"  note: not comparable — {', '.join(missing)} not recorded")
+    # Not an error — historical runs genuinely did not record these. But saying nothing here is how a row
+    # that can never be compared ends up looking like one that can. Reported per half, because a row can
+    # be sound for artifact scores and unusable for findings, and one verdict would hide that.
+    from ledger import COMPARABILITY_KEYS, FINDINGS_KEYS
+    for what, keys, metric in (("artifact scores", COMPARABILITY_KEYS, "judged_mean"),
+                               ("findings scores", FINDINGS_KEYS, "evaluate_mean")):
+        if getattr(row, metric, "") and not row.comparable(metric):
+            missing = [k for k in keys if row.key(k) is None]
+            print(f"  note: not comparable for {what} — {', '.join(missing)} not recorded")
+    if row.findings_capture and not row.findings_deterministic:
+        print("  note: findings captured but determinism not checked — re-run with --repeat to record it")
     return 0
 
 
@@ -121,10 +127,13 @@ def cmd_trend(args) -> int:
         print(f"\nnothing to compare on {args.metric}")
         return 1
 
-    print(f"\n{args.metric} — {len(cmp.rows)} row(s)\n")
+    # Naming the key set, not just the values: a findings metric is gated on the archagent build and an
+    # artifact metric is not, and a reader cannot tell a sound comparison from a wrongly-gated one
+    # without being told which rule was applied.
+    print(f"\n{args.metric} — {len(cmp.rows)} row(s), compared on {', '.join(cmp.keys)}\n")
     for r in sorted(cmp.rows, key=lambda r: (r.date, r.run_id)):
-        print(f"  {r.date:12}{r.run_id:46}{getattr(r, args.metric):>8}"
-              f"   {r.judge_model}/{r.rubric_version}")
+        stamp = "/".join(r.key(k) or "?" for k in cmp.keys)
+        print(f"  {r.date:12}{r.run_id:46}{getattr(r, args.metric):>8}   {stamp}")
 
     if cmp.differs_on:
         print(f"\nNOT A TREND. These rows differ on {', '.join(cmp.differs_on)}, so they are not measuring"
