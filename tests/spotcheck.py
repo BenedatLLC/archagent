@@ -213,6 +213,51 @@ _WHY = re.compile(r"^\s*why\s*:\s*(.*)$", re.IGNORECASE | re.MULTILINE)
 _ITEM = re.compile(r"^##\s+item\s+\d+\s+—\s+`([^`]+)`", re.IGNORECASE | re.MULTILINE)
 
 
+#: Per-signal reading instructions, emitted only for the signals actually on the sheet.
+#:
+#: This used to be one hardcoded paragraph about `change-prone-file`, which was right for the rounds that
+#: existed and became actively misleading the moment a group B/C sheet was generated: it told a reviewer
+#: to go read a file, when what a `layer-inversion` item needs is the two `**Tier:**` declarations the
+#: finding compares.
+_GUIDANCE: dict[str, str] = {
+    "change-prone-file":
+        "**change-prone-file** — the question is whether the file is genuinely absorbing special cases. "
+        "Only reading it answers that; churn alone never does.",
+    "layer-inversion":
+        "**layer-inversion / layer-skip** — half of this claim lives in the architecture documents. "
+        "`extraction (infra) depends up on drift (domain)` asserts three things: the two `**Tier:**` "
+        "declarations in `subsystems/*.md`, and an import between them in the code. Check all three. "
+        "Note that a test subsystem depending on the code it tests is what tests are for, and may say "
+        "more about how the tiers were assigned than about the code.",
+    "cycle-subsystem":
+        "**cycle-subsystem** — read the declared `**Connects:**` edges *and* the imports. A cycle "
+        "recorded in an ADR as an accepted cost is still a true finding: `confirm`, with a note.",
+    "god-component":
+        "**god-component** — a share of files, from `**Covers:**`. The question is whether that "
+        "subsystem is doing several unrelated jobs, or is one coherent thing that happens to be large.",
+    "unstable-interface":
+        "**unstable-interface** — combines a static fan-in with git co-change. Both halves are "
+        "checkable: how many subsystems declare a dependency on it, and whether those files really do "
+        "change together in the log.",
+    "scattered-source-of-truth":
+        "**scattered-source-of-truth** — the question is whether the copies can drift apart, and what "
+        "breaks when they do. Constants frozen by an external standard cannot drift.",
+    "enum-value-escape":
+        "**enum-value-escape** — check that the literals really are the named enum's members, and not a "
+        "different concept that happens to share strings.",
+}
+_GUIDANCE["layer-skip"] = _GUIDANCE["layer-inversion"]
+_GUIDANCE["cycle-service"] = _GUIDANCE["cycle-subsystem"]
+
+
+def _guidance(signs: list[str]) -> list[str]:
+    """Reading notes for the signals on this sheet, and no others."""
+    out: list[str] = []
+    for text in dict.fromkeys(_GUIDANCE[s] for s in signs if s in _GUIDANCE):
+        out += [f"- {text}", ""]
+    return (["**Reading each kind:**", ""] + out) if out else []
+
+
 def render_worksheet(items: list[dict], reviewer: str = "") -> tuple[str, dict]:
     """`(markdown, withheld)` — the sheet a person fills in, and the claims kept out of it.
 
@@ -230,16 +275,32 @@ def render_worksheet(items: list[dict], reviewer: str = "") -> tuple[str, dict]:
         "sheet is ingested.",
         "",
         "Verdicts: `confirm` (a real problem worth acting on) · `dismiss` (not a problem here, say why) ·",
-        "`unsure`. A one-line reason matters more than the verdict; it is what makes a disagreement",
-        "diagnosable later, and `unsure` is a real answer — it is excluded from the precision denominator",
-        "rather than counted as a dismissal.",
+        "`partial` · `unsure`. A one-line reason matters more than the verdict; it is what makes a",
+        "disagreement diagnosable later, and `unsure` is a real answer — it is excluded from the precision",
+        "denominator rather than counted as a dismissal.",
         "",
-        "The evidence below is a pointer, not a substitute for the code. For a **change-prone file** in",
-        "particular the question is whether that file is genuinely absorbing special cases, which only",
-        "reading it can answer.",
+        "**`partial` means: something real is here, but not what the finding claims.** The escape exists "
+        "but",
+        "from a different enum than the one named; the coupling is real but between other modules. It was "
+        "not",
+        "an anticipated verdict — a reviewer reached for it unprompted on 3 of 10 items in round 1, and it",
+        "carried the most information in the set. Counting those as `confirm` overstates precision and as",
+        "`dismiss` throws away a real defect, so it is its own answer.",
         "",
-        "---",
+        "**Two questions per item, in order.** First: *is the measurement true?* Then, only if it is: *is "
+        "it",
+        "a real problem worth acting on?* A true measurement can still be a non-finding, and saying which",
+        "of the two failed is the difference between a bug in the check and a bug in its threshold.",
+        "",
+        "A finding that is **real but already accepted** — recorded in an ADR as a known cost — is a",
+        "`confirm` with a note saying so. The signal did its job; dismissing it would teach this exercise",
+        "that correct findings are wrong.",
+        "",
+        "The evidence below is a pointer, not a substitute for the code.",
+        "",
     ]
+    lines += _guidance([it.get("sign", "") for it in items])
+    lines += ["---"]
     withheld: dict[str, dict] = {}
     for n, it in enumerate(items, 1):
         key = it["key"]

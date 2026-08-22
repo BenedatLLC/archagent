@@ -169,6 +169,23 @@ def _checkout_section(repos: dict[str, str]) -> str:
         lines += ["These are not corpus repositories — check each out yourself at the revision named:", ""]
         lines += [f"- **{n}** at `{r or '(revision unrecorded)'}`" for n, r in sorted(other.items())]
         lines.append("")
+    lines += [
+        "### The architecture documents are part of the evidence",
+        "",
+        "Several signals compare what the documents *declare* against what the code *does* — a layering",
+        "finding asserts two `**Tier:**` values and an import, and only one of those three is in the code.",
+        "So read the artifact alongside the source; it is not the thing under review here, it is half of",
+        "each claim.",
+        "",
+        "A corpus repository has no artifact of its own. The one these findings were produced from lives",
+        "in the evaluation data repo, and goes back into the worktree like this:",
+        "",
+        "```bash",
+        "cp -r $ARCHAGENT_EVAL_HOME/selfeval/<name>/artifact /tmp/review-<name>/architecture",
+        "cp $ARCHAGENT_EVAL_HOME/selfeval/<name>/archagent.toml /tmp/review-<name>/   # if one is stored",
+        "```",
+        "",
+    ]
     return "\n".join(lines)
 
 

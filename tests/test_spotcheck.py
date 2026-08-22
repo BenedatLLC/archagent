@@ -273,3 +273,57 @@ def test_a_value_set_is_askable_without_a_measurement():
     """How group F items have always arrived."""
     from spotcheck import evidence_is_usable
     assert evidence_is_usable("- owner: `a.py`\n- values: eu, us")
+
+
+# --- worksheet instructions must match the sheet's contents -----------------------------------------
+
+def _sheet(signs):
+    from spotcheck import render_worksheet
+    items = [{"key": f"{s}:x:0", "repo": "demo", "rev": "v1", "sign": s,
+              "evidence": f"- owner: `x`\n- measured: {s} detail"} for s in signs]
+    return render_worksheet(items)[0]
+
+
+def test_partial_is_offered_to_the_reviewer():
+    """It is accepted by the parser and was the most informative verdict in round 1, and the instructions
+    did not mention it — a reviewer could only use it by guessing it existed."""
+    text = _sheet(["layer-inversion"])
+    assert "`partial`" in text and "not what the finding claims" in text
+
+
+def test_guidance_covers_the_signs_present_and_no_others():
+    """The guidance was one hardcoded paragraph about change-prone-file. On a group B/C sheet it told the
+    reviewer to go read a file when the claim to check was two `**Tier:**` declarations."""
+    text = _sheet(["layer-inversion"])
+    assert "**Tier:**" in text
+    assert "change-prone file" not in text.lower()
+
+
+def test_a_change_prone_sheet_still_gets_its_own_guidance():
+    assert "absorbing special cases" in _sheet(["change-prone-file"])
+
+
+def test_guidance_is_not_repeated_when_two_signs_share_it():
+    text = _sheet(["layer-inversion", "layer-skip"])
+    assert text.count("half of this claim lives in the architecture documents") == 1
+
+
+def test_the_reviewer_is_told_the_measurement_comes_first():
+    assert "is the measurement true?" in _sheet(["god-component"])
+
+
+def test_an_accepted_finding_is_still_a_confirm():
+    """Items 1 and 2 of round 2 are the drift/extraction cycle recorded in ADR 0003. Scoring a true
+    finding as a dismissal because it was accepted would teach the calibration that correct findings are
+    wrong."""
+    assert "real but already accepted" in _sheet(["cycle-subsystem"])
+
+
+def test_every_sign_on_a_worksheet_has_reading_guidance():
+    """A signal with no guidance is one the reviewer gets no help on, which is how a round returns
+    `unsure` for a whole class."""
+    from spotcheck import GROUPS, _GUIDANCE
+    labelled = {s for g in ("B", "C", "E", "F") for s in GROUPS[g]}
+    missing = labelled - set(_GUIDANCE)
+    assert missing <= {"unstable-dependency", "implicit-coupling", "extraneous-adjacent-connector",
+                       "distributed-monolith"}, sorted(missing)
