@@ -52,6 +52,12 @@ _TEST_DIRS = {"test", "tests", "__tests__", "testdata", "fixtures", "e2e"}
 #: described.
 _CODE_EXTS = (".py", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".go", ".rb", ".java", ".kt", ".rs")
 
+#: Build configuration is code by extension and not a subject. `tailwind.config.js` is 109 lines and sits
+#: inside a `**Covers:**` glob; no artifact worth reading writes a paragraph about it, and demanding one
+#: pushes `describe` toward the inventories the prose criterion penalises. Same reasoning as skipping
+#: migrations and locales.
+_BUILD_CONFIG = re.compile(r"\.config\.[cm]?[jt]sx?$")
+
 #: A directory holding at least this many source files is a *group*, and an artifact that describes the
 #: group has described its members. Round 4's artifact covers 216 Angular components by directory, base
 #: class and pattern — deliberately, and it says so — and demanding a sentence per component would push
@@ -227,7 +233,7 @@ def described(config: Config, source_files: set[str], claimed_by: dict[str, str]
                 siblings.get(PurePosixPath(rel).parent.as_posix(), 0) + 1
 
     for rel in sorted(source_files):
-        if _skip(rel) or not rel.endswith(_CODE_EXTS):
+        if _skip(rel) or not rel.endswith(_CODE_EXTS) or _BUILD_CONFIG.search(PurePosixPath(rel).name):
             continue
         if _is_test(rel):
             report.test_files += 1

@@ -133,3 +133,14 @@ def test_the_claiming_subsystem_is_carried_when_known(tmp_path):
     r = described(cfg, files, claimed_by={"src/app/db_cache.py": "platform.md"})
     assert r.undescribed[0].subsystem == "platform.md"
     assert "platform.md" in str(r.undescribed[0])
+
+
+def test_build_configuration_is_not_a_subject(tmp_path):
+    """`tailwind.config.js` is 109 lines of code by extension and sits inside a `**Covers:**` glob. No
+    artifact worth reading writes a paragraph about it, and demanding one pushes `describe` toward the
+    inventories the prose criterion penalises."""
+    cfg, files = _project(tmp_path, {"index.md": "Nothing named here."},
+                          {"src/app/tailwind.config.js": 109, "src/app/vite.config.ts": 60,
+                           "src/app/real.ts": 120})
+    r = described(cfg, files)
+    assert [u.path for u in r.undescribed] == ["src/app/real.ts"]
