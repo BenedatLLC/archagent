@@ -189,6 +189,180 @@ def _checkout_section(repos: dict[str, str]) -> str:
     return "\n".join(lines)
 
 
+def _run(*args, cwd=None) -> None:
+    import subprocess
+    r = subprocess.run(args, cwd=cwd, capture_output=True, text=True)
+    if r.returncode != 0:
+        raise SystemExit(f"{' '.join(args)}\n{r.stderr.strip()}")
+
+
+def _fill_blobs(src: Path, rev: str) -> None:
+    """Make a blobless corpus mirror complete enough to clone from.
+
+    The mirrors are partial clones (`--filter=blob:none`) so that a `git log --name-only` walk is cheap,
+    which is all the corpus regression ever needed. File *contents* arrive on demand — through the
+    promisor remote, which a plain local clone of the mirror does not inherit. So the clone succeeds, the
+    checkout fails on whichever blobs were never materialised, and git reports it as
+    `unable to read sha1 file` — a message that reads like a corrupt repository rather than a filter.
+
+    Nothing about the kit works around this. It just fills the mirror once, which needs the network and
+    is the reason the failure is worth handling here rather than leaving as a footnote.
+    """
+    import subprocess
+    r = subprocess.run(["git", "-C", str(src), "config", "--get", "remote.origin.promisor"],
+                       capture_output=True, text=True)
+    if r.stdout.strip() != "true":
+        return
+    missing = subprocess.run(["git", "-C", str(src), "rev-list", "--objects", "--missing=print", rev],
+                             capture_output=True, text=True)
+    if not any(ln.startswith("?") for ln in missing.stdout.splitlines()):
+        return
+    print(f"  {src.name} is a blobless mirror and is missing file contents — refetching "
+          f"(needs the network, once) …")
+    _run("git", "-C", str(src), "fetch", "--refetch", "--no-filter", "origin")
+
+
+def do_kit(worksheet: Path, out: Path, source: dict[str, Path]) -> None:
+    """Assemble a self-contained review kit: the sheet, plus each repository at the revision it was
+    judged at, with the architecture documents in place.
+
+    Written because a review is handed to someone who does not have the corpus mirrors, the evaluation
+    data repo, or any reason to know how the two fit together. Round 1's reviewer got a worksheet and a
+    set of instructions; two of the first three reviews came back unreadable for setup reasons, and every
+    hour spent reconstructing state is an hour not spent reading code.
+
+    Three things this gets right that a hand-assembled directory does not:
+
+    **Real clones, never worktrees.** A `git worktree` puts a *pointer file* at `.git` naming the
+    repository it came from. It works perfectly until the directory is copied to another machine, at
+    which point every git command fails — and the failure looks like a corrupt kit rather than a wrong
+    packaging choice.
+
+    **History included.** `unstable-interface` is half a co-change claim, and the reviewer is asked
+    whether those files really do change together. `git archive` would give a smaller, cleaner tree that
+    cannot answer five of the fourteen questions.
+
+    **The withheld file is not copied, and that is asserted rather than assumed.** It holds the severity,
+    confidence and recommendation this whole exercise depends on the reviewer not having seen.
+    """
+    side = worksheet.with_suffix("").with_suffix(".withheld.json")
+    if not side.is_file():
+        raise SystemExit(f"missing side file {side}")
+    meta = json.loads(side.read_text())
+    revs: dict[str, str] = {}
+    for it in meta["items"].values():
+        revs.setdefault(it["repo"], it.get("rev", ""))
+
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "repos").mkdir(exist_ok=True)
+    placed = {}
+    for repo, rev in sorted(revs.items()):
+        src = source.get(repo)
+        if src is None:
+            print(f"  ! no source known for {repo} — pass --source {repo}=<path to a clone or mirror>")
+            continue
+        dest = out / "repos" / repo
+        _fill_blobs(src, rev)
+        print(f"  cloning {repo} @ {rev} …")
+        _run("git", "clone", "--quiet", "--no-hardlinks", str(src), str(dest))
+        _run("git", "-C", str(dest), "checkout", "--quiet", "--detach", rev)
+        # An artifact the repository does not carry itself. fastapi-template is the case: the findings
+        # were produced against a description stored in the evaluation data repo, and without it the
+        # layering items name tiers that appear nowhere in the kit.
+        stored = RESULTS / repo / "artifact"
+        if stored.is_dir() and not (dest / "architecture").exists() \
+                and not (dest / "docs" / "architecture").exists():
+            import shutil
+            shutil.copytree(stored, dest / "architecture")
+            toml = RESULTS / repo / "archagent.toml"
+            if toml.is_file():
+                shutil.copy(toml, dest / "archagent.toml")
+            print(f"    + architecture/ (from the evaluation data repo)")
+        placed[repo] = rev
+
+    # The sheet's own "Getting the code" section describes work the kit has already done. Left in, it
+    # would send the reviewer to clone into /tmp and judge a different checkout than the one beside it.
+    text = worksheet.read_text()
+    start = text.find("\n## Getting the code")
+    end = text.find("\n---", start) if start != -1 else -1
+    if start != -1 and end != -1:
+        text = text[:start] + text[end:]
+    (out / "worksheet.md").write_text(text)
+
+    (out / "REVIEW.md").write_text(_kit_readme(placed))
+    assert not list(out.rglob("*.withheld.json")), "the withheld claims must not ship in a review kit"
+    print(f"\nkit at {out}")
+    print(f"  {len(placed)} repo(s), worksheet.md, REVIEW.md — and no withheld file")
+
+
+def _kit_readme(placed: dict[str, str]) -> str:
+    rows = "\n".join(f"| `{r}` | `{rev}` | `repos/{r}/` |" for r, rev in sorted(placed.items()))
+    return f"""# archagent finding review
+
+Thank you for doing this. It should take an hour or two. Everything you need is in this directory —
+nothing to clone, install or configure.
+
+## What you are judging
+
+`archagent` reads a codebase and its architecture documents, and reports **candidate signals**: places
+the structure may have a problem. This review asks whether those candidates are any good. We have never
+checked these particular kinds of finding against an independent reader, which is the entire reason you
+are being asked.
+
+**Open `worksheet.md` and work through the 14 items.** Each gives you a repository, a revision, and the
+evidence the tool used. Record a verdict and a one-line reason in the fenced block.
+
+## Two questions per item, in this order
+
+1. **Is the measurement true?** Most items assert several separate facts. `extraction (infra) depends up
+   on drift (domain)` claims that `extraction` is *declared* infra, that `drift` is *declared* domain,
+   and that one imports the other. The first two are in the architecture documents; the third is in the
+   code.
+2. **If it is true, is it a real problem worth acting on?** A correct measurement can still be a
+   non-finding — a test package depending on the code it tests is what tests are for.
+
+Saying which of the two failed is the most useful thing you can write. It is the difference between a
+check that is broken and a check whose threshold is wrong.
+
+## The architecture documents are half the evidence
+
+These signals compare what the documents **declare** against what the code **does**, so read both. The
+documents are inside each repository:
+
+| Repository | Revision | Where |
+|---|---|---|
+{rows}
+
+Look for `architecture/` or `docs/architecture/`. The `**Tier:**`, `**Connects:**` and `**Covers:**`
+lines at the top of each `subsystems/*.md` are what the findings are built from.
+
+The git history is present too — some items claim files change together, and `git log` is how you check
+that.
+
+## Verdicts
+
+- `confirm` — a real problem worth acting on.
+- `dismiss` — not a problem here. Say why.
+- `partial` — **something real is here, but not what the finding claims.** The most useful verdict we
+  have, and easy to forget you have it.
+- `unsure` — a real answer. It is excluded from the scoring rather than counted against the tool.
+
+A finding that is real but **already accepted** — you will find one recorded in an ADR as a known cost —
+is a `confirm` with a note. The signal did its job.
+
+## Please do not
+
+- Look for our severity ratings or recommendations. They are deliberately not in this kit: if you see
+  what the tool concluded, this measures whether you agree with us rather than whether we are right.
+- Worry about being harsh. Round 1 found errors in **both** directions from the person who built the
+  checks, which is exactly what made it worth doing.
+
+## When you are done
+
+Send back `worksheet.md`. Nothing else is needed.
+"""
+
+
 def do_ingest(path: Path, reviewer: str, note: str) -> None:
     side = path.with_suffix("").with_suffix(".withheld.json")
     if not side.is_file():
@@ -239,6 +413,11 @@ if __name__ == "__main__":
     g.add_argument("--groups", default="",
                    help="comma-separated signal groups (e.g. B,C) — an alternative to --signs")
     i = sub.add_parser("ingest"); i.add_argument("worksheet"); i.add_argument("--reviewer", default=""); i.add_argument("--note", default="")
+    k = sub.add_parser("kit", help="assemble a self-contained review kit for someone else")
+    k.add_argument("worksheet")
+    k.add_argument("--out", default="", help="output directory (default /tmp/archagent-review-<date>)")
+    k.add_argument("--source", action="append", default=[], metavar="REPO=PATH",
+                   help="where to clone a repository from; repeatable")
     sub.add_parser("report")
     a = ap.parse_args()
     if a.cmd == "generate":
@@ -249,5 +428,16 @@ if __name__ == "__main__":
         do_generate(a.cap, a.reviewer, signs)
     elif a.cmd == "ingest":
         do_ingest(Path(a.worksheet), a.reviewer, a.note)
+    elif a.cmd == "kit":
+        src = {}
+        for s in a.source:
+            name, _, where = s.partition("=")
+            src[name] = Path(where).expanduser()
+        # Two sources are known without being told: this checkout, and any corpus mirror.
+        src.setdefault("archagent", ROOT)
+        for m in sorted(Path.home().glob(".cache/archagent/corpus/*.git")):
+            src.setdefault(m.stem, m)
+        out = Path(a.out).expanduser() if a.out else Path(f"/tmp/archagent-review-{date.today()}")
+        do_kit(Path(a.worksheet), out, src)
     else:
         do_report()

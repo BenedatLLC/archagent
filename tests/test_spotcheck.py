@@ -327,3 +327,88 @@ def test_every_sign_on_a_worksheet_has_reading_guidance():
     missing = labelled - set(_GUIDANCE)
     assert missing <= {"unstable-dependency", "implicit-coupling", "extraneous-adjacent-connector",
                        "distributed-monolith"}, sorted(missing)
+
+
+# --- the review kit handed to an outside reviewer ---------------------------------------------------
+
+def _kit_module():
+    """`do_kit` lives in `scripts/`, which is where the runners live; import it directly."""
+    import importlib.util
+    import sys
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1]
+    # `scripts/spotcheck.py` resolves its own imports off sys.path at module scope, and `evalhome` lives
+    # in `scripts/`. Under pytest only `tests/` is on the path.
+    sys.path.insert(0, str(root / "scripts"))
+    spec = importlib.util.spec_from_file_location("spotcheck_cli", root / "scripts" / "spotcheck.py")
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    return m
+
+
+def _tiny_repo(path):
+    import subprocess
+    path.mkdir(parents=True)
+    (path / "a.py").write_text("x = 1\n")
+    for args in (["init", "-q"], ["add", "-A"],
+                 ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "one"]):
+        subprocess.run(["git", "-C", str(path), *args], check=True, capture_output=True)
+    return subprocess.run(["git", "-C", str(path), "rev-parse", "--short", "HEAD"],
+                          capture_output=True, text=True).stdout.strip()
+
+
+def _worksheet_pair(tmp_path, repo, rev):
+    import json as _json
+    ws = tmp_path / "worksheet-x.md"
+    ws.write_text("# sheet\n\n## Getting the code\n\nclone it yourself\n\n---\n\n"
+                  "## item 1 - `layer-skip:a:0`\n\nverdict:\n")
+    ws.with_suffix("").with_suffix(".withheld.json").write_text(_json.dumps({
+        "items": {"layer-skip:a:0": {"key": "layer-skip:a:0", "repo": repo, "rev": rev,
+                                     "sign": "layer-skip", "evidence": "- measured: x"}},
+        "withheld": {"layer-skip:a:0": {"severity": "high"}}}))
+    return ws
+
+
+def test_a_kit_never_contains_the_withheld_claims(tmp_path):
+    """The one property that would invalidate the whole exercise. A reviewer who has seen the tool's
+    severity is measuring agreement with us rather than with the code."""
+    src = tmp_path / "src-repo"
+    rev = _tiny_repo(src)
+    out = tmp_path / "kit"
+    _kit_module().do_kit(_worksheet_pair(tmp_path, "src-repo", rev), out, {"src-repo": src})
+    assert not list(out.rglob("*withheld*"))
+    assert "high" not in (out / "worksheet.md").read_text()
+
+
+def test_a_kit_repo_is_a_real_clone_not_a_worktree(tmp_path):
+    """A `git worktree` leaves a pointer file at `.git` naming the repository it came from, so every git
+    command in the kit fails the moment it is copied to another machine — and the failure reads as a
+    corrupt kit rather than as a packaging mistake."""
+    src = tmp_path / "src-repo"
+    rev = _tiny_repo(src)
+    out = tmp_path / "kit"
+    _kit_module().do_kit(_worksheet_pair(tmp_path, "src-repo", rev), out, {"src-repo": src})
+    assert (out / "repos" / "src-repo" / ".git").is_dir()
+
+
+def test_a_kit_checks_out_the_revision_the_finding_was_judged_at(tmp_path):
+    import subprocess
+    src = tmp_path / "src-repo"
+    rev = _tiny_repo(src)
+    (src / "b.py").write_text("y = 2\n")            # a later commit the kit must NOT be at
+    for args in (["add", "-A"], ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "two"]):
+        subprocess.run(["git", "-C", str(src), *args], check=True, capture_output=True)
+    out = tmp_path / "kit"
+    _kit_module().do_kit(_worksheet_pair(tmp_path, "src-repo", rev), out, {"src-repo": src})
+    assert not (out / "repos" / "src-repo" / "b.py").exists()
+
+
+def test_the_kit_sheet_drops_instructions_for_work_the_kit_already_did(tmp_path):
+    """Left in, "Getting the code" would send the reviewer to clone into /tmp and judge a checkout other
+    than the one sitting beside the sheet."""
+    src = tmp_path / "src-repo"
+    rev = _tiny_repo(src)
+    out = tmp_path / "kit"
+    _kit_module().do_kit(_worksheet_pair(tmp_path, "src-repo", rev), out, {"src-repo": src})
+    text = (out / "worksheet.md").read_text()
+    assert "Getting the code" not in text and "item 1" in text
