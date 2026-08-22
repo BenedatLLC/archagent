@@ -19,7 +19,7 @@ TEMPLATES = Path(__file__).resolve().parent / "templates"
 ARCH_TEMPLATES = TEMPLATES / "architecture"
 AGENT_TEMPLATES = TEMPLATES / "agent"
 
-KNOWN_AGENTS = ("claude", "cursor", "openhands")
+KNOWN_AGENTS = ("claude", "cursor", "codex", "openhands")
 
 _POINTER_START = "<!-- archagent:start -->"
 _POINTER_END = "<!-- archagent:end -->"
@@ -71,7 +71,19 @@ class InitResult:
 # --- detection -----------------------------------------------------------
 
 def detect_agents(root: Path) -> list[str]:
-    """Which agents are already set up in this repo (by their config dirs)."""
+    """Which agents are already set up in this repo (by their config dirs).
+
+    **Codex is deliberately absent, and cannot be added.** This function's contract is "an unambiguous,
+    agent-specific directory exists in this repo". Claude, Cursor and OpenHands each satisfy it. Codex is
+    repo-clean by construction — a full session leaves `git status` untouched, and all per-machine state
+    lives under `~/.codex/`, which says nothing about *this* repo. The two candidate signals both fail on
+    precision: `.agents/skills/` is vendor-neutral and belongs to no single agent, and a root `AGENTS.md`
+    is read by Codex, Cursor and several others.
+
+    Widening the contract to "a directory exists that Codex *might* use" would weaken detection for the
+    three agents that satisfy it strictly, in exchange for a guess. Codex is opt-in via `--agents codex`,
+    and the advisory in `cli._resolve_agents` is what makes that discoverable.
+    """
     found = []
     if (root / ".claude").exists():
         found.append("claude")
@@ -147,9 +159,18 @@ def _write_owned_agent_files(root: Path, agents: list[str], result: InitResult, 
             _write_owned(dest, _apply_arch_dir(frontmatter + body, arch_dir), result)
 
 
+#: Agents whose repo-level skills are a directory per skill holding `SKILL.md` with `name`/`description`
+#: frontmatter — the same shape for all three, so they share a branch below.
+#:
+#: Codex's directory is `.agents/`, **not** `.codex/`. `~/.codex/` is the user-level config home; the
+#: repo-level skills path is the vendor-neutral `.agents/skills/`. Getting this wrong writes files no
+#: agent ever reads.
+_SKILL_DIR_AGENTS = {"claude": ".claude", "cursor": ".cursor", "codex": ".agents"}
+
+
 def _agent_target(root: Path, agent: str, phase: Phase) -> tuple[Path | None, str]:
-    if agent in ("claude", "cursor"):
-        base = ".claude" if agent == "claude" else ".cursor"
+    if agent in _SKILL_DIR_AGENTS:
+        base = _SKILL_DIR_AGENTS[agent]
         frontmatter = f"---\nname: archagent-{phase.name}\ndescription: {phase.description}\n---\n\n"
         return root / base / "skills" / f"archagent-{phase.name}" / "SKILL.md", frontmatter
     if agent == "openhands":
@@ -167,7 +188,9 @@ def _wire_top_level(root: Path, agents: list[str], result: InitResult, arch_dir:
     targets: set[str] = set()
     if "claude" in agents:
         targets.add("CLAUDE.md")
-    if "cursor" in agents or "openhands" in agents:
+    if any(a in agents for a in ("cursor", "codex", "openhands")):
+        # Codex reads `AGENTS.md` from the repo root down to the working directory, so the pointer is
+        # exactly the right mechanism for it and needs no new template.
         targets.add("AGENTS.md")
     block = f"\n{_POINTER_START}\n{_pointer_body(arch_dir)}\n{_POINTER_END}\n"
     for name in sorted(targets):

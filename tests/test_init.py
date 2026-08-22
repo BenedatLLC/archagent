@@ -136,3 +136,81 @@ def test_wire_is_additive_and_idempotent(tmp_path):
 
     init_project(tmp_path, agents=["claude"], wire=True)  # again
     assert claude_md.read_text().count("archagent:start") == 1       # no duplicate pointer
+
+
+# --- Codex (issue #23) -------------------------------------------------------------------------------
+
+_PHASES = ("describe", "check", "invariant", "evaluate", "help")
+
+
+def _codex_skill(root, phase):
+    return root / ".agents" / "skills" / f"archagent-{phase}" / "SKILL.md"
+
+
+def test_codex_init_writes_skills_under_dot_agents(tmp_path):
+    """`.agents/`, not `.codex/`. `~/.codex/` is the user-level config home; the repo-level skills path is
+    the vendor-neutral `.agents/skills/`, and getting it wrong writes files no agent ever reads."""
+    _pyrepo(tmp_path)
+    init_project(tmp_path, agents=["codex"])
+    written = [p for p in _PHASES if _codex_skill(tmp_path, p).is_file()]
+    assert written, "no codex skills written"
+    for phase in written:
+        text = _codex_skill(tmp_path, phase).read_text()
+        assert text.startswith("---\n"), phase
+        assert f"name: archagent-{phase}" in text
+        assert "description:" in text
+    assert not (tmp_path / ".codex").exists(), "must not write to the user-level config dir name"
+
+
+def test_codex_upgrade_refreshes_the_skills(tmp_path):
+    """Proves `detect_installed_agents` sees codex — it probes via `_agent_target`, so codex falls out for
+    free once the target exists."""
+    _pyrepo(tmp_path)
+    init_project(tmp_path, agents=["codex"])
+    target = next(_codex_skill(tmp_path, p) for p in _PHASES if _codex_skill(tmp_path, p).is_file())
+    target.write_text("clobbered\n")
+    upgrade_project(tmp_path)
+    assert target.read_text() != "clobbered\n"
+
+
+def test_codex_wire_writes_the_agents_pointer_and_is_idempotent(tmp_path):
+    """Codex reads `AGENTS.md` from the repo root down to the working directory, so the pointer is the
+    right mechanism and needs no new template."""
+    _pyrepo(tmp_path)
+    init_project(tmp_path, agents=["codex"], wire=True)
+    first = (tmp_path / "AGENTS.md").read_text()
+    assert "architecture/AGENTS.md" in first
+    init_project(tmp_path, agents=["codex"], wire=True)
+    assert (tmp_path / "AGENTS.md").read_text() == first
+
+
+def test_codex_is_never_auto_detected(tmp_path):
+    """**This test pins a decision.**
+
+    Codex is repo-clean by construction: a full session leaves `git status` untouched and all state lives
+    under `~/.codex/`. The two candidate signals both fail on precision — `.agents/skills/` is
+    vendor-neutral, and a root `AGENTS.md` is read by Codex, Cursor and others. Without this test, keying
+    detection off either could be reintroduced by accident and nothing would fail.
+    """
+    _pyrepo(tmp_path)
+    (tmp_path / ".agents" / "skills").mkdir(parents=True)
+    (tmp_path / "AGENTS.md").write_text("# Agent instructions\n")
+    assert detect_agents(tmp_path) == []
+
+
+def test_the_advisory_names_codex_and_says_why_it_is_not_detected(tmp_path):
+    """The highest-leverage line in codex support: it is what turns an undetectable agent into a
+    discoverable one, which is what makes opt-in acceptable rather than merely defensible."""
+    from archagent.cli import _resolve_agents
+    selected, advisory = _resolve_agents(tmp_path, "auto", detect_agents)
+    assert selected == []
+    assert "codex" in advisory and "auto-detect" in advisory
+
+
+def test_codex_is_a_known_agent(tmp_path):
+    """`--agents codex` used to be a silent no-op that reported success."""
+    from archagent.init import KNOWN_AGENTS
+    assert "codex" in KNOWN_AGENTS
+    from archagent.cli import _resolve_agents
+    selected, advisory = _resolve_agents(tmp_path, "codex", detect_agents)
+    assert selected == ["codex"] and not advisory

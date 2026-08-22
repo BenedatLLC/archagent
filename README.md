@@ -200,7 +200,8 @@ otherwise infers one in memory; it never writes it.
 
 1. **`archagent init .`** — scaffold `archagent.toml`, the `architecture/` templates, and the phase
    skills. It **auto-detects which agents you use** (`.claude/`, `.cursor/`, `.openhands/`) and installs
-   skills for those; override with `--agents claude,cursor` / `all` / `none`. It also detects languages
+   skills for those; override with `--agents claude,cursor` / `all` / `none`. **Codex is opt-in** —
+   `--agents codex` — because it keeps no per-repo directory to detect. It also detects languages
    and guesses `root_package` / `source_paths` — check those in `archagent.toml`. It asks **where the
    architecture docs should live** (default `architecture/`, or a combo it finds like `docs/architecture` —
    set it directly with `--arch-dir`, or `--yes` to take the default), and records it as `architecture_dir`.
@@ -263,9 +264,10 @@ otherwise infers one in memory; it never writes it.
 > enforces *your system's* design rules and flags *system-level* smells (candidates its skill judges in
 > context) — it isn't a generic metrics dashboard (cycle counts, coupling scores).
 
-The three skills (`describe`, `check`, `invariant`) come from one neutral source and are installed per
-agent — Claude Code `.claude/skills/`, Cursor `.cursor/skills/`, OpenHands `.openhands/microagents/` — plus
-`architecture/AGENTS.md` (the full instructions, archagent-owned). In Claude Code, invoke a skill directly
+The skills come from one neutral source and are installed per agent — Claude Code `.claude/skills/`,
+Cursor `.cursor/skills/`, Codex `.agents/skills/`, OpenHands `.openhands/microagents/` — plus
+`architecture/AGENTS.md` (the full instructions, archagent-owned). Codex also reads a root `AGENTS.md`
+from the repo root down, so `--wire` alone gives it a working integration even with no skills installed. In Claude Code, invoke a skill directly
 as `/archagent-describe` (etc.) or just describe the task and Claude activates it.
 
 ## Commands

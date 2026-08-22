@@ -68,8 +68,13 @@ def _resolve_agents(root: Path, agents_opt: str, detected_when_auto) -> tuple[li
         found = detected_when_auto(root)
         if found:
             return found, None
-        return [], ("no coding agent detected (.claude/.cursor/.openhands) — "
-                    "re-run with --agents claude,cursor,openhands to add skills")
+        # The highest-leverage line in the codex support: Codex keeps no per-repo directory, so it can
+        # never be auto-detected (see `init.detect_agents`). Naming it here is what turns an undetectable
+        # agent into a discoverable one, and it is what makes opt-in acceptable rather than merely
+        # defensible.
+        return [], ("no coding agent detected (.claude/.cursor/.openhands) — re-run with "
+                    "--agents claude,cursor,openhands, or --agents codex "
+                    "(Codex keeps no per-repo directory, so it cannot be auto-detected)")
     selected = [a.strip() for a in agents_opt.split(",") if a.strip()]
     unknown = [a for a in selected if a not in KNOWN_AGENTS]
     msg = f"unknown agent(s) ignored: {', '.join(unknown)}" if unknown else None
