@@ -39,6 +39,24 @@ app = typer.Typer(add_completion=False, help="Keep code adherent to a described 
 console = Console()
 
 
+def _version_callback(value: bool) -> None:
+    if value:
+        from . import __version__
+        # Plain `print`, not `console.print`: rich highlights a bare version as a number and emits colour
+        # codes, and the first consumer of this is a script pinning what produced a scorecard.
+        print(__version__)
+        raise typer.Exit()
+
+
+@app.callback()
+def _main(
+    version: bool = typer.Option(
+        False, "--version", "-V", callback=_version_callback, is_eager=True,
+        help="Print the archagent version and exit."),
+) -> None:
+    """Keep code adherent to a described architecture."""
+
+
 def _resolve_agents(root: Path, agents_opt: str, detected_when_auto) -> tuple[list[str], str | None]:
     """Resolve the --agents value to a concrete list, with an optional advisory message."""
     val = agents_opt.strip().lower()

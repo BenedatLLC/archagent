@@ -37,6 +37,8 @@ How to cut a new release to [PyPI](https://pypi.org/project/archagent/). Keep it
    ```bash
    python3 -m venv /tmp/agx && /tmp/agx/bin/pip -q install dist/*.whl
    /tmp/agx/bin/archagent --help >/dev/null && echo CLI-OK
+   # and confirm *which* build: --help proves a CLI starts, not that it is the one you just built
+   test "$(/tmp/agx/bin/archagent --version)" = "<version>" && echo VERSION-OK
    mkdir -p /tmp/agxproj/.claude && (cd /tmp/agxproj && /tmp/agx/bin/archagent init . --agents claude)
    ls /tmp/agxproj/.claude/skills /tmp/agxproj/architecture   # skills + scaffold present?
    rm -rf /tmp/agx /tmp/agxproj
@@ -51,7 +53,7 @@ How to cut a new release to [PyPI](https://pypi.org/project/archagent/). Keep it
 
 7. **Verify it's live.**
    ```bash
-   uvx archagent@<version> --help
+   uvx archagent@<version> --version   # must print <version>
    ```
 
 8. **Commit the bump, tag, and push.**
