@@ -258,7 +258,20 @@ def _guidance(signs: list[str]) -> list[str]:
     return (["**Reading each kind:**", ""] + out) if out else []
 
 
-def render_worksheet(items: list[dict], reviewer: str = "") -> tuple[str, dict]:
+#: The sheet names its own side file, so `ingest` can find the withheld claims however the returned file
+#: has been renamed. Resolution used to be "swap the extension on whatever path you were given", which
+#: quietly required the reviewer to hand back a file with the exact basename it was generated under —
+#: and the two most natural things a person does are add their name to it and save it from the kit, where
+#: it is called `worksheet.md`. Both broke it, and the error named a missing file rather than the rule.
+SHEET_ID = re.compile(r"<!--\s*spotcheck-sheet:\s*([A-Za-z0-9._-]+)\s*-->")
+
+
+def sheet_id(text: str) -> str:
+    m = SHEET_ID.search(text)
+    return m.group(1) if m else ""
+
+
+def render_worksheet(items: list[dict], reviewer: str = "", sheet: str = "") -> tuple[str, dict]:
     """`(markdown, withheld)` — the sheet a person fills in, and the claims kept out of it.
 
     The withheld half is returned separately rather than hidden in a comment: a claim in the same file is
@@ -267,7 +280,12 @@ def render_worksheet(items: list[dict], reviewer: str = "") -> tuple[str, dict]:
     lines = [
         "# archagent spot-check worksheet",
         "",
+        f"<!-- spotcheck-sheet: {sheet or 'worksheet-' + date.today().isoformat()} -->",
+        "",
         f"Reviewer: {reviewer or '(fill in)'}    Date: {date.today().isoformat()}",
+        "",
+        "**Rename this file however you like — just keep the comment line above it.** It is how the",
+        "results are matched back to the run that produced them.",
         "",
         "For each item below, read the evidence and record a verdict. **The tool's own severity,",
         "confidence and recommendation are deliberately not shown** — they are held back so that this",

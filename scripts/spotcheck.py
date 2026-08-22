@@ -127,7 +127,7 @@ def do_generate(cap: int, reviewer: str, signs: tuple[str, ...]) -> None:
               f"single repo\n  describes that repo, not the signal — quote it with the interval and the "
               f"source, or widen first.")
     picked = stratified_sample(fresh, cap=cap)
-    sheet, withheld = render_worksheet(picked, reviewer)
+    sheet, withheld = render_worksheet(picked, reviewer, sheet=f"worksheet-{date.today().isoformat()}")
     sheet = sheet.replace("---\n", _checkout_section({i["repo"]: i.get("rev", "") for i in picked})
                           + "\n---\n", 1)
     SHEETS.mkdir(parents=True, exist_ok=True)
@@ -287,15 +287,17 @@ def do_kit(worksheet: Path, out: Path, source: dict[str, Path]) -> None:
     end = text.find("\n---", start) if start != -1 else -1
     if start != -1 and end != -1:
         text = text[:start] + text[end:]
-    (out / "worksheet.md").write_text(text)
+    # Named after the run, not `worksheet.md`. The sheet carries its own id so a rename is safe, but a
+    # reviewer who strips the header still gets a file that drops straight in beside its side file.
+    (out / worksheet.name).write_text(text)
 
-    (out / "REVIEW.md").write_text(_kit_readme(placed))
+    (out / "REVIEW.md").write_text(_kit_readme(placed, worksheet.name, len(meta["items"])))
     assert not list(out.rglob("*.withheld.json")), "the withheld claims must not ship in a review kit"
     print(f"\nkit at {out}")
-    print(f"  {len(placed)} repo(s), worksheet.md, REVIEW.md — and no withheld file")
+    print(f"  {len(placed)} repo(s), {worksheet.name}, REVIEW.md — and no withheld file")
 
 
-def _kit_readme(placed: dict[str, str]) -> str:
+def _kit_readme(placed: dict[str, str], sheet_name: str, n_items: int) -> str:
     rows = "\n".join(f"| `{r}` | `{rev}` | `repos/{r}/` |" for r, rev in sorted(placed.items()))
     return f"""# archagent finding review
 
@@ -309,7 +311,7 @@ the structure may have a problem. This review asks whether those candidates are 
 checked these particular kinds of finding against an independent reader, which is the entire reason you
 are being asked.
 
-**Open `worksheet.md` and work through the 14 items.** Each gives you a repository, a revision, and the
+**Open `{sheet_name}` and work through the {n_items} items.** Each gives you a repository, a revision, and the
 evidence the tool used. Record a verdict and a one-line reason in the fenced block.
 
 ## Two questions per item, in this order
@@ -359,14 +361,39 @@ is a `confirm` with a note. The signal did its job.
 
 ## When you are done
 
-Send back `worksheet.md`. Nothing else is needed.
+Send back `{sheet_name}`. Rename it however you like — add your own name to it if that helps — as
+long as the `<!-- spotcheck-sheet: ... -->` comment near the top of the file survives. That line is
+how the results are matched back to the run. Nothing else is needed.
 """
 
 
+def _side_file(path: Path) -> Path:
+    """The withheld claims belonging to a completed sheet.
+
+    Tried in order: the id the sheet carries in its own header, then a sibling with the matching name.
+    The sibling rule alone required the reviewer to return a file with the exact basename it was
+    generated under, and the two most natural things a person does — add their name to it, or save it
+    out of the review kit, where it is called `worksheet.md` — both broke it. The error then named a
+    missing file, which reads as data loss rather than as a rename.
+    """
+    from spotcheck import sheet_id
+    sid = sheet_id(path.read_text(errors="replace"))
+    if sid:
+        by_id = SHEETS / f"{sid}.withheld.json"
+        if by_id.is_file():
+            return by_id
+    return path.with_suffix("").with_suffix(".withheld.json")
+
+
 def do_ingest(path: Path, reviewer: str, note: str) -> None:
-    side = path.with_suffix("").with_suffix(".withheld.json")
+    side = _side_file(path)
     if not side.is_file():
-        raise SystemExit(f"missing side file {side} — it holds the evidence hashes and the withheld claims")
+        raise SystemExit(
+            f"cannot find the withheld claims for {path.name}.\n"
+            f"Looked for {side}.\n\n"
+            f"The sheet should carry a `<!-- spotcheck-sheet: ... -->` line naming its run; if it was "
+            f"stripped,\nput the completed sheet next to its `.withheld.json` under {SHEETS} and give it "
+            f"the same basename.")
     meta = json.loads(side.read_text())
     answers = parse_worksheet(path.read_text())
     store = LabelStore(LABELS)

@@ -374,10 +374,11 @@ def test_a_kit_never_contains_the_withheld_claims(tmp_path):
     severity is measuring agreement with us rather than with the code."""
     src = tmp_path / "src-repo"
     rev = _tiny_repo(src)
+    ws = _worksheet_pair(tmp_path, "src-repo", rev)
     out = tmp_path / "kit"
-    _kit_module().do_kit(_worksheet_pair(tmp_path, "src-repo", rev), out, {"src-repo": src})
+    _kit_module().do_kit(ws, out, {"src-repo": src})
     assert not list(out.rglob("*withheld*"))
-    assert "high" not in (out / "worksheet.md").read_text()
+    assert "high" not in (out / ws.name).read_text()
 
 
 def test_a_kit_repo_is_a_real_clone_not_a_worktree(tmp_path):
@@ -408,7 +409,47 @@ def test_the_kit_sheet_drops_instructions_for_work_the_kit_already_did(tmp_path)
     than the one sitting beside the sheet."""
     src = tmp_path / "src-repo"
     rev = _tiny_repo(src)
+    ws = _worksheet_pair(tmp_path, "src-repo", rev)
     out = tmp_path / "kit"
-    _kit_module().do_kit(_worksheet_pair(tmp_path, "src-repo", rev), out, {"src-repo": src})
-    text = (out / "worksheet.md").read_text()
+    _kit_module().do_kit(ws, out, {"src-repo": src})
+    text = (out / ws.name).read_text()
     assert "Getting the code" not in text and "item 1" in text
+
+
+# --- getting a completed sheet back ------------------------------------------------------------------
+
+def test_a_sheet_carries_the_id_of_the_run_that_made_it():
+    from spotcheck import render_worksheet, sheet_id
+    text = render_worksheet([{"key": "a:b:0", "repo": "r", "rev": "v", "sign": "layer-skip",
+                              "evidence": "- measured: x"}], sheet="worksheet-2026-08-22")[0]
+    assert sheet_id(text) == "worksheet-2026-08-22"
+
+
+def test_a_renamed_sheet_still_names_its_run():
+    """The reviewer will rename it — adding their own name to a file they spent two hours on is the most
+    natural thing in the world, and it used to silently break the match back to the withheld claims."""
+    from spotcheck import render_worksheet, sheet_id
+    text = render_worksheet([{"key": "a:b:0", "repo": "r", "rev": "v", "sign": "layer-skip",
+                              "evidence": "- measured: x"}], sheet="worksheet-2026-08-22")[0]
+    # renaming is a filesystem act; the identity travels inside the file, so it survives untouched
+    assert sheet_id(text + "\n\n## item 1 - `a:b:0`\n\nverdict: confirm\n") == "worksheet-2026-08-22"
+
+
+def test_a_sheet_with_no_marker_falls_back_to_the_sibling_rule(tmp_path):
+    """Old sheets, and any file whose header a reviewer edited away, must still ingest."""
+    m = _kit_module()
+    ws = tmp_path / "worksheet-2026-08-01.md"
+    ws.write_text("# no marker here\n")
+    (tmp_path / "worksheet-2026-08-01.withheld.json").write_text("{}")
+    assert m._side_file(ws).name == "worksheet-2026-08-01.withheld.json"
+
+
+def test_the_kit_keeps_the_generated_filename(tmp_path):
+    """So a sheet whose marker was stripped still lands beside its side file. Naming it `worksheet.md`
+    guaranteed a mismatch for every reviewer who saved it straight out of the kit."""
+    src = tmp_path / "src-repo"
+    rev = _tiny_repo(src)
+    ws = _worksheet_pair(tmp_path, "src-repo", rev)
+    out = tmp_path / "kit"
+    _kit_module().do_kit(ws, out, {"src-repo": src})
+    assert (out / ws.name).is_file()
