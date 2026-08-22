@@ -20,11 +20,16 @@ Add (or modify) a row in `architecture/invariants.md` and confirm it works.
      `fc.commands` model-based stub (JS/TS): model operations as commands/rules that get composed into
      random sequences, and assert what must always hold after each. The right tool for state/data-layer
      invariants a single property can't catch (e.g. "state resets on error", "writes reflected in reads").
-3. Add the row: ID, Type, Tier, Applies-to (language), Rule, Severity, Why (link an ADR), Status.
+3. Add the row: ID, Type, Tier, Applies-to (language), Rule, Severity, Why (link an ADR), Status —
+   and for a `prose` row, **Verification** and **Graduation path**.
    **Every invariant is a table row** — including purely descriptive ones and ones the code would fail
    today. Give those **Tier `prose`**: the row is documented and greppable but never generated or run
    (put the eventual `forbid`/`forbid-pattern` in the Rule column, or a short description). Don't record an
    invariant as a loose prose bullet outside the table.
+   **A `prose` row states how it is verified.** `prose` means archagent cannot generate a checker, not
+   that nobody checks the rule; without `Verification` those two are indistinguishable. Name the test, the
+   command, the runtime assertion or the manual audit — `none` is a legitimate answer and better than a
+   blank. `Graduation path` says what would make it mechanical, or that nothing would.
    **Note on enforcement:** a row with a real Rule and Tier `structural`/`pbt` is generated and checked
    regardless of `Status` (except `deprecated`) — `Status: proposed` does *not* suppress enforcement; only
    Tier `prose` does.

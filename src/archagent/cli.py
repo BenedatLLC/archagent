@@ -264,6 +264,26 @@ def check(
         for inv_id, why in gen_result.skipped:
             console.print(f"  [yellow]{inv_id}[/]  {why}")
 
+    # A prose rule with a stated `Verification` is in a materially different state from one nobody has
+    # ever checked, and without the column they look identical. Calibration round 4 had 52 of 56 rows at
+    # tier `prose`, several backed by a real test the row did not mention, and no way to tell which.
+    verified = [i for i in invariants if i.is_prose and i.verification]
+    unverified = [i for i in invariants if i.unverified]
+    if verified or unverified:
+        console.print(f"\n[bold]Prose rules[/] — {len(verified)} state how they are verified, "
+                      f"{len(unverified)} do not")
+        for i in verified[:6]:
+            console.print(f"  [green]{i.id}[/]  {i.verification[:76]}")
+        for i in unverified[:6]:
+            grad = f"  [dim]→ {i.graduation[:50]}[/]" if i.graduation else ""
+            console.print(f"  [yellow]{i.id}[/]  no Verification recorded{grad}")
+        if len(verified) > 6 or len(unverified) > 6:
+            console.print("  [dim]…[/]")
+        if unverified:
+            console.print("  [dim]`prose` means this tool cannot generate a checker, not that nobody "
+                          "checks it. Name the test, the\n  command or the audit that confirms the rule "
+                          "— or say plainly that nothing does.[/]")
+
     # A prose row marked `active` says the rule is in force while nothing can confirm it. Twice now a
     # rule in that state was simply false — and in both cases the `Why` column held rationale with no
     # evidence, so "does Why cite anything?" separates a verified assertion from an unverified one.

@@ -25,7 +25,25 @@ class Invariant:
     severity: str = "error"  # error | warn
     why: str = ""
     status: str = "active"  # active | proposed | deprecated
+    verification: str = ""  # how this rule is confirmed today; see below
+    graduation: str = ""    # what would have to change for it to become mechanical
     line: int = 0  # 1-based line in invariants.md, for diagnostics
+
+    @property
+    def is_prose(self) -> bool:
+        return self.tier == "prose"
+
+    @property
+    def unverified(self) -> bool:
+        """A prose rule with no stated way to confirm it.
+
+        `prose` means *this consumer cannot generate a checker for it*, and calibration round 4 showed how
+        far that drifts from *nobody checks it*: 52 of 56 rows were prose, several were backed by a real
+        test the row did not mention, and none of them said how anyone would confirm the rest. Without a
+        `Verification` column the two states are indistinguishable, and the table's claim to be the
+        canonical inventory of the system's rules weakens with every row added.
+        """
+        return self.is_prose and not self.verification
 
 
 def parse_invariants(path: Path) -> list[Invariant]:
@@ -47,6 +65,8 @@ def parse_invariants(path: Path) -> list[Invariant]:
                 severity=get("severity", "error").lower() or "error",
                 why=get("why"),
                 status=get("status", "active").lower() or "active",
+                verification=get("verification"),
+                graduation=get("graduation path") or get("graduation"),
                 line=lineno,
             )
         )

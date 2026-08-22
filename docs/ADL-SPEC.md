@@ -270,12 +270,22 @@ The table MUST have the following columns, in any letter case:
 | `Severity` | failure disposition | `error` (default) fails a check; `warn` is reported only |
 | `Why` | rationale | SHOULD link an ADR under `decisions/` |
 | `Status` | lifecycle | `active` (default) · `proposed` · `deprecated` |
+| `Verification` | OPTIONAL — how this rule is confirmed today | a test id, a command, `runtime assertion`, `manual audit`, or `none` |
+| `Graduation path` | OPTIONAL — what would make it mechanical | free text; `not mechanical` is a valid answer |
 
 Not every `(Type, Tier)` combination is mechanically enforced; a rule a consumer cannot compile is
 reported as unsupported rather than silently ignored. A row with tier **`prose`** is recorded as
 documentation and MUST NOT be generated or enforced; any other tier with a valid Rule is enforced
 regardless of `Status` (except `deprecated`). An invariant that cannot yet be enforced SHOULD therefore be
-recorded with tier `prose` (not status `proposed`, which is still enforced). **All** invariants — including
+recorded with tier `prose` (not status `proposed`, which is still enforced).
+
+**A `prose` tier means this consumer cannot generate a checker, not that nobody checks the rule**, and the
+two states are indistinguishable without saying so. A `prose` row SHOULD therefore carry `Verification` —
+the named test, the command, the runtime assertion or the manual audit that confirms it — and `none` is a
+legitimate and useful value. `Graduation path` SHOULD say what would have to change for the rule to become
+mechanical (an ast-grep pattern for a shape, support for a language the tool does not parse), or state
+that it cannot. Both columns are OPTIONAL under §1.2: a table without them stays conformant, and a
+consumer reports on them only when present. **All** invariants — including
 descriptive-only ones — SHOULD be recorded as rows in this table (with tier `prose` where not enforceable)
 rather than as free prose elsewhere, so the table stays the single inventory of the system's rules.
 

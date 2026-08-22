@@ -3,15 +3,20 @@
 The **first markdown table below** is the single source of truth for `archagent`
 (parsed by `archagent gen` / `archagent check`). The prose around it is for humans.
 
-| ID | Type | Tier | Applies-to | Rule | Severity | Why | Status |
-|----|------|------|-----------|------|----------|-----|--------|
+| ID | Type | Tier | Applies-to | Rule | Severity | Why | Status | Verification | Graduation path |
+|----|------|------|-----------|------|----------|-----|--------|--------------|-----------------|
 
 No invariants yet — add rows to the table above. Example rows:
 
 - `| BND-001 | BOUNDARY   | structural | python | `forbid app.domain -> app.web` | error | [0002](decisions/0002-...) | active |`
 - `| BND-010 | BOUNDARY   | structural | ts     | `forbid src/domain -> src/ui`  | error | [0003](decisions/0003-...) | active |`
 - `| STR-002 | STRUCTURAL | structural | python | `forbid-pattern print($$$)`    | warn  | [0004](decisions/0004-...) | active |`
-- `| CFG-001 | STRUCTURAL | prose      | python | `forbid-pattern os.environ outside app.config` | error | [0005](decisions/0005-...) | proposed |`
+- `| CFG-001 | STRUCTURAL | prose      | python | `forbid-pattern os.environ outside app.config` | error | [0005](decisions/0005-...) | proposed | `rg -n "os.environ" --glob "!app/config.py"` | needs a scoped ast-grep pattern |`
+
+The last two columns are optional and matter most for **`prose`** rows. `prose` means archagent cannot
+generate a checker — not that nobody checks the rule, and without `Verification` those two look the same.
+Name the test, the command or the audit that confirms it; `none` is a legitimate answer and better than a
+blank. `Graduation path` says what would make it mechanical, or that nothing would.
 
 **Record every invariant as a row** — including ones you can't enforce yet, and ones that are purely
 descriptive (a rule you can only state in prose today). Give the non-enforceable ones **Tier `prose`**:

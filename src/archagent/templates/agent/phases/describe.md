@@ -74,7 +74,14 @@ the user first, and never overwrite their existing content.
    table** — including ones you can only describe in prose today and ones the code would fail right now.
    Give those **Tier `prose`**: they stay documented and greppable in one place but are never generated or
    run (`gen`/`check` skip `prose` rows), so put the eventual `forbid`/`forbid-pattern` in the Rule column
-   (or a short description) and graduate it later. **Don't write invariants as loose prose bullets outside
+   (or a short description) and graduate it later.
+   **Every `prose` row gets a `Verification` and a `Graduation path`.** `prose` means *archagent cannot
+   generate a checker*, not *nobody checks this* — and without saying which, a rule backed by a real test
+   is indistinguishable from one nobody has ever confirmed. `Verification` names the test, the command,
+   the runtime assertion or the manual audit that confirms the rule today; **`none` is a legitimate and
+   useful answer** and is far better than leaving it blank. `Graduation path` says what would have to
+   change for the rule to become mechanical — an ast-grep pattern for the shape, support for a language
+   archagent does not parse — or says plainly that it cannot be mechanical and needs a reader. **Don't write invariants as loose prose bullets outside
    the table.** Note: **any row with a real rule and Tier `structural`/`pbt` is enforced** regardless of
    `Status` (except `deprecated`) — `Status: proposed` does *not* stop enforcement; only Tier `prose` does.
 5b. **Mine invariants already stated in the docs and code.** A big part of the value here is enforcing the
