@@ -132,3 +132,11 @@ def test_a_multi_line_answer_survives_parsing():
             "why: it says the checksum is compared\nbefore the plugin chain runs\n```\n")
     r = parse(text, tasks)["t1"]
     assert "Ingestion section" in r.document and "plugin chain" in r.why
+
+
+def test_quoted_evidence_does_not_earn_the_verdict():
+    """`why` quotes the artifact, and the artifact names modules. Grading it would credit an answer whose
+    own conclusion was a different file — reading the evidence instead of the answer."""
+    r = Response("t1", where="the database layer",
+                 why="consumption.md says `src/documents/checks.py` compares the checksum")
+    assert grade(_task(), r).verdict == "lost"

@@ -1,5 +1,5 @@
 ---
-status: proposed — predicate redesign passed step 1 on 2026-08-16; step 2 next
+status: deferred (2026-08-22) — mechanism works, case not made; re-evaluate on the trigger in §9
 date: 2026-08-16
 author: Jeff Fischer (proposal), written up with Claude
 ---
@@ -622,14 +622,68 @@ equally consistent with a stronger model or a longer run. One generation cannot 
 the first evidence in this project that the artifacts have got better, and it is why the calibration
 rounds measure a moving target.
 
-## 9. Status
+## 9. Status: deferred
 
-**Proposed. Not accepted.** The next action is step 1, which is cheap and can retire the idea before any
-further cost.
+**Deferred on 2026-08-22, before the 1.0 release. Not rejected.** The mechanism works and is measured; the
+case for its cost is not made. Everything below is the record, and §9.1 states what would reopen it.
 
-This document is kept whatever the outcome. If the change is rejected the status becomes `rejected`, the
-measurements are recorded here, and the reasoning stays on file — a rejected design with evidence is worth
-more than a silence someone re-derives in six months.
+### The three things that decided it
+
+**1. The drift case is one caught defect across two experiments, and the best example closed itself.**
+`drift` 3 of 8 on wardrowbe against claims 0 of 8; `drift` 0 of 1 on obstudio against claims 1 of 1. The
+third instance — paperless-ngx asserting "every `PAPERLESS_*` key is listed" over 94 of 185, with `drift`
+reporting zero config drift in both directions — **was fixed by teaching `configscan` to follow helper
+wrappers.** Forty lines, no ADL change, and `drift` now reports 82 undocumented keys on that artifact.
+
+Two of the three blind-spot cases turned out to be ordinary tool gaps. The third is an unparsed language,
+and the honest comparison there is *claims versus adding language support* — which would also fix `check`,
+`evaluate` and the import graph, where a claims file fixes only the documents.
+
+**2. It does not improve `describe`, and there is no headroom left to prove it could.** Four instruments
+agree the round-4 artifact is good: deterministic 1.00, code-derived checklist 0.92, judged rubric 4.33,
+locate findability 1.00. The two-arm comparison of §8 is blocked not by bad instruments but by the effect
+being smaller than any instrument's resolution on a well-described target. A freshly generated artifact
+carries about **one false assertion in fifteen**, so three artifacts per arm gives 3 against 0 — Fisher
+exact p ≈ 0.24.
+
+**3. The authoring error rate is a permanent cost, not a teething one.** 27% of commands measured something
+other than what the prose meant, falling to 20% after the redesign, and the residue is *scoping* — a
+command that looks in the right place and takes in more than the claim covers. That class does not go away
+with a different claim kind. In production those errors are silent, because the recorded value comes from
+the command rather than from the prose.
+
+### Why deferring costs nothing, which is not obvious
+
+The natural objection is that this changes the ADL, so it belongs pre-1.0 or nowhere. **The ADL's own
+design principle says otherwise.** §1.2: *"Additive and gated. Every structured field is OPTIONAL. A signal
+that depends on a field is emitted only when that field is present."*
+
+Every piece of this proposal is additive under that rule — a new optional document, an optional
+front-matter field, and a `[C-nnn]` prose reference an older tool ignores. **No 1.0 artifact becomes
+non-conformant if this lands in 1.1.** The only irreversible element is amending "static and
+non-executing", and that is a principle statement rather than a format guarantee; no existing artifact
+stops conforming when it changes.
+
+### 9.1 What would reopen this
+
+Any one of:
+
+- **A target in a language archagent does not parse becomes a priority.** obstudio is the standing example:
+  `drift` can check 0 of 16 Go closed collections and its 22 findings there are all false positives the
+  artifact itself predicts. If adding language support is not on the table, a claims file is the only
+  mechanical check available. **Compare the two explicitly before building either.**
+- **A completeness or accuracy instrument finds real headroom on a fresh target.** Every instrument is
+  currently saturated on well-described repositories. A target where `describe` genuinely struggles would
+  make the two-arm comparison of §8 runnable, and it is the experiment that was never possible to run.
+- **A third independent instance of the blind-spot class that a tool fix cannot close.** Two of three were
+  ordinary gaps. A case that is genuinely beyond static analysis, and not merely beyond today's scanner,
+  changes the arithmetic above.
+
+If it is reopened, the parts already validated are worth keeping: predicate claims over closed sets,
+output recorded as evidence, the no-shell execution model, and the safety rules — which cost almost
+nothing, with exactly one command refused across the whole evaluation.
+
+### The record
 
 | Step | Result |
 |---|---|
@@ -772,6 +826,9 @@ reaches.
   governing rule *prefer an uncomputed claim to an unsafe command* (§5.4); ESAA read and cited.
 - **2026-08-16** — workflow section added at the top: what runs during authoring, checking and revising,
   and the distinction that authoring computes a new claim's value while nothing recomputes an existing one.
+- **2026-08-22** — status set to `deferred`. The mechanism is measured and works; the case for its
+  cost is not made, and the ADL's additive-and-gated principle means deferring forfeits nothing. Trigger
+  for re-evaluation recorded in §9.1.
 - **2026-08-16** — threat model corrected (§5.4): archagent normally runs where an agent already has a
   shell and write access, so claim commands grant no new capability and the rules stand on correctness
   grounds rather than security ones. Claim checking therefore runs **by default** in `describe`, `drift`

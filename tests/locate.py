@@ -101,7 +101,11 @@ def grade(task: Task, response: Response | None) -> Graded:
     """
     if response is None or response.unanswered:
         return Graded(task, response, "lost")
-    said = f"{response.where}\n{response.document}\n{response.why}"
+    # `where` and `document` only. `why` quotes the artifact, and artifact prose naming the right module
+    # would credit an answer whose own conclusion was a different file — the grader would be reading the
+    # evidence rather than the answer. It made no difference on the first real worksheet (checked), which
+    # is the reason to close it now rather than after it does.
+    said = f"{response.where}\n{response.document}"
     for path in task.expects:
         hit = _names(said, path)
         if hit:
