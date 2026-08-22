@@ -17,6 +17,80 @@ Rationale and design detail for most items live in `~/research/architecture-agen
 
 ---
 
+## Path to 1.0 — the planned sequence
+
+*Agreed 2026-08-22. Unlike the rest of this file, **this section is a schedule**: the items are ordered
+and the order matters.*
+
+### 1. Pre-work — three issues that change what a release can claim
+
+- [ ] **[#14](https://github.com/BenedatLLC/archagent/issues/14) — make the release trigger mechanical.**
+  Diff the documented usage surface (commands, and the commands the phase prompts tell agents to run)
+  against the last tag. Answers *is a release warranted* with a number rather than a judgement made under
+  pressure. First because it informs the 1.0 decision itself.
+- [ ] **[#13](https://github.com/BenedatLLC/archagent/issues/13) — an evaluation can use two archagents
+  and record only one.** Half done: `--version` shipped. What remains is naming the tool in the review
+  brief, in the artifact's `log.md`, and as a ledger column. **This is what makes the calibration round in
+  step 3 recordable** — round 4 generated with the working tree and was reviewed against a July build, and
+  nothing anywhere said so.
+- [ ] **[#17](https://github.com/BenedatLLC/archagent/issues/17) — separate assigned from described.**
+  Built and wired into `status`; needs a look at its output on a couple of targets before closing.
+
+### 2. Documentation
+
+- [ ] **[#22](https://github.com/BenedatLLC/archagent/issues/22) — review the docs, add a Quickstart,
+  re-run archagent on itself.** The README is long and has no Quickstart, and `docs/architecture/` predates
+  everything built this month. The self-describe is the part that matters most: it is the artifact a new
+  user meets, and it should show 1.0 behaviour including the new invariant columns.
+
+### 3. Evaluate before shipping, not after
+
+- [ ] **A round of evaluations, including calibration round 5**, on the 1.0 code.
+- [ ] **User testing.**
+- [ ] **Fix whatever high-priority issues those find.**
+
+Two things about round 5 specifically, both learned the hard way in round 4:
+
+- **Two briefs at two paths.** Round 4 generated one brief, gave it to the blind judge, then gave the
+  human the same file. The result was an edit pass over the judge's review, which measures recall rather
+  than agreement — the anchoring §14 of `evaluating-archagent.md` predicts when it argues against shipping
+  a sample review. There is no calibration number for round 4 and there cannot be one.
+- **The checklist is built from the code, by an agent blind to the artifact.** Rounds 2 and 3 built theirs
+  from one artifact's defects, so both saturated the moment a fresh artifact faced them: wardrowbe 0.12 →
+  1.00, obstudio 0.24 → 0.88. Round 4's code-derived checklist is the model to follow.
+
+### 4. Ship 1.0
+
+### 5. After 1.0 — the `describe`/ADL batch
+
+Held back deliberately: these are prompt and format changes, and shipping them untested the day before a
+release is how round 4's instruments ended up saturated. Batched so **round 6 can measure them together**.
+
+- [ ] **[#15](https://github.com/BenedatLLC/archagent/issues/15)** — the `Config:` line should explain
+  scoped settings groups, not list keys.
+- [ ] **[#18](https://github.com/BenedatLLC/archagent/issues/18)** — generated counts record their
+  revision, command and tool version.
+- [ ] **[#21](https://github.com/BenedatLLC/archagent/issues/21)** — pair the generated system map with a
+  small runtime context diagram.
+- [ ] **[#19](https://github.com/BenedatLLC/archagent/issues/19)** — record a disposition for a discovered
+  risk, not just the finding.
+
+### Not in this sequence
+
+- **[#20](https://github.com/BenedatLLC/archagent/issues/20)** — canonical invariant IDs. Half shipped as
+  `lint-docs`' `unknown-invariant-id`; the other half needs generated references, a larger ADL change that
+  belongs with the step-5 batch if it happens at all.
+- **[#10](https://github.com/BenedatLLC/archagent/issues/10)** — `configscan` and pydantic-settings. The
+  helper-wrapper fix does not touch it: pydantic-settings has no call to find, only typed class
+  attributes. Genuinely open.
+- **[#9](https://github.com/BenedatLLC/archagent/issues/9)** — the corpus cannot evaluate service-shaped
+  signals. Evaluation infrastructure; no user impact.
+- **Computed claims** (`docs/designs/computed-claims.md`) — **deferred**, not rejected. The mechanism works
+  and is measured; the case for its cost is not made, and the ADL's additive-and-gated principle means
+  deferring forfeits nothing. §9.1 of that design states the three triggers that would reopen it.
+
+---
+
 ## Shipped so far (context)
 
 - **Commands:** `init` (per-agent skill delivery, agent auto-detect, `--wire`, `upgrade`), `gen`, `check`
@@ -34,6 +108,14 @@ Rationale and design detail for most items live in `~/research/architecture-agen
   **history hygiene** (commits mined, conventional-commit %, bulk skips) so "zero findings" is never read as
   "clean."
 - **Connector-typed edges** (`**Connects:** … via <kind>`) + inference from code. Python + JS/TS.
+- **Since 0.3.0, unreleased:** `--version` (read from the installed distribution, so it cannot drift from
+  the wheel that is running); Codex phase skills under `.agents/skills/` (opt-in — Codex keeps no per-repo
+  directory to detect); optional `Verification` / `Graduation path` columns on invariant rows, so a
+  `prose` rule can say how it *is* confirmed rather than only that archagent cannot check it; `status`
+  reporting which assigned modules the documents actually **describe**, not just which are claimed by a
+  glob; `configscan` following one hop through a project's own `get_x_from_env`-style helpers; `lint-docs`
+  reporting an invariant ID cited with no matching row; and `check` no longer reading a colourised tool's
+  output as a clean run.
 
 ## Evaluation
 
