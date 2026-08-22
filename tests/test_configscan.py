@@ -108,3 +108,112 @@ def test_config_read_only_in_a_test_is_not_part_of_the_surface(tmp_path):
         "from settings import get_int_from_env\nget_int_from_env('INT_VAR', 1)\n")
     keys = read_config_keys(tmp_path, {"settings.py", "tests/test_settings.py"})
     assert keys == {"REAL_KEY"}
+
+
+# --- pydantic-settings (issue #10) -------------------------------------------------------------------
+
+_SETTINGS = '''
+import secrets
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file="../.env", extra="ignore")
+    API_V1_STR: str = "/api/v1"
+    SECRET_KEY: str = secrets.token_urlsafe(32)
+    POSTGRES_SERVER: str
+    _private: str = "x"
+
+    @computed_field
+    @property
+    def dsn(self) -> str:
+        return "..."
+'''
+
+
+def test_pydantic_settings_fields_are_config_keys(tmp_path):
+    """The blind spot the issue is about. pydantic-settings populates typed class attributes from the
+    environment at import time, so there is no call to read — and a scanner looking for `os.getenv`
+    concludes nothing reads them. On `fastapi-template` that made `drift` report all 18 declared keys as
+    dangling, and made `undocumented_config` unable to fire in the other direction."""
+    (tmp_path / "config.py").write_text(_SETTINGS)
+    keys = read_config_keys(tmp_path, {"config.py"})
+    assert {"API_V1_STR", "SECRET_KEY", "POSTGRES_SERVER"} <= keys
+
+
+def test_class_machinery_is_not_a_config_key(tmp_path):
+    (tmp_path / "config.py").write_text(_SETTINGS)
+    keys = read_config_keys(tmp_path, {"config.py"})
+    for junk in ("model_config", "_private", "dsn", "Settings"):
+        assert junk not in keys, junk
+
+
+def test_env_prefix_is_applied(tmp_path):
+    (tmp_path / "c.py").write_text(
+        'from pydantic_settings import BaseSettings, SettingsConfigDict\n'
+        'class S(BaseSettings):\n'
+        '    model_config = SettingsConfigDict(env_prefix="PAPERLESS_")\n'
+        '    debug: bool = False\n')
+    keys = read_config_keys(tmp_path, {"c.py"})
+    assert "PAPERLESS_DEBUG" in keys and "DEBUG" not in keys
+
+
+def test_the_older_inner_config_class_prefix_is_applied(tmp_path):
+    """pydantic v1 style, still everywhere."""
+    (tmp_path / "c.py").write_text(
+        'from pydantic import BaseSettings\n'
+        'class S(BaseSettings):\n'
+        '    debug: bool = False\n'
+        '    class Config:\n'
+        '        env_prefix = "APP_"\n')
+    assert "APP_DEBUG" in read_config_keys(tmp_path, {"c.py"})
+
+
+def test_a_lowercase_field_is_reported_as_the_env_name(tmp_path):
+    """pydantic matches env vars case-insensitively, so a field `debug` is set by `DEBUG`. Reporting only
+    the lowercase form would make every declared key look undeclared."""
+    (tmp_path / "c.py").write_text(
+        'from pydantic_settings import BaseSettings\n'
+        'class S(BaseSettings):\n'
+        '    debug: bool = False\n')
+    assert "DEBUG" in read_config_keys(tmp_path, {"c.py"})
+
+
+def test_a_subclass_of_a_settings_class_is_also_scanned(tmp_path):
+    (tmp_path / "c.py").write_text(
+        'from pydantic_settings import BaseSettings\n'
+        'class Base(BaseSettings):\n'
+        '    SHARED: str = ""\n'
+        'class Prod(Base):\n'
+        '    EXTRA: str = ""\n')
+    keys = read_config_keys(tmp_path, {"c.py"})
+    assert {"SHARED", "EXTRA"} <= keys
+
+
+def test_an_unrelated_class_whose_name_ends_in_settings_is_not_scanned(tmp_path):
+    """The precision risk. A dataclass called `WorkerSettings` is not a pydantic settings class, and
+    treating every annotated attribute in the tree as an env key would be worse than the blind spot."""
+    (tmp_path / "c.py").write_text(
+        'from dataclasses import dataclass\n'
+        '@dataclass\nclass WorkerSettings:\n'
+        '    job_timeout: int = 300\n'
+        '    NOT_AN_ENV_KEY: str = "x"\n')
+    assert read_config_keys(tmp_path, {"c.py"}) == set()
+
+
+def test_an_explicit_alias_wins_over_the_field_name(tmp_path):
+    (tmp_path / "c.py").write_text(
+        'from pydantic import Field\n'
+        'from pydantic_settings import BaseSettings\n'
+        'class S(BaseSettings):\n'
+        '    token: str = Field(default="", alias="GITHUB_TOKEN")\n')
+    keys = read_config_keys(tmp_path, {"c.py"})
+    assert "GITHUB_TOKEN" in keys and "TOKEN" not in keys
+
+
+def test_vite_env_reads_are_found(tmp_path):
+    """`import.meta.env` is how a Vite frontend reads configuration — the only way. Missing it reported
+    `VITE_API_URL` as declared-but-unread on `fastapi-template` while `main.tsx:16` reads it."""
+    (tmp_path / "main.tsx").write_text(
+        'OpenAPI.BASE = import.meta.env.VITE_API_URL\n'
+        'const m = import.meta.env["VITE_MODE"]\n')
+    assert {"VITE_API_URL", "VITE_MODE"} <= read_config_keys(tmp_path, {"main.tsx"})

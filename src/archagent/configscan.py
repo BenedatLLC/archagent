@@ -4,7 +4,7 @@ Extraction is static (no execution):
   - Python: `os.getenv("X")`, `os.environ["X"]`, `os.environ.get("X")`, and **one hop through a project's
     own helper** — `get_bool_from_env("X", ...)` where that function reaches the environment with its own
     parameter.
-  - JS/TS:  `process.env.X`, `process.env["X"]`.
+  - JS/TS:  `process.env.X`, `process.env["X"]`, and Vite's `import.meta.env.X`.
 
 **Why the helper hop is not a nicety.** paperless-ngx reads 79 of its ~185 settings through
 `get_bool_from_env`-style wrappers, so those names never appear as a literal argument to `os.getenv`. A
@@ -36,6 +36,10 @@ _ENV_READS = [
     re.compile(r"os\.environ\[\s*['\"]" + _KEY),
     re.compile(r"process\.env\." + _KEY),
     re.compile(r"process\.env\[\s*['\"]" + _KEY),
+    # Vite's idiom, and the only way a Vite frontend reads configuration. Missing it reported
+    # `VITE_API_URL` as declared-but-unread on `fastapi-template` while `main.tsx:16` reads it.
+    re.compile(r"import\.meta\.env\." + _KEY),
+    re.compile(r"import\.meta\.env\[\s*['\"]" + _KEY),
 ]
 _ENV_FILE = re.compile(r"^\s*(?:export\s+)?" + _KEY + r"\s*=", re.MULTILINE)
 # require the bold `**Config:**` form so prose / a Mermaid `Configured` node isn't read as a manifest (issue #1)
@@ -100,6 +104,84 @@ def _is_environ_get(func) -> bool:
     return isinstance(func, ast.Attribute) and func.attr == "get" and _is_environ(func.value)
 
 
+def _settings_keys(text: str) -> set[str]:
+    """Environment keys declared as pydantic-settings *fields*.
+
+    The third way a project reads configuration, and the one with no call to find: pydantic-settings
+    populates typed class attributes from the environment at import time. A scanner looking for
+    `os.getenv` therefore concludes nothing reads them — which on `fastapi-template` reported all 18
+    declared keys as dangling, and left `undocumented_config` unable to fire in the other direction, so
+    the config half of `drift` was inert on the shape most modern FastAPI code uses.
+
+    **Precision matters more than recall here.** A class is only scanned if it reaches `BaseSettings`,
+    directly or through another class in the same file. Matching any class whose name ends in `Settings`
+    would sweep up every `WorkerSettings` dataclass in the tree and turn its annotated attributes into
+    environment keys, which is worse than the blind spot.
+    """
+    import ast
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:
+        return set()
+
+    settings_classes: set[str] = set()
+    for _ in range(3):                     # resolve a short inheritance chain; deeper is vanishingly rare
+        for cls in [n for n in ast.walk(tree) if isinstance(n, ast.ClassDef)]:
+            for b in cls.bases:
+                name = ast.unparse(b).split(".")[-1]
+                if name == "BaseSettings" or name in settings_classes:
+                    settings_classes.add(cls.name)
+
+    keys: set[str] = set()
+    for cls in [n for n in ast.walk(tree) if isinstance(n, ast.ClassDef)]:
+        if cls.name not in settings_classes:
+            continue
+        prefix = _env_prefix(cls)
+        for node in cls.body:
+            if not isinstance(node, ast.AnnAssign) or not isinstance(node.target, ast.Name):
+                continue
+            field = node.target.id
+            if field == "model_config" or field.startswith("_"):
+                continue
+            alias = _field_alias(node.value)
+            # pydantic matches environment variables case-insensitively, so a field `debug` is set by
+            # `DEBUG`. Reporting only the lowercase form would make every declared key look undeclared.
+            keys.add(alias or (prefix + field).upper())
+    return keys
+
+
+def _env_prefix(cls) -> str:
+    """`env_prefix` from `model_config = SettingsConfigDict(...)` or the older inner `class Config:`."""
+    import ast
+    for node in cls.body:
+        if isinstance(node, ast.Assign) and any(getattr(t, "id", "") == "model_config" for t in node.targets):
+            for kw in getattr(node.value, "keywords", []):
+                if kw.arg == "env_prefix" and isinstance(kw.value, ast.Constant):
+                    return str(kw.value.value)
+        if isinstance(node, ast.ClassDef) and node.name == "Config":
+            for inner in node.body:
+                if (isinstance(inner, ast.Assign)
+                        and any(getattr(t, "id", "") == "env_prefix" for t in inner.targets)
+                        and isinstance(inner.value, ast.Constant)):
+                    return str(inner.value.value)
+    return ""
+
+
+def _field_alias(value) -> str:
+    """An explicit `Field(alias=...)` / `validation_alias=...`, which overrides the field name.
+
+    `AliasChoices(...)` is not handled — it names several, and picking one would be a guess. Such a field
+    falls back to its name, which is the conservative direction.
+    """
+    import ast
+    if not (isinstance(value, ast.Call) and getattr(value.func, "id", "") == "Field"):
+        return ""
+    for kw in value.keywords:
+        if kw.arg in ("alias", "validation_alias") and isinstance(kw.value, ast.Constant):
+            return str(kw.value.value)
+    return ""
+
+
 def _env_wrappers(text: str) -> dict[str, int]:
     """Python functions that read the environment using one of their own parameters.
 
@@ -152,6 +234,7 @@ def read_config_keys(root: Path, source_files: set[str], report_unresolved: bool
 
     unresolved = 0
     for text in texts.values():
+        keys |= _settings_keys(text)
         for pat in _ENV_READS:
             keys.update(pat.findall(text))
         for pat in _ENV_READ_ANY:
