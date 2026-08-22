@@ -795,6 +795,33 @@ def status(project: Path = typer.Option(Path("."), help="Target repo root")) -> 
                           "draws nothing. A document\n         whose subject is a set of relationships is "
                           "where prose about directionality loses the reader.")
 
+    # Assignment is not description. A `**Covers:**` glob proves a file is claimed; it says nothing about
+    # whether the claiming document mentions it. Calibration round 4 scored 727/727 assigned and 1.00 on
+    # the deterministic rubric with a whole cross-cutting mechanism — a 17-line module wiring an
+    # optional ORM read cache — never named anywhere in the artifact.
+    from .described import described as run_described
+    from .drift import _source_files
+    desc = run_described(config, _source_files(config))
+    if desc.considered:
+        groups = desc.by_package()
+        console.print(f"\n[bold]Described[/] — of {desc.considered} modules assigned to a subsystem, "
+                      f"[bold]{desc.mentioned}[/] ({desc.pct}%) are named in some document"
+                      + (f", {desc.grouped} of them only as part of a described directory" if desc.grouped
+                         else ""))
+        if groups:
+            for pkg, us in groups.items():
+                console.print(f"  [yellow]{len(us):3}[/] unnamed under [bold]{pkg}[/]"
+                              f"  ({sum(u.lines for u in us)} lines)")
+            worst = next(iter(groups.values()))
+            for u in worst[:4]:
+                console.print(f"        {u.path}  [dim]{u.lines} lines[/]")
+            console.print("  [dim]A module no document names is assigned, not described. A large count "
+                          "under one package is often a\n  deliberate choice to describe a tree "
+                          "collectively — read the list rather than the number.[/]")
+        if not desc.tests_described and desc.test_files:
+            console.print(f"  [yellow]{desc.test_files} test files[/] counted in coverage, and no document "
+                          f"discusses the test suite.")
+
     console.print(
         f"\n[bold]{report.documented_packages} of {len(report.packages)} packages[/] have documented code · "
         f"[bold]{report.pct}%[/] of {report.total} source files covered · "
