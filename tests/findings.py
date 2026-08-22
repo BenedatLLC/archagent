@@ -69,6 +69,10 @@ class Capture:
     history_ran: bool = False
     commits_seen: int = 0
     mining_failed: bool = False
+    #: "yes" / "no" / "" for never checked. Three states, and collapsing them loses the one that matters:
+    #: an empty field must not read as a pass. Set after `check`, not at capture time, because a single
+    #: capture cannot know.
+    deterministic: str = ""
 
     @property
     def ids(self) -> set[str]:

@@ -1605,7 +1605,50 @@ metric is precisely how three means across three different briefs came to look l
 A new `precision` run kind records a spot-check round, which is not a calibration — calibration scores an
 artifact — and forcing the two under one name would put different measurements in one series.
 
-### 22.6 What this still does not do
+### 22.6 `--repeat` on calibration and precision rounds
+
+Determinism has never once been checked. `selfeval.py score --kind calibration` (and `--kind precision`)
+therefore captures twice by default; `--no-repeat` opts out and `--repeat` forces it on any kind. A
+calibration round costs hours of a reviewer's time, so a second `evaluate` run is noise against it.
+
+The verdict is written onto the capture (`deterministic: yes | no | ""`), not just printed. Three states,
+and the empty one means *never checked* — an empty field must not read as a pass.
+
+First result: archagent and fastapi-template both come back `yes`.
+
+### 22.7 The group B/C spot-check, and the source problem it exposed
+
+Groups B and C had never been labelled. Scoping a round to them (`spotcheck.py generate --groups B,C`)
+turned out to need two changes rather than a filter.
+
+**The pinned corpus cannot supply the evidence.** `tests/corpus/*.json` are regression baselines: they
+store only the fields that must not change, so `detail` and `recommendation` are stripped. Group E and F
+findings survive that — their evidence is a file or a value set — but a group B finding read from a
+baseline is two subsystem names and nothing else. Asking a reviewer about that is not a spot-check; it
+asks them to reconstruct the finding and then grade their own reconstruction, and the number that comes
+back would describe that exercise.
+
+`evidence_is_usable` therefore refuses any item carrying nothing beyond its subjects, and `generate`
+prints what it skipped instead of quietly shrinking the denominator. The test is whether a measurement
+survived, not how long it is: a first version required six words and rejected `god-component`'s
+`70/122 files (57%)`, which is the entire finding.
+
+**And the corpus repositories cannot produce these findings at all.** Groups B and C need `**Tier:**` and
+`**Connects:**` metadata, which only a repository with an archagent artifact has. datasette, django and
+litellm have none. That is the real reason four groups have never been labelled, and it is
+[#9](https://github.com/BenedatLLC/archagent/issues/9) again in a new place: a corpus assembled for
+checks that need only source and history, asked a question it cannot answer.
+
+So `collect` now reads the `evaluate` captures of §22.1 as well as the baselines, preferring the capture
+where a finding appears in both. This is the first payoff from capturing: the B/C round exists because
+the data does.
+
+**Round 2 is 14 items across 2 repositories** (archagent at `fe2222b`, fastapi-template at `0.9.0`),
+covering `layer-inversion`, `layer-skip`, `unstable-interface`, `cycle-subsystem` and `god-component`.
+Two repositories is thin, and `generate` warns when a round draws on fewer than two. Whatever precision
+comes back is quoted with its interval and its sources, the way round 1's was.
+
+### 22.8 What this still does not do
 
 It does not measure whether a finding is true. Three signals of twenty have that evidence and this
 changes none of it. What it changes is that the data to produce it now accumulates by default instead of

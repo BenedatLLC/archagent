@@ -209,3 +209,67 @@ def test_precision_is_reported_strictly_and_leniently():
     assert out["precision_strict"] == pytest.approx(0.5)
     assert out["precision_lenient"] == pytest.approx(0.75)
     assert (out["confirmed"], out["partial"], out["dismissed"]) == (2, 1, 1)
+
+
+# --- scoping a round to signal groups (B/C have never been labelled) --------------------------------
+
+def test_groups_resolve_to_signs():
+    from spotcheck import signs_in
+    assert "layer-inversion" in signs_in("B")
+    assert "god-component" in signs_in("C")
+    assert set(signs_in("B,C")) == set(signs_in("B")) | set(signs_in("C"))
+
+
+def test_an_unknown_group_is_refused_rather_than_returning_nothing():
+    """An empty tuple would generate a worksheet with no items and read as "nothing left to label",
+    which is the opposite of what a typo means."""
+    from spotcheck import signs_in
+    with pytest.raises(ValueError, match="unknown group"):
+        signs_in("B,Z")
+
+
+def test_every_sign_belongs_to_exactly_one_group():
+    from spotcheck import GROUPS
+    seen = [s for signs in GROUPS.values() for s in signs]
+    assert len(seen) == len(set(seen))
+
+
+def test_the_group_table_covers_every_sign_evaluate_emits():
+    """A signal added to `evaluate` and forgotten here is invisible to `--groups`, so a round scoped by
+    group would silently never ask about it."""
+    import re
+    from pathlib import Path
+
+    from spotcheck import GROUPS
+    src = (Path(__file__).resolve().parents[1] / "src" / "archagent" / "evaluate.py").read_text()
+    emitted = set(re.findall(r'sign="([a-z0-9-]+)"', src))
+    known = {s for signs in GROUPS.values() for s in signs}
+    assert emitted <= known, sorted(emitted - known)
+
+
+# --- refusing items a reviewer could not judge ------------------------------------------------------
+
+def test_a_finding_with_only_subject_names_is_not_askable():
+    """The pinned corpus keeps only fields that must not change, so it strips `detail`. A group B finding
+    read from there is two subsystem names — asking about it would have the reviewer reconstruct the
+    finding and then grade their own reconstruction."""
+    from spotcheck import evidence_is_usable
+    assert not evidence_is_usable("- owner: `backend-core`\n- also: `backend-domain`")
+
+
+def test_a_finding_carrying_its_measurement_is_askable():
+    from spotcheck import evidence_is_usable
+    assert evidence_is_usable("- owner: `drift`\n- measured: 2-node tiny cycle (2 edges, max weight 5)")
+
+
+def test_a_short_measurement_is_still_askable():
+    """`70/122 files (57%)` is the whole of a god-component finding and is immediately judgeable. A first
+    version required six words and rejected it — length was never the question."""
+    from spotcheck import evidence_is_usable
+    assert evidence_is_usable("- owner: `frontend-app`\n- measured: 70/122 files (57%)")
+
+
+def test_a_value_set_is_askable_without_a_measurement():
+    """How group F items have always arrived."""
+    from spotcheck import evidence_is_usable
+    assert evidence_is_usable("- owner: `a.py`\n- values: eu, us")

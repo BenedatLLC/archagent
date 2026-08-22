@@ -58,6 +58,12 @@ def _arch_dir(root: Path) -> str:
     return load_config(root).arch_dir
 
 
+#: Run kinds whose findings are captured twice by default. A calibration round costs hours of a
+#: reviewer's time, so a second `evaluate` run is noise against it — and determinism has never once been
+#: checked, which makes it exactly the assumption most likely to be wrong.
+_REPEAT_BY_DEFAULT = {"calibration", "precision"}
+
+
 def do_findings(path: Path, repeat: bool = False, until: str | None = None) -> Path | None:
     """Capture `evaluate` output beside the artifact, and run the judge-free checks over it.
 
@@ -79,9 +85,14 @@ def do_findings(path: Path, repeat: bool = False, until: str | None = None) -> P
         print(f"\n  findings NOT captured: {e}")
         return None
 
+    second = capture(root, repo=root.name, archagent=tool_info().stamp(),
+                     captured_at=cap.captured_at, until=until) if repeat else None
+    rpt = check(cap, root, repeat=second)
+    if second is not None:
+        # Recorded on the capture itself so the verdict travels with the data rather than living only in
+        # this run's terminal output, which is where the last several determinism questions went to die.
+        cap.deterministic = "no" if any(p.kind == "nondeterminism" for p in rpt.problems) else "yes"
     dest = save(RESULTS / root.name / f"findings-{cap.target_rev}.json", cap)
-    rpt = check(cap, root, repeat=capture(root, repo=root.name, archagent=tool_info().stamp(),
-                                          captured_at=cap.captured_at, until=until) if repeat else None)
 
     print(f"\n{root.name} @ {cap.target_rev} — evaluate findings\n")
     print(f"  {rpt.summary()}")
@@ -97,6 +108,11 @@ def do_findings(path: Path, repeat: bool = False, until: str | None = None) -> P
         print("\n  history mining FAILED — every history-based signal in this capture is void")
     print(f"\n  written to {dest}")
     return dest
+
+
+def _repeat_for(kind: str, explicit: bool | None) -> bool:
+    """Whether to capture twice. An explicit `--repeat` / `--no-repeat` always wins over the kind."""
+    return explicit if explicit is not None else kind in _REPEAT_BY_DEFAULT
 
 
 def do_score(path: Path, arch_dir: str | None, rev: str = "", changed: set[str] | None = None,
@@ -267,10 +283,18 @@ if __name__ == "__main__":
     s.add_argument("--rev", default=""); s.add_argument("--out")
     s.add_argument("--no-findings", action="store_true",
                    help="skip the evaluate capture (it is on by default — the output is not recoverable later)")
-    s.add_argument("--repeat", action="store_true",
+    s.add_argument("--kind", default="scoring", choices=sorted({"scoring", "calibration", "precision",
+                                                               "noise-floor", "checklist", "recurrence"}),
+                   help="the run kind; calibration and precision capture findings twice by default")
+    s.add_argument("--repeat", dest="repeat", action="store_true", default=None,
                    help="capture twice and check the two runs agree (costs a second evaluate run)")
+    s.add_argument("--no-repeat", dest="repeat", action="store_false",
+                   help="capture once even on a calibration run")
     fi = sub.add_parser("findings", help="capture evaluate output on its own, without scoring")
-    fi.add_argument("path"); fi.add_argument("--repeat", action="store_true")
+    fi.add_argument("path")
+    fi.add_argument("--kind", default="scoring")
+    fi.add_argument("--repeat", dest="repeat", action="store_true", default=None)
+    fi.add_argument("--no-repeat", dest="repeat", action="store_false")
     fi.add_argument("--until", help="bound the history, as evaluate --until")
     b = sub.add_parser("brief"); b.add_argument("path"); b.add_argument("--second-run", action="store_true")
     b.add_argument("--force", action="store_true", help="overwrite a completed review")
@@ -292,9 +316,10 @@ if __name__ == "__main__":
     if args.cmd == "judged":
         do_judged(Path(args.path), Path(args.review), args.by); raise SystemExit(0)
     if args.cmd == "findings":
-        do_findings(Path(args.path), args.repeat, args.until); raise SystemExit(0)
-    data = do_score(Path(args.path), args.arch_dir, args.rev,
-                    skip_findings=args.no_findings, repeat=args.repeat)
+        do_findings(Path(args.path), _repeat_for(args.kind, args.repeat), args.until)
+        raise SystemExit(0)
+    data = do_score(Path(args.path), args.arch_dir, args.rev, skip_findings=args.no_findings,
+                    repeat=_repeat_for(args.kind, args.repeat))
     if args.out:
         out = Path(args.out); out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(json.dumps(data, indent=2) + "\n")

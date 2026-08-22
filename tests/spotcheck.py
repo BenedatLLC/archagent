@@ -39,6 +39,54 @@ from pathlib import Path
 VERDICTS = ("confirm", "dismiss", "partial", "unsure")
 SCORE_VERDICTS = ("agree", "too-high", "too-low", "unsure")
 
+#: The signal groups, so a round can be scoped to the ones with no evidence yet. Rounds so far have
+#: covered E (`change-prone-file`, also validated predictively by the defect study) and F
+#: (`scattered-source-of-truth`, `enum-value-escape`). B, C, D and A have never been labelled at all.
+GROUPS: dict[str, tuple[str, ...]] = {
+    "A": ("duplicated-source-of-truth", "shared-persistency", "service-intimacy", "shared-library"),
+    "B": ("layer-inversion", "layer-skip", "unstable-dependency", "unstable-interface",
+          "implicit-coupling", "extraneous-adjacent-connector"),
+    "C": ("god-component", "cycle-subsystem", "cycle-service", "distributed-monolith"),
+    "D": ("hardcoded-endpoint", "no-request-tracing", "trace-chain-gap", "permissive-origin",
+          "server-side-fetch"),
+    "E": ("change-prone-file",),
+    "F": ("scattered-source-of-truth", "enum-value-escape"),
+}
+
+
+def signs_in(groups: str) -> tuple[str, ...]:
+    """The signs belonging to a comma-separated group list, e.g. `"B,C"`.
+
+    Refuses an unknown group rather than returning an empty tuple, which would silently generate a
+    worksheet with nothing on it and read as "no findings left to label".
+    """
+    out: list[str] = []
+    for g in (x.strip().upper() for x in groups.split(",") if x.strip()):
+        if g not in GROUPS:
+            raise ValueError(f"unknown group {g!r}; known groups are {', '.join(sorted(GROUPS))}")
+        out += GROUPS[g]
+    return tuple(out)
+
+
+def evidence_is_usable(evidence: str) -> bool:
+    """Is there enough here for a reviewer to reach a verdict without re-deriving the finding?
+
+    **The guard that makes a group B/C round possible at all.** Those findings carry their reasoning in
+    `detail` — *"extraction (infra) depends up on drift (domain)"*, *"4 subsystems depend on drift; it
+    co-changes frequently with cli, evaluate, extraction"* — while group F carries it in a value set. The
+    pinned corpus baselines store neither: they keep only the fields that must not change, so a B/C
+    finding read from one is a pair of subsystem names and nothing else.
+
+    A worksheet item like that is not a spot-check. It asks the reviewer to reconstruct the finding from
+    scratch and then grade their own reconstruction, and whatever number comes back would describe that
+    exercise. Better to refuse the item and say the source cannot supply it.
+
+    The test is **whether anything beyond the subject names survived**, not how much prose there is. A
+    first version required six words and rejected `god-component`'s `70/122 files (57%)` — which is the
+    entire finding, is immediately judgeable, and is four words. Length was never the question.
+    """
+    return any(ln.strip().startswith(("- values:", "- measured:")) for ln in evidence.splitlines())
+
 
 # --- identity -------------------------------------------------------------------------------
 
