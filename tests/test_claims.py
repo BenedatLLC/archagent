@@ -7,6 +7,8 @@ that goes into version control.
 
 from pathlib import Path
 
+import shutil
+
 import pytest
 
 from claims import (Claim, check, judge, leaves_the_root, load, looks_like_a_secret, run,
@@ -146,12 +148,20 @@ def test_the_refusal_does_not_echo_what_it_refused(tmp_path):
 
 # --- execution --------------------------------------------------------------------------------------
 
+#: Two tests below run a real `rg`. Skipped rather than failed where it is absent: they assert what the
+#: runner does with a working pipeline, and "tool not found: rg" is the runner behaving correctly, not a
+#: defect. CI installs ripgrep so they are exercised there rather than quietly skipped everywhere.
+needs_rg = pytest.mark.skipif(shutil.which("rg") is None, reason="ripgrep not installed")
+
+
+@needs_rg
 def test_a_pipeline_runs_without_a_shell(tmp_path):
     (tmp_path / "a.py").write_text("x\ny\n")
     (tmp_path / "b.txt").write_text("z\n")
     out, err = run("ls | rg '\\.py$' | wc -l", tmp_path)
     assert err is None and out == "1"
 
+@needs_rg
 def test_a_command_finding_nothing_is_an_answer_not_an_error(tmp_path):
     """`rg` exits 1 when it matches nothing, and for an `absent` claim that is precisely the passing
     case. Treating a non-zero exit as a failure would make every `absent` claim unrunnable."""

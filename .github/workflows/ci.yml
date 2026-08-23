@@ -13,6 +13,12 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: "3.13"
+      # `rg` is not on the GitHub runner image, and two claims tests exercise a real `rg` pipeline.
+      # Without it CI was red for seven days and thirty-odd commits — which is worse than having no gate,
+      # because a red workflow nobody watches trains everyone to ignore the one that matters.
+      - name: Install ripgrep
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ripgrep
+
       - name: Install (incl. dev + bundled checkers)
         run: uv sync --group dev
       - name: Run tests

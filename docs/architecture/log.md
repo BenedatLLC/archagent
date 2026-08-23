@@ -182,3 +182,15 @@ worked example that has drifted teaches the wrong thing.
 commit. And the staleness check cannot be asserted from a working tree at all — it compares commit
 timestamps, so editing the document does not clear it and the test stays red until the fix is committed.
 That belongs in CI, which runs on committed state; the local test asserts the other nine categories.
+
+### The gate that already existed had been red for a week
+
+Adding the three gates above surfaced something worse than their absence: **CI had been failing since
+2026-08-16 — seven days and thirty-odd commits.** Two claims tests run a real `rg` pipeline, and ripgrep
+is not on the GitHub runner image, so every push since the computed-claims prototype landed had reported
+failure and nobody had looked.
+
+A red workflow nobody watches is worse than no workflow: it trains everyone to ignore the signal, which
+is what would have happened to the three new gates. CI now installs ripgrep so those tests are actually
+exercised, and they carry a `skipif` so a contributor without `rg` is not blocked by a tool the project
+does not otherwise require.
