@@ -316,7 +316,10 @@ def do_package(path: Path, out: Path | None = None) -> None:
 
     print(f"\npackage at {out}")
     print(f"  repo/ @ {rev} (artifact at {arch}/), evaluate-report.txt, {sheet.name}, REVIEW.md")
-    print(f"  {len(cap.findings)} finding(s) to rate for impact")
+    from rubric_judged import _sample_findings
+    sampled, total = _sample_findings(cap.findings)
+    print(f"  {len(sampled)} of {total} finding(s) to rate for impact"
+          if len(sampled) < total else f"  {total} finding(s) to rate for impact")
 
 
 def _evaluate_report(root: Path) -> str:

@@ -395,6 +395,35 @@ def render_brief(artifact_path: str, repo: str, second_run: bool = False,
     return "\n".join(lines) + "\n"
 
 
+#: How many findings a reviewer is asked to rate for impact. `evaluate` on a real repository produces
+#: dozens — 65 on dspy — and asking for all of them turns a two-hour review into a data-entry task, which
+#: is how a reviewer starts skimming and every rating after the twentieth becomes noise.
+#:
+#: The *whole* report still ships in `evaluate-report.txt`, because two of the three report criteria are
+#: about coverage and ordering and cannot be judged from a subset.
+IMPACT_SAMPLE_CAP = 20
+
+
+def _sample_findings(findings: list[dict], cap: int = IMPACT_SAMPLE_CAP) -> tuple[list[dict], int]:
+    """`(sampled, total)` — spread across signs, so one prolific signal cannot dominate the ratings.
+
+    Deterministic: round-robin over signs in sorted order, taking findings in the order `evaluate`
+    reported them. A reviewer re-generating the package gets the same sheet, and two reviewers of the same
+    run rate the same items.
+    """
+    if len(findings) <= cap:
+        return findings, len(findings)
+    by_sign: dict[str, list[dict]] = {}
+    for f in findings:
+        by_sign.setdefault(f.get("sign", ""), []).append(f)
+    out: list[dict] = []
+    while len(out) < cap and any(by_sign.values()):
+        for sign in sorted(by_sign):
+            if by_sign[sign] and len(out) < cap:
+                out.append(by_sign[sign].pop(0))
+    return out, len(findings)
+
+
 def _evaluate_section(cap) -> list[str]:
     """The `evaluate` half of the brief: the findings, then three questions about the report.
 
@@ -415,7 +444,7 @@ def _evaluate_section(cap) -> list[str]:
         "ask whether a reader could act on this, whether it claims more than it showed, and whether it is",
         "clear about what never ran.",
         "",
-        f"## The findings ({len(cap.findings)})",
+        f"## The findings",
         "",
         "**Rate each one for impact** in the block beneath it, and say why in a sentence. This is the "
         "judgement",
@@ -435,10 +464,19 @@ def _evaluate_section(cap) -> list[str]:
         "that reports true trivia trains people to skim, and no amount of accuracy recovers from that.",
         "",
     ]
+    sampled, total = _sample_findings(cap.findings)
+    if total > len(sampled):
+        lines += [
+            f"`evaluate` reported **{total}** findings. You are asked to rate **{len(sampled)}** of them,",
+            "spread across the signal kinds so no single prolific one dominates. **The full report is in**",
+            "**`evaluate-report.txt`** — read it for the two criteria below that are about coverage and",
+            "ordering, which a subset cannot answer.",
+            "",
+        ]
     if not cap.findings:
         lines += ["_None reported._ That is a result, not a blank: read the coverage list below before "
                   "concluding anything from it.", ""]
-    for f in cap.findings:
+    for f in sampled:
         subjects = ", ".join(f.get("subjects", [])) or "—"
         lines += [
             f"### `{f['sign']}` — {f.get('title', '')}  ",

@@ -404,3 +404,38 @@ def test_the_summary_reports_a_distribution_not_a_mean():
     assert "mean" not in s
     assert s["not_a_finding"] == 1 and s["noise"] == 2 and s["worth_acting_on"] == 1
     assert s["rated"] == 3 and s["unrated"] == 2
+
+
+def test_a_large_finding_set_is_sampled_not_dumped():
+    """`evaluate` produced 65 findings on dspy. Asking a reviewer to rate all of them turns a two-hour
+    review into data entry, and every rating after the twentieth is noise."""
+    from rubric_judged import IMPACT_SAMPLE_CAP, _sample_findings
+    many = [_finding(fid=f"s{i%5}:x{i}:0", sign=f"sign{i%5}") for i in range(65)]
+    sampled, total = _sample_findings(many)
+    assert total == 65 and len(sampled) == IMPACT_SAMPLE_CAP
+
+
+def test_the_sample_is_spread_across_signs():
+    """One prolific signal must not fill the sheet: on dspy, `implicit-coupling` alone was 13 of 65."""
+    from rubric_judged import _sample_findings
+    many = ([_finding(fid=f"a:{i}:0", sign="implicit-coupling") for i in range(40)]
+            + [_finding(fid=f"b:{i}:0", sign="god-component") for i in range(3)])
+    sampled, _ = _sample_findings(many, cap=10)
+    signs = {f["sign"] for f in sampled}
+    assert signs == {"implicit-coupling", "god-component"}
+
+
+def test_sampling_is_deterministic():
+    """Two reviewers of the same run must rate the same items, and a regenerated package must match."""
+    from rubric_judged import _sample_findings
+    many = [_finding(fid=f"s{i%4}:x{i}:0", sign=f"sign{i%4}") for i in range(50)]
+    a, _ = _sample_findings(many)
+    b, _ = _sample_findings(many)
+    assert [f["id"] for f in a] == [f["id"] for f in b]
+
+
+def test_a_small_finding_set_is_not_sampled():
+    from rubric_judged import _sample_findings
+    few = [_finding(fid=f"a:{i}:0") for i in range(6)]
+    sampled, total = _sample_findings(few)
+    assert len(sampled) == 6 and total == 6
