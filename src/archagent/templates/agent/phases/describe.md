@@ -112,14 +112,17 @@ the user first, and never overwrite their existing content.
    what it should (try a quick local violation if unsure). Fix or refine. Also run **`archagent lint-docs`**
    to catch Mermaid syntax errors in the diagrams you just wrote (e.g. a stray second `:` in a
    `stateDiagram-v2` label) before they land — a malformed diagram only breaks when a human renders it.
-7. **Evaluate health.** Run `archagent evaluate` (the `evaluate` skill judges the candidates). For each
-   confirmed *system-level* smell, decide with the team: change the design, or accept it and record why.
-   Turn accepted fixes into an ADR under `decisions/` and — where enforceable — a `check` invariant so it
-   can't regress. This is how `evaluate` feeds back into the artifact and the enforcement tier.
-   *Expect some candidates to be dismissible:* a shared kernel/`foundation` that every layer depends on will
-   always show `layer-skip`, and flat peer capabilities under one orchestrator show skips whenever the
-   orchestrator calls a capability directly — both are correct. Consider modelling flat peer subsystems as a
-   single `domain` tier rather than forcing a strict `ui → app → domain → infra` ladder.
+7. **Evaluate health.** Run `archagent evaluate`, then **invoke `/archagent-evaluate` to judge what it
+   reports** — the signals are candidates, and that skill is where reading them is explained. Do not skip
+   it and do not interpret the raw output here; a candidate acted on without judgement is how a correct
+   measurement becomes a wrong change.
+   For each *confirmed* system-level smell, decide with the team: change the design, or accept it and
+   record why. Turn accepted fixes into an ADR under `decisions/` and — where enforceable — a `check`
+   invariant so it can't regress. This is how `evaluate` feeds back into the artifact and the enforcement
+   tier.
+   **Never re-tier a subsystem to silence a finding.** If tests or migrations show up as layering
+   violations, the fix is `**Tier:** test` / `migration` (see step 3), not folding them into a production
+   layer — the model has to keep describing the system.
 8. **Index + log.** Refresh `architecture/index.md` and append a line to `architecture/log.md` —
    **including the target revision and the archagent version** (`archagent --version`), because every
    claim here is relative to both. A reader who hits a command this artifact cites but their build lacks
@@ -267,11 +270,12 @@ design-review time (does a proposed design fit the architecture?) and periodical
 - **Refresh what changed.** Update the affected `subsystems/<name>.md` and reconcile the invariants table
   (add rules for new boundaries; retire rules for removed ones).
 - **Evaluate the architecture's health.** Beyond doc-vs-code drift, run `archagent evaluate` for
-  *system-level smells* (god components, cycles, shotgun surgery, shared persistence, leaky layering).
-  These are not record fixes — each confirmed one is a design decision: change the structure, or accept it
-  with an ADR. Graduate the fixes you want to hold into `check` invariants (`/archagent-evaluate` does the
-  judging, clustering, and prioritizing).
+  *system-level smells* (god components, cycles, shotgun surgery, shared persistence, leaky layering),
+  then **invoke `/archagent-evaluate` to judge the candidates** — it does the judging, clustering and
+  prioritizing, and it is where reading each signal is explained. These are not record fixes: each
+  confirmed one is a design decision — change the structure, or accept it with an ADR. Graduate the fixes
+  you want to hold into `check` invariants.
 - **For a new design:** describe the proposed design first, check it against the existing architecture and
-  invariants, and **run `archagent evaluate` to catch smells the change would introduce** — before it's
-  built. Only update the artifact to match once it's built.
+  invariants, and **run `archagent evaluate` (then `/archagent-evaluate`) to catch smells the change would
+  introduce** — before it's built. Only update the artifact to match once it's built.
 - **Record it:** append a line to `architecture/log.md` and add/adjust ADRs in `architecture/decisions/`.

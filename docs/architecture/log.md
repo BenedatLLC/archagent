@@ -108,3 +108,30 @@ is not the manifest it is still a second declaration rather than a use.
 Obstudio's seven remaining dangling keys are a different shape and are left: all are read by its Go core,
 which archagent cannot parse, and two of those are *written* by the TypeScript extension for the Go
 process to read.
+
+## 2026-08-23 — the describe → evaluate hand-off, and where signal guidance lives
+
+Prompted by a question about merging `evaluate` into `describe`. The merge turned out to be mostly done
+already — `describe` runs `archagent evaluate` in its main flow and again on the update path — so the two
+commands are not really two things a user must remember. What the question surfaced instead were three
+defects in the prompts.
+
+**The hand-off was an allusion.** Step 7 said "the `evaluate` skill judges the candidates" and never named
+`/archagent-evaluate`, so whether it was invoked was left to chance. A user who lands on raw candidate
+signals at the end of a long describe run has the interpretation guide nowhere in front of them. Now an
+instruction, in the main flow and on the update path.
+
+**The signal guidance was in the wrong prompt.** `describe` carried the `layer-skip` caveats while
+`evaluate` — the skill whose entire purpose is interpreting signals — did not mention the sign at all. Moved,
+and expanded with what the labelling rounds established: `layer-inversion` was right 3 of 3 on production
+code and wrong 4 of 4 on test and migration packages, and `layer-skip` was dismissed every time.
+
+**And the guidance had gone stale.** It claimed a shared kernel "will always show `layer-skip`" and that
+flat peers show skips "whenever the orchestrator calls a capability directly". Neither survives the
+narrowing: a skip now requires the intermediate tier to be occupied, so `app -> domain` reports nothing.
+Worse, it advised modelling flat peers as a single tier "rather than forcing a strict ladder" — telling a
+reader to distort the model to quiet a false positive that had been fixed twice, and the opposite of what
+issue #26 established.
+
+`tests/test_prompts.py` is new. The prompts ship as package data and nothing imported them, so no test had
+ever read one.

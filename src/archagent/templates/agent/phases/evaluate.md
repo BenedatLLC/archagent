@@ -91,7 +91,35 @@ Keep it disciplined:
   Depend toward stability; put a stable interface in front of the volatile target.
 - **Leaky abstraction — layer inversion / skip** (B) — a lower tier depends up on a higher one, or a tier
   reaches past its neighbor to a distant one. Needs `**Tier:**` on the subsystem docs. Route through the
-  adjacent layer, or invert with an interface.
+  adjacent layer, or invert with an interface. **These two have been labelled by an independent reviewer
+  and read very differently — see below.**
+
+### Reading the layering signals
+
+Blind labelling across three repositories put `layer-inversion` at 3 of 7 and `layer-skip` at 0 of 3, and
+the pattern in the misses is more useful than either number.
+
+**`layer-inversion` on production code was right every time it was checked** (3 of 3). Every dismissal was
+a test or migration package tiered onto the production ladder — usually `infra`, the bottom rank, which
+makes everything the tests import read as "upward". If you see an inversion whose source is tests,
+migrations, scripts or startup tooling, **the finding is a mis-tiering, not a layering defect**: fix the
+artifact with `**Tier:** test` / `migration` / `ops`, which take that subsystem off the ladder. `archagent
+drift` now reports this directly. Never collapse real layers together to quiet it — the model has to keep
+describing the system.
+
+**`layer-skip` was dismissed every time it was checked**, so weight it accordingly and read the specific
+shape before acting:
+
+- It fires only when some subsystem actually occupies the tier being skipped. A gap where no layer exists
+  is not a skip and is no longer reported.
+- A **shared kernel or foundation** that everything depends on will still show skips from the upper tiers.
+  That is a real observation about the design; the question is whether the kernel is *meant* to be reachable
+  directly, and usually it is.
+- An **entry point or composition root** touching several subsystems is doing its job. Reaching across the
+  system is what that tier is for.
+- The tier ranks are **global**, so in a repository with two independent stacks (a frontend and a backend)
+  a skip can name an "intermediate layer" that belongs to the other stack and could never be routed
+  through. Check that the layer it wants you to route through is one this edge could actually reach.
 - **Hard-coded endpoint** (D) — a literal address in code; a barrier to local development and relocation.
   Move to config / service discovery.
 - **No request tracing across services / trace-chain gap** (D) — services make cross-service calls but

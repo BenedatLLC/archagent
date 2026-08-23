@@ -25,6 +25,14 @@ touches nothing else. This is why upgrading never overwrites an authored `invari
 encode: how to describe a system, how to judge findings, how to write a report. They ship in the wheel and
 are the only place a model's instructions live.
 
+**Nothing exercised the prompts until `tests/test_prompts.py`.** They ship as package data and no code
+imports them, so a wrong instruction survived until a person read it — `describe` carried advice to model
+flat peer subsystems as one tier "rather than forcing a strict ladder", which is advice to distort the
+architecture to quiet a false positive that had since been fixed twice. The tests assert the few claims
+worth pinning: that `describe`'s hand-off to `/archagent-evaluate` is an instruction rather than an
+allusion, that signal-reading guidance lives in the `evaluate` prompt, and that no prompt tells a reader
+to re-tier a subsystem to silence a finding.
+
 **One neutral prompt, four destinations.** The same skill bodies are written to `.claude/skills/`,
 `.cursor/skills/`, `.agents/skills/` (Codex) or `.openhands/microagents/` depending on which agents are
 selected. Adding an agent is adding an entry to `KNOWN_AGENTS` and a directory to the map, not writing
