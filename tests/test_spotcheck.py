@@ -497,3 +497,31 @@ def test_a_label_in_one_repo_does_not_suppress_another_repos_finding(tmp_path, m
     b = store.load("repo-b")
     assert "layer-inversion:backend-tests:da39a3ee" in a
     assert "layer-inversion:backend-tests:da39a3ee" not in b, "repo-b must be unaffected"
+
+
+# --- one item per key, showing everything that key covers -------------------------------------------
+
+def test_findings_sharing_a_key_merge_into_one_item():
+    """`finding_key` ignores the non-owner subjects, so `backend-tests`' four layer-inversions are one
+    key. Keeping whichever arrived last showed the reviewer one edge while the label they wrote attached
+    to all four — judging one thing and answering for four, with nothing on the sheet saying so."""
+    m = _kit_module()
+    items = [{"key": "layer-inversion:t:0", "repo": "r", "rev": "v", "sign": "layer-inversion",
+              "evidence": "- owner: `t`\n- also: `api`\n- measured: t depends up on api"},
+             {"key": "layer-inversion:t:0", "repo": "r", "rev": "v", "sign": "layer-inversion",
+              "evidence": "- owner: `t`\n- also: `dom`\n- measured: t depends up on dom"}]
+    merged = m._merge(items)
+    assert len(merged) == 1
+    ev = merged[0]["evidence"]
+    assert ev.count("- measured:") == 2 and "`api`" in ev and "`dom`" in ev
+
+
+def test_the_same_key_in_two_repos_stays_two_items():
+    """Merging on the key alone would fuse two different systems' findings into one item — the same
+    collision that let a fastapi-template label suppress a wardrowbe finding."""
+    m = _kit_module()
+    items = [{"key": "layer-inversion:backend-tests:0", "repo": "repo-a", "rev": "v",
+              "sign": "layer-inversion", "evidence": "- owner: `backend-tests`\n- measured: a"},
+             {"key": "layer-inversion:backend-tests:0", "repo": "repo-b", "rev": "v",
+              "sign": "layer-inversion", "evidence": "- owner: `backend-tests`\n- measured: b"}]
+    assert len(m._merge(items)) == 2

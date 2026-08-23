@@ -90,12 +90,51 @@ def collect(signs: tuple[str, ...] = JUDGED) -> tuple[list[dict], list[dict]]:
             if f["sign"] in signs:
                 it = _item(f, cap["repo"], cap["target_rev"])
                 (usable if evidence_is_usable(it["evidence"]) else unusable).append(it)
-    # A finding can be reached from both sources; the capture wins because it carries more.
-    seen: dict[str, dict] = {}
-    for it in usable:
-        if it["key"] not in seen or len(it["evidence"]) > len(seen[it["key"]]["evidence"]):
-            seen[it["key"]] = it
-    return list(seen.values()), [u for u in unusable if u["key"] not in seen]
+    return _merge(usable), [u for u in unusable if u["key"] not in {x["key"] for x in usable}]
+
+
+def _merge(items: list[dict]) -> list[dict]:
+    """One worksheet item per finding key, showing **every** measurement that key covers.
+
+    `finding_key` is `sign:owner:digest` and ignores the non-owner subjects, so `backend-tests`' four
+    separate `layer-inversion` findings — to `backend-api`, `backend-domain`, `backend-services` and
+    `backend-workers` — are one key. Keeping whichever arrived last showed the reviewer a single edge
+    while the label they wrote attached to all four. They would be judging one thing and answering for
+    four, and nothing on the sheet said so.
+
+    Collapsing by owner is the right unit here: "is `backend-tests` being tiered as infra a defect?" is
+    one question, not four. But then the item has to show the whole basis for it.
+
+    A key reachable from both the corpus baseline and a capture merges too, which is how the capture's
+    `measured` line reaches an item the baseline would have contributed bare.
+    """
+    # Keyed on (repo, key), never key alone. `layer-inversion:backend-tests:...` is the same string in
+    # every repository with a subsystem of that name, and merging across repositories would fuse two
+    # different systems' findings into one item — the same collision that made a fastapi-template label
+    # suppress a wardrowbe finding.
+    by_key: dict[tuple[str, str], dict] = {}
+    for it in items:
+        cur = by_key.get((it["repo"], it["key"]))
+        if cur is None:
+            by_key[(it["repo"], it["key"])] = dict(it)
+            continue
+        subjects = _evidence_lines(cur, "- also:") | _evidence_lines(it, "- also:")
+        measured = _evidence_lines(cur, "- measured:") | _evidence_lines(it, "- measured:")
+        lines = [ln for ln in cur["evidence"].splitlines() if ln.startswith(("- owner:", "- values:"))]
+        if subjects:
+            lines.append("- also: " + ", ".join(sorted(subjects)))
+        lines += [f"- measured: {m}" for m in sorted(measured)]
+        cur["evidence"] = "\n".join(lines)
+    return list(by_key.values())
+
+
+def _evidence_lines(item: dict, prefix: str) -> set[str]:
+    out: set[str] = set()
+    for ln in item["evidence"].splitlines():
+        if ln.startswith(prefix):
+            out |= {p.strip() for p in ln[len(prefix):].split(",") if p.strip()} \
+                if prefix == "- also:" else {ln[len(prefix):].strip()}
+    return out
 
 
 def do_generate(cap: int, reviewer: str, signs: tuple[str, ...]) -> None:
