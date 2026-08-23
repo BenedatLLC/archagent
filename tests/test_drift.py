@@ -438,3 +438,46 @@ def test_a_bare_extension_in_prose_is_not_a_file_reference(tmp_path):
     refs = _file_refs("The suite is `.ts` only, and `frontend/scripts/` holds three `.mjs` tools "
                       "alongside `app/main.py`.")
     assert refs == ["app/main.py"]
+
+
+# --- a subsystem claiming a layer it has no business on (issue #26) ---------------------------------
+
+def test_a_test_only_subsystem_tiered_as_production_is_reported(tmp_path):
+    """Four of seven labelled `layer-inversion` findings came from test or migration packages tiered
+    `infra` — the bottom rank — so everything they imported read as "upward". The artifact says something
+    the code contradicts, which is drift's job rather than a smell."""
+    from archagent.drift import _mistiered
+    assert _mistiered({"backend/tests/test_api.py"}, "infra") == "infra"
+    assert _mistiered({"backend/migrations/env.py"}, "infra") == "infra"
+
+
+def test_a_subsystem_already_off_the_ladder_is_not_reported(tmp_path):
+    """Nothing to correct once the author has said so."""
+    from archagent.drift import _mistiered
+    assert _mistiered({"backend/tests/test_api.py"}, "test") == ""
+    assert _mistiered({"backend/migrations/env.py"}, "migration") == ""
+
+
+def test_a_subsystem_with_no_tier_is_not_reported(tmp_path):
+    from archagent.drift import _mistiered
+    assert _mistiered({"backend/tests/test_api.py"}, None) == ""
+
+
+def test_a_production_subsystem_is_not_reported(tmp_path):
+    from archagent.drift import _mistiered
+    assert _mistiered({"backend/app/api/routes.py"}, "domain") == ""
+
+
+def test_a_subsystem_mixing_production_and_test_code_is_not_reported(tmp_path):
+    """**Every** covered file must be non-production, not merely most. A subsystem holding production code
+    alongside its tests is a production subsystem and belongs on the ladder — flagging it would move the
+    false positives rather than remove them."""
+    from archagent.drift import _mistiered
+    assert _mistiered({"backend/app/svc.py", "backend/tests/test_svc.py"}, "infra") == ""
+
+
+def test_a_subsystem_covering_nothing_is_not_reported(tmp_path):
+    """`all()` over an empty set is True, which would report every doc that declares a tier and covers
+    no resolvable files."""
+    from archagent.drift import _mistiered
+    assert _mistiered(set(), "infra") == ""

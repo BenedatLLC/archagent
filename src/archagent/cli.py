@@ -343,6 +343,7 @@ def drift(
             "extra_deploy_edges": [{"service": a, "depends_on": b} for a, b in result.extra_deploy_edges],
             "connector_mismatches": [{"subsystem": s, "target": t, "declared": d, "observed": o}
                                      for s, t, d, o in result.connector_mismatches],
+            "mistiered": [{"subsystem": s, "tier": tr} for s, tr in result.mistiered],
             "openapi_spec": result.openapi_spec,
             "git_available": result.git_available,
             "covers_declared": result.covers_declared,
@@ -436,6 +437,13 @@ def drift(
 
     if not result.git_available:
         console.print("[dim](git not available — stale-doc check skipped)[/]")
+    if result.mistiered:
+        console.print(f"[yellow]Mis-tiered subsystems ({len(result.mistiered)})[/] — covers only test or "
+                      f"migration code but claims a place on the layer ladder:")
+        for sub, tier in result.mistiered:
+            console.print(f"  {sub} (**Tier:** {tier}) — tests and migrations are not a layer beneath the "
+                          f"code they exercise; use a non-layered tier such as `test` or `migration`")
+        console.print("")
     if not result.covers_declared:
         console.print("[dim](no **Covers:** in subsystem docs — undocumented-code check skipped)[/]")
     if not result.any:

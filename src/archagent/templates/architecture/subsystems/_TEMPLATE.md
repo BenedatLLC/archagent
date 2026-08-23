@@ -26,7 +26,7 @@
      `archagent drift` checks the code's cross-service dependencies against docker-compose depends_on.
      Optional — OMIT for a single-process app (no distinct services). Don't write a placeholder value. -->
 
-**Tier:** <ui | domain | infra>
+**Tier:** <ui | domain | infra — or test / migration / ops for code that is not a layer>
 <!-- The architectural layer this subsystem lives in (e.g. ui / app / domain / infra / data). When set on
      related subsystems, `archagent evaluate` flags leaky abstractions: a lower tier depending up on a
      higher one, or a tier reaching past its neighbor to a distant one. Optional. -->

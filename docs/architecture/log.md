@@ -54,3 +54,33 @@ it adds zero edges — declared and parsed already agree, because `drift` report
 blast radius is exactly the repositories that were blind. obstudio goes from 21 findings to 29, and its
 `implicit-coupling` count drops from 8 to 6 as two co-changing pairs turn out to have a declared
 dependency after all.
+
+## 2026-08-23 — tests are not a layer (issue #26)
+
+Calibration rounds 2 and 3 labelled seven `layer-inversion` findings blind across three repositories and
+the split was total: all three confirmations were production code, all four dismissals were test or
+migration packages. Every dismissed subsystem was tiered `infra` — the bottom rank — so everything it
+imported read as "upward", and one test subsystem produced an inversion against every production
+subsystem it exercised. wardrowbe's produced four.
+
+The cause was `describe`'s vocabulary, not the check: the subsystem template offered
+`<ui | domain | infra>` with no way to say *this is not a layer*, and `infra` was the natural pick for
+test plumbing.
+
+Two changes, chosen together because neither is sufficient. The ADL now **recognises non-layered tier
+tokens** (`test`, `migration`, `ops`, …) and `describe` is told to use them — which stops the problem being
+created. And `drift` now **reports a subsystem that covers only non-production code while claiming a
+layer**, which is a doc-vs-code disagreement rather than a smell, and fixes artifacts that already exist
+by telling the author to correct them rather than working around them.
+
+Validated end to end on wardrowbe: correcting the two tiers takes `layer-inversion` from 7 findings to 2,
+removing exactly the five a reviewer dismissed and keeping exactly the one they confirmed.
+
+`tiers.py` is new, and is a leaf on purpose — `evaluate` already imports `drift`, so the shared vocabulary
+could not live in either without closing a second cycle. It absorbed the three copies of `tier_of` that
+had accumulated.
+
+The drift check catches two of the four known cases. It misses fastapi-template's `backend-ops`, whose
+startup and seed files sit in the app package under no distinguishing path. Inferring intent from
+`backend_pre_start.py` is the name-based guess this project has twice regretted, so it is left to
+`describe`.

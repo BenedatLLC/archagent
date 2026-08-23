@@ -17,6 +17,7 @@ from pathlib import Path
 from .config import Config
 from .drift import _connectors, _service_of
 from .mdutil import is_empty_value, strip_code_fences
+from .tiers import tier_of as _tier_of
 
 GRAPH_START = "<!-- archagent:graph -->"
 GRAPH_END = "<!-- /archagent:graph -->"
@@ -43,11 +44,6 @@ class Subsystem:
     connectors: dict[str, str]  # target -> kind
 
 
-def _tier_of(text: str) -> str | None:
-    m = _TIER.search(text)
-    if not m or is_empty_value(m.group(1)):
-        return None
-    return re.split(r"[\s,|]+", m.group(1).strip())[0].strip("`") or None
 
 
 def collect_subsystems(config: Config) -> list[Subsystem]:

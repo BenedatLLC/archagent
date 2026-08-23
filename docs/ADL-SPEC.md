@@ -223,7 +223,22 @@ or a dependency skipping a tier).
 | 2 | `domain`, `service`, `core`, `business`, `logic`, `usecase` |
 | 1 (bottom) | `infra`, `infrastructure`, `data`, `persistence`, `storage`, `db`, `adapter` |
 
-An unrecognized token is ignored (the layering check is skipped for that subsystem).
+A subsystem MAY instead declare itself **off the ladder**. These tokens are recognized and carry no rank,
+so the layering checks skip the subsystem entirely:
+
+| Not a layer | Recognized tokens |
+|------|-------------------|
+| — | `test`, `tests`, `testing`, `migration`, `migrations`, `ops`, `operations`, `tooling`, `build`, `scripts`, `none` |
+
+**Test and migration packages SHOULD use these.** They are not a layer beneath the code they exercise, and
+placing them on the ladder makes every dependency they legitimately have look like a violation. A test
+package tiered `infra` — the bottom rank — reports an inversion against every production subsystem it
+imports; measured across three repositories, that accounted for four of seven `layer-inversion` findings,
+and an independent reviewer dismissed all four.
+
+An unrecognized token is ignored (the layering check is skipped for that subsystem), so a typo degrades
+to silence rather than to a wrong answer. The recognized non-layered tokens exist so that *deliberately
+off the ladder* and *mistyped* are distinguishable, which a silent skip cannot do.
 
 ## 5. System-Level View (`deployment.md`)
 

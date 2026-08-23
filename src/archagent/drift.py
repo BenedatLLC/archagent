@@ -19,7 +19,7 @@ import re
 import subprocess
 from dataclasses import dataclass, field
 from functools import lru_cache
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 try:
     import tomllib
@@ -27,8 +27,9 @@ except ModuleNotFoundError:  # py < 3.11
     tomllib = None
 
 from .config import Config
-from .configscan import declared_config_keys, read_config_keys
+from .configscan import _is_test_path, declared_config_keys, read_config_keys
 from .connscan import sync_call_targets
+from .tiers import tier_of as _tier_of, tier_rank
 from .mdutil import is_empty_value, strip_code_fences
 from .deployscan import declared_services, extract_service_edges, extract_services
 from .webapi import extract_routes, load_openapi, matches
@@ -66,6 +67,9 @@ class DriftResult:
     missing_deploy_edges: list[tuple[str, str]] = field(default_factory=list)  # code needs it, compose doesn't wire it
     extra_deploy_edges: list[tuple[str, str]] = field(default_factory=list)    # compose wires it, code doesn't need it
     connector_mismatches: list[tuple[str, str, str, str]] = field(default_factory=list)  # (subsystem, target, declared kind, observed kind)
+    #: (subsystem, declared tier) — covers only non-production code but claims a place on the layer
+    #: ladder. Issue #26: the artifact says something the code contradicts, which is this command's job.
+    mistiered: list[tuple[str, str]] = field(default_factory=list)
     openapi_spec: str | None = None  # the committed spec used as the intended interface, if any
     git_available: bool = False
     covers_declared: bool = False  # did any subsystem doc declare **Covers:**? (gates undocumented)
@@ -79,7 +83,7 @@ class DriftResult:
             or self.undocumented_config or self.dangling_config
             or self.undocumented_services or self.dangling_services
             or self.missing_deploy_edges or self.extra_deploy_edges
-            or self.connector_mismatches
+            or self.connector_mismatches or self.mistiered
         )
 
 
@@ -129,6 +133,9 @@ def find_drift(config: Config, until: str | None = None) -> DriftResult:
             svc = _service_of(text)
             if svc:
                 sub_service[doc.stem] = svc
+            mistier = _mistiered(covered_files, _tier_of(text))
+            if mistier:
+                result.mistiered.append((doc.stem, mistier))
 
             # staleness: only subsystem docs describe code, and only when git can tell us
             if result.git_available:
@@ -200,6 +207,42 @@ def _file_refs(text: str) -> list[str]:
         if t not in out:
             out.append(t)
     return out
+
+
+#: A subsystem whose covered files are *entirely* non-production — tests, migrations, fixtures — has no
+#: place on the layer ladder, and saying it does is a claim about the code that the code contradicts.
+#: That makes it drift rather than a smell, which is why it is reported here and not by `evaluate`.
+#:
+#: Issue #26. Seven `layer-inversion` findings were labelled blind across three repositories: all three
+#: confirmations were production code and all four dismissals were test or migration packages, every one
+#: of them tiered `infra` — the bottom rank — so that everything the tests imported read as "upward".
+#:
+#: **Every covered file must be non-production**, not merely most. A subsystem mixing production code with
+#: its tests is a production subsystem and belongs on the ladder; flagging it would move the false
+#: positives rather than remove them.
+#: Directories whose contents are not the product. `scripts` is here because the tier vocabulary already
+#: recognises `scripts` as non-layered, so treating it as production here would contradict the spec.
+#:
+#: Known limit: this catches two of the four mis-tierings the calibration rounds found. It misses
+#: fastapi-template's `backend-ops`, whose startup and seed files sit in the app package under no
+#: distinguishing path, and it would miss any similar case. That is deliberate — inferring "this is
+#: really operational code" from `backend_pre_start.py` is the name-based guess this project has twice
+#: regretted. `describe` emitting the right tier is what covers those; this is the backstop for artifacts
+#: that already exist, and a backstop that only catches the unambiguous cases is still worth having.
+_MIGRATION_DIRS = {"migrations", "migration", "alembic", "versions", "scripts"}
+
+
+def _mistiered(covered: set[str], tier: str | None) -> str:
+    """The declared production tier of a subsystem that covers only non-production code, or "".
+
+    Silent when nothing is covered, when no tier is declared, or when the tier already says the subsystem
+    is off the ladder — there is nothing to correct in any of those.
+    """
+    if not covered or tier_rank(tier) is None:
+        return ""
+    def _non_production(rel: str) -> bool:
+        return _is_test_path(rel) or bool(set(PurePosixPath(rel).parts) & _MIGRATION_DIRS)
+    return tier if all(_non_production(f) for f in covered) else ""
 
 
 def _covers_globs(text: str) -> list[str]:

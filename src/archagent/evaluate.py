@@ -30,6 +30,7 @@ from .history import HistoryProfile, history_profile
 from .investigations import load as _load_investigation
 from .hotspots import MAX_REPORTED, find_hotspots
 from .mdutil import strip_code_fences
+from .tiers import tier_of as _tier_of, tier_rank
 from .obsscan import scan as _obs_scan
 from .fetchscan import scan_python as _fetch_scan, scan_ts as _fetch_scan_ts
 from .originscan import mutating_routes as _mutating_routes, scan as _origin_scan
@@ -57,15 +58,6 @@ DECISION_MIN_CHURN = 2  # mean commits per involved file; below this the duplica
 MAX_DECISIONS = 10      # candidates are for a person to triage, not an inventory to work through
 MAX_ORIGIN_SITES = 6    # one finding lists a few sites; the point is the policy, not the census
 _EPS = 1e-9
-
-_TIER = re.compile(r"^\s*\*\*\s*Tier\s*:?\s*\*\*\s*[:：]?\s*(.+)$", re.IGNORECASE | re.MULTILINE)
-# higher rank = higher-level layer; allowed dependencies point downward (ui -> domain -> infra)
-_TIER_RANK = {
-    "ui": 4, "presentation": 4, "frontend": 4, "web": 4, "view": 4,
-    "api": 3, "app": 3, "application": 3, "interface": 3, "controller": 3, "handler": 3,
-    "domain": 2, "service": 2, "core": 2, "business": 2, "logic": 2, "usecase": 2,
-    "infra": 1, "infrastructure": 1, "data": 1, "persistence": 1, "storage": 1, "db": 1, "adapter": 1,
-}
 
 _IPV4 = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}(?::\d{2,5})?\b")
 _URL_WITH_PORT = re.compile(r"https?://([A-Za-z0-9._-]+):\d{2,5}", re.IGNORECASE)  # explicit :port only
@@ -289,12 +281,7 @@ def _build_model(config: Config) -> _Model:
                   connectors, declared_only)
 
 
-def _tier_of(text: str) -> str | None:
-    m = _TIER.search(text)
-    if not m:
-        return None
-    tok = re.split(r"[,\s]+", m.group(1).strip())[0].strip("`").lower()
-    return tok or None
+
 
 
 # --- entry point --------------------------------------------------------------------------
@@ -443,7 +430,10 @@ def _coverage(model: _Model, result: "EvaluationResult", history_requested: bool
     'zero findings' is never silently read as 'clean here'. Only inactive families are returned."""
     inactive: list[Inactive] = []
     services = {s for s in model.service.values() if s}
-    tiers = {t for t in model.tier.values() if t}
+    # Rankable, not merely present. A repository declaring `domain` on one subsystem and `test` on another
+    # has two `**Tier:**` lines and nothing the layering check can compare, so counting declarations would
+    # report the family active over a comparison that cannot happen.
+    tiers = {t for t in model.tier.values() if tier_rank(t) is not None}
 
     if len(services) < 2:
         reason = (f"needs **Service:** on ≥2 subsystems ({len(services)} declared) — data ownership, "
@@ -702,14 +692,14 @@ def _tier_violations(model: _Model) -> list[Finding]:
     disputed. That is a question about how `describe` assigns tiers to non-production code, not about
     this check, and one of the two dismissals restated guidance the worksheet itself supplied.
     """
-    populated = {r for r in (_TIER_RANK.get(t or "") for t in model.tier.values()) if r is not None}
+    populated = {r for r in (tier_rank(t) for t in model.tier.values()) if r is not None}
     out: list[Finding] = []
     for a in model.subs:
-        ra = _TIER_RANK.get(model.tier.get(a, ""))
+        ra = tier_rank(model.tier.get(a))
         if ra is None:
             continue
         for b in sorted(model.edges[a]):
-            rb = _TIER_RANK.get(model.tier.get(b, ""))
+            rb = tier_rank(model.tier.get(b))
             if rb is None:
                 continue
             if ra < rb:  # lower layer depends on higher layer => dependency inversion

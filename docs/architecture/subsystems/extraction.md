@@ -1,6 +1,6 @@
 # extraction — the static scanners
 
-**Covers:** `src/archagent/fetchscan.py`, `src/archagent/originscan.py`, `src/archagent/configscan.py`, `src/archagent/deployscan.py`, `src/archagent/webapi.py`, `src/archagent/datamap.py`, `src/archagent/connscan.py`, `src/archagent/obsscan.py`, `src/archagent/invscan.py`, `src/archagent/mdutil.py`
+**Covers:** `src/archagent/fetchscan.py`, `src/archagent/originscan.py`, `src/archagent/configscan.py`, `src/archagent/deployscan.py`, `src/archagent/webapi.py`, `src/archagent/datamap.py`, `src/archagent/connscan.py`, `src/archagent/obsscan.py`, `src/archagent/invscan.py`, `src/archagent/mdutil.py`, `src/archagent/tiers.py`
 **Tier:** infra
 **Connects:** config via import, drift via import
 
@@ -11,6 +11,7 @@ returns data; none of them judges.
 
 | Module | Fact extracted |
 |---|---|
+| `tiers.py` | the `**Tier:**` vocabulary: which tokens name a layer, and which say *not a layer* |
 | `configscan.py` | environment keys the code reads — `os.getenv` / `process.env` / `import.meta.env`, helper wrappers, and pydantic-settings fields |
 | `deployscan.py` | services declared in docker-compose / k8s / Procfile |
 | `webapi.py` | HTTP routes, from the code or an OpenAPI spec |
@@ -63,6 +64,19 @@ The pattern holds for all eight: a file set in, typed facts out, and the value i
 compared against rather than in the fact itself.
 
 ## Key abstractions
+
+**`tiers.py` is a leaf, and that is the whole reason it exists.** `evaluate` needs the layer ranks to find
+inversions and `drift` needs them to notice a subsystem claiming a layer it has no business on — and
+`evaluate` already imports `drift`, so putting the vocabulary in either would have closed a second cycle
+on top of the one ADR 0003 records. It imports nothing internal, which is what makes it usable from
+anywhere. `tier_of` had accumulated three copies (`evaluate`, `graph`, and nearly `drift`) before the move
+— the duplicated decision this tool's own `scattered-source-of-truth` check exists to find.
+
+It also carries **tokens meaning *not a layer*** — `test`, `migration`, `ops` and friends. An unrecognised
+token was already skipped by the layering check, so recognising these changes no behaviour on its own;
+what it buys is telling *the author said this is off the ladder* apart from *the author typed `domian`*.
+Issue #26: four of seven labelled `layer-inversion` findings came from test and migration packages tiered
+`infra`, the bottom rank, so everything they imported read as upward.
 
 **Regex and AST, never execution.** "Static" here means no import of the target code, so scanning a
 repository can never run it.

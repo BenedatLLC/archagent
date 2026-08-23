@@ -55,7 +55,8 @@ the user first, and never overwrite their existing content.
    files. Record provenance (doc vs code) and mark anything unverified. Fill the doc's metadata lines —
    `**Covers:**`, `**Connects:**` (subsystems this one connects to, each typed by connector kind — `import`
    / `sync-call` / `async-event` / `shared-data` / `pipe`), and where they apply `**Service:**` (deployment
-   service) and `**Tier:**` (layer, e.g. `ui` / `domain` / `infra`) — so `drift` and `evaluate` have the
+   service) and `**Tier:**` (layer: `ui` / `domain` / `infra`, or `test` / `migration` / `ops` for code
+   that is **not** a layer) — so `drift` and `evaluate` have the
    inputs they need. Getting the connector *kind* right matters: it's how `evaluate` tells a distributed
    monolith (a synchronous service cycle) from a benign event-coupled one.
 4. **Fill `architecture/constitution.md`** (terse, always-loaded): conventions, the patterns the system
@@ -256,6 +257,11 @@ design-review time (does a proposed design fit the architecture?) and periodical
   and a `**Connects:** <subsystem> via <kind>, …` line (kinds: `import` / `sync-call` / `async-event` /
   `shared-data` / `pipe`; so `drift` checks import staleness + topology and `evaluate` can judge coupling),
   plus `**Tier:**` and `**Service:**` where they apply (layering + per-service data ownership).
+
+  **A test, migration or tooling subsystem is not a layer.** Give it `**Tier:** test` / `migration` /
+  `ops`, never a production tier. Tiering a test package `infra` — the bottom rank — makes every
+  production subsystem it exercises look like a layering violation: measured across three repositories,
+  that produced four of seven `layer-inversion` findings and a reviewer dismissed all four.
 - **Flag drift.** Where a doc or invariant disagrees with the code, surface it and decide: fix the code,
   or update the doc/invariant (with an ADR if it's a real decision) — don't silently overwrite intent.
 - **Refresh what changed.** Update the affected `subsystems/<name>.md` and reconcile the invariants table
