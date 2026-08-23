@@ -13,7 +13,7 @@ returns data; none of them judges.
 |---|---|
 | `tiers.py` | the `**Tier:**` vocabulary: which tokens name a layer, and which say *not a layer* |
 | `configscan.py` | environment keys the code reads — `os.getenv` / `process.env` / `import.meta.env`, helper wrappers, and pydantic-settings fields |
-| `deployscan.py` | services declared in docker-compose / k8s / Procfile |
+| `deployscan.py` | services declared in docker-compose / k8s / Procfile, and the env keys those files consume |
 | `webapi.py` | HTTP routes, from the code or an OpenAPI spec |
 | `datamap.py` | table definitions and datastore touch points |
 | `connscan.py` | outbound calls whose target resolves to a known service |
@@ -45,6 +45,25 @@ Two constraints keep that from over-reaching. The wrapper rule requires the rece
 itself; accepting any `.get(param)` made every `dict.get` in the codebase look like an env wrapper and
 dragged in names like `Document` and `Checksum`. And test paths are skipped, because a repository's own
 test fixtures set environment keys that are not part of its configuration surface.
+
+**The configuration surface has two halves, and scanning one of them looks like scanning both.**
+`read_config_keys` covers the configured `source_paths`, which is where application code lives and is
+precisely where deployment configuration does not. So `deployment_config_keys` asks the same question of
+the compose files, Dockerfiles and k8s manifests `deployscan` already opens — a key consumed there is
+read, just not by application code.
+
+Issue #24 is the measurement: wardrowbe reported 24 declared-but-unread keys, every one correct and none
+of them a defect. `BACKEND_PORT` appears only in a compose *port mapping*, so a structural scan of
+`environment:` blocks would still have missed it — the raw text is scanned for `${VAR}` interpolation as
+well, because interpolation anywhere in the file is a read. After the fix that list is 2, and both are
+real: one key appears nowhere at all, and the other is `OIDC_ISSUER` where everything else says
+`OIDC_ISSUER_URL`. That near-miss was invisible among two dozen correct ones, which is the argument for
+the change — a signal buried is a signal lost.
+
+The scan is deliberately narrow. `env:` is read as a Kubernetes key only in its list-of-`{name, value}`
+form, so a GitHub Actions `env:` mapping does not pull CI variables into the configuration surface; and
+`${tag}` and `$ID` are rejected on the conventional shape of an environment name, or every template
+placeholder in every compose file would qualify.
 
 **`webapi`** — given `@app.get("/orders/{order_id}")`, `extract_routes` returns
 `Route(method="GET", path="orders/{}")`, keeping the original string in `raw` and the file in `source`.

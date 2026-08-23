@@ -31,7 +31,8 @@ from .configscan import _is_test_path, declared_config_keys, read_config_keys
 from .connscan import sync_call_targets
 from .tiers import tier_of as _tier_of, tier_rank
 from .mdutil import is_empty_value, strip_code_fences
-from .deployscan import declared_services, extract_service_edges, extract_services
+from .deployscan import (declared_services, deployment_config_keys, extract_service_edges,
+                         extract_services)
 from .webapi import extract_routes, load_openapi, matches
 
 CODE_EXTS = (".py", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".go", ".rs", ".java", ".rb")
@@ -165,8 +166,18 @@ def find_drift(config: Config, until: str | None = None) -> DriftResult:
     declared_cfg = declared_config_keys(root, doc_text)
     if declared_cfg:
         read_cfg = read_config_keys(root, source_files)
+        # A key the deployment consumes is read, just not by application code (issue #24). `read_config_keys`
+        # scans `source_paths`, which is exactly where deployment configuration does not live, so a key used
+        # only by a compose file or a container entrypoint came back "declared but never read" — true, and
+        # not a defect. wardrowbe produced 24 of those at once, every one correct, which invites deleting an
+        # accurate manifest and buries the finding that matters: a key nothing reads anywhere.
+        deploy_cfg = deployment_config_keys(root)
+        result.dangling_config = sorted(declared_cfg - read_cfg - deploy_cfg)
+        # Deliberately asymmetric: the deployment's keys suppress a dangling finding but do not create an
+        # undocumented one. Compose interpolation picks up image tags and port numbers, and treating every
+        # one as part of the configuration surface would trade two dozen false dangling findings for two
+        # dozen false undocumented ones.
         result.undocumented_config = sorted(read_cfg - declared_cfg)
-        result.dangling_config = sorted(declared_cfg - read_cfg)
 
     # deployment drift: services in IaC vs a declared **Services:** list (gated on a declaration)
     declared_svc = declared_services(doc_text)

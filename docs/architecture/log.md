@@ -84,3 +84,27 @@ The drift check catches two of the four known cases. It misses fastapi-template'
 startup and seed files sit in the app package under no distinguishing path. Inferring intent from a
 filename like backend_pre_start is the name-based guess this project has twice regretted, so it is left to
 `describe`.
+
+## 2026-08-23 — a key the deployment reads is read (issue #24)
+
+`read_config_keys` scans the configured `source_paths` — where application code lives, and precisely
+where deployment configuration does not. So a key consumed only by a compose file or a container
+entrypoint came back *declared but never read*: true, and not a defect. wardrowbe reported 24 of them at
+once, which invites deleting an accurate manifest and buries the finding that matters.
+
+`deployment_config_keys` asks the same question of the files `deployscan` already opens: compose
+`environment:` blocks **and** raw `${VAR}` interpolation, `ENV`/`ARG` in Dockerfiles, and `env:` lists in
+Kubernetes manifests. Interpolation matters on its own — `BACKEND_PORT` appears only in a port mapping,
+so a structural scan of environment blocks would still have missed it.
+
+wardrowbe goes from 24 dangling keys to 2, and both survivors are real: `AI_PROVIDER` appears nowhere,
+and the manifest says `OIDC_ISSUER` where the code and compose both say `OIDC_ISSUER_URL`. That near-miss
+was invisible among two dozen correct findings, which is the whole argument for the change.
+
+`.env.example` is **not** counted as evidence of use, though the issue proposed it. It is already read as
+a manifest, so counting it would make every declared key justify itself and empty the check; and where it
+is not the manifest it is still a second declaration rather than a use.
+
+Obstudio's seven remaining dangling keys are a different shape and are left: all are read by its Go core,
+which archagent cannot parse, and two of those are *written* by the TypeScript extension for the Go
+process to read.

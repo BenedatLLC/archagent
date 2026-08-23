@@ -481,3 +481,42 @@ def test_a_subsystem_covering_nothing_is_not_reported(tmp_path):
     no resolvable files."""
     from archagent.drift import _mistiered
     assert _mistiered(set(), "infra") == ""
+
+
+def test_a_key_read_only_by_the_deployment_is_not_dangling(tmp_path):
+    """Issue #24. `read_config_keys` scans `source_paths`, which is exactly where deployment
+    configuration does not live, so a key consumed only by compose came back "declared but never read" —
+    true, and not a defect. wardrowbe produced 24 of those at once."""
+    from archagent.config import Config, PythonConfig, TSConfig
+    from archagent.drift import find_drift
+    (tmp_path / "architecture").mkdir()
+    (tmp_path / "src" / "pkg").mkdir(parents=True)
+    (tmp_path / "src" / "pkg" / "a.py").write_text("import os\nX = os.getenv('APP_SECRET')\n")
+    (tmp_path / "docker-compose.yml").write_text(
+        'services:\n  api:\n    ports:\n      - "${BACKEND_PORT:-8000}:8000"\n')
+    (tmp_path / "architecture" / "deployment.md").write_text(
+        "# Deployment\n\n**Config:** APP_SECRET, BACKEND_PORT, GONE_ENTIRELY\n")
+    cfg = Config(project_root=tmp_path, languages=["python"],
+                 python=PythonConfig(root_package="pkg", source_paths=["src"]),
+                 ts=TSConfig(source_paths=["src"]))
+    r = find_drift(cfg)
+    assert r.dangling_config == ["GONE_ENTIRELY"], r.dangling_config
+
+
+def test_deployment_keys_suppress_a_dangling_finding_but_do_not_create_an_undocumented_one(tmp_path):
+    """Deliberately asymmetric. Compose interpolation picks up image tags and port numbers, so treating
+    every one as part of the configuration surface would trade two dozen false dangling findings for two
+    dozen false undocumented ones."""
+    from archagent.config import Config, PythonConfig, TSConfig
+    from archagent.drift import find_drift
+    (tmp_path / "architecture").mkdir()
+    (tmp_path / "src" / "pkg").mkdir(parents=True)
+    (tmp_path / "src" / "pkg" / "a.py").write_text("import os\nX = os.getenv('APP_SECRET')\n")
+    (tmp_path / "docker-compose.yml").write_text("services:\n  api:\n    image: app:${RELEASE_TAG}\n")
+    (tmp_path / "architecture" / "deployment.md").write_text("# D\n\n**Config:** APP_SECRET\n")
+    cfg = Config(project_root=tmp_path, languages=["python"],
+                 python=PythonConfig(root_package="pkg", source_paths=["src"]),
+                 ts=TSConfig(source_paths=["src"]))
+    r = find_drift(cfg)
+    assert r.undocumented_config == []          # RELEASE_TAG is not reported as undeclared config
+    assert r.dangling_config == []

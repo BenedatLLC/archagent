@@ -66,6 +66,16 @@ cases and not four — one of the misses keeps its startup and seed files in the
 no distinguishing path, and guessing from a filename is the heuristic this module has twice been burned
 by.
 
+**A key the deployment reads is read.** The config comparison subtracts `deployment_config_keys` as well
+as the code's, and the asymmetry is deliberate: the deployment's keys suppress a *dangling* finding but
+never create an *undocumented* one. Compose interpolation picks up image tags and port numbers, and
+counting each as part of the configuration surface would trade two dozen false dangling findings for two
+dozen false undocumented ones.
+
+Not fixed by this, and a different shape: a key read by code in a language archagent cannot parse. All
+seven of obstudio's remaining dangling keys are read by its Go core, and two are *written* by the
+TypeScript extension for that Go process to read — a write is not a read, and the reader is invisible.
+
 **Every git-reading path takes `until`.** Three of them needed it and only two were obvious: the miner, the
 staleness comparison, and — the one that was missed — the commit-wording profile, which would otherwise
 learn from commits after a cutoff and use them to label commits before it.
