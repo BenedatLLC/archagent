@@ -11,4 +11,4 @@ Make the code adhere to the described architecture.
    Never silently suppress or work around a failing invariant.
 3. For each **WARN**: note it; fix if cheap, otherwise leave for follow-up.
 4. Re-run `archagent check` until it is clean (exit 0).
-5. If you changed the architecture, update `architecture/index.md` and append to `architecture/log.md`.
+5. If you changed the architecture, update the artifact's `README.md` and append to `architecture/log.md`.

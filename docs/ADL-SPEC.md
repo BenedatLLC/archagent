@@ -73,7 +73,8 @@ the absence of any of them.
 architecture/
 ├── constitution.md            REQUIRED  always-loaded conventions and load-bearing patterns
 ├── invariants.md              REQUIRED  the canonical invariants table (§6)
-├── index.md                   OPTIONAL  catalog of the documents
+├── README.md                  OPTIONAL  the entry document: what the system is, what to read
+│                                     first, and a catalog of the members below
 ├── log.md                     OPTIONAL  append-only chronological change log
 ├── deployment.md              OPTIONAL  system-level view: services + configuration (§5)
 ├── AGENTS.md                  OPTIONAL  tool-owned usage instructions
@@ -85,7 +86,18 @@ architecture/
     └── <finding-id>.md        OPTIONAL  recorded analyses of `evaluate` findings (§6a)
 ```
 
-`index.md`, when present, MAY carry a **system map**: a single fenced Mermaid `flowchart` — one node per
+`README.md` is named for the forges, not for archagent. GitHub and comparable tools render a directory's
+`README.md` and render nothing otherwise, so an artifact whose entry document is called anything else is
+one a browsing reader never sees. Producers MUST write `README.md`; there is no alternative spelling.
+
+`README.md`, when present, MAY carry a **provenance stamp**: the archagent version and repository revision
+that last generated the artifact, delimited by `<!-- archagent:provenance -->` and
+`<!-- /archagent:provenance -->`. It answers the one question a reader has on arrival — *is this current?*
+— and a producer MUST generate rather than author it, for the same reason §4.2's derived counts are
+suspect: a hand-maintained version string is never wrong at the moment it is written and never right
+afterwards.
+
+`README.md`, when present, MAY carry a **system map**: a single fenced Mermaid `flowchart` — one node per
 subsystem, one edge per declared `Connects` relation (§4.3), typed by connector kind — delimited by the
 HTML-comment markers `<!-- archagent:graph -->` and `<!-- /archagent:graph -->`. The map is derived
 entirely from subsystem metadata, so a producer SHOULD regenerate it rather than hand-edit it (`archagent

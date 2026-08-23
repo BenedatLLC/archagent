@@ -135,3 +135,26 @@ issue #26 established.
 
 `tests/test_prompts.py` is new. The prompts ship as package data and nothing imported them, so no test had
 ever read one.
+
+## 2026-08-23 — the artifact's index is README.md (issue #28)
+
+GitHub and comparable forges render a directory's `README.md` when a reader opens it and render nothing
+otherwise, so the artifact's entry document — `index.md` — was the one file a browsing reader never saw.
+Renamed outright rather than aliased: pre-1.0 is when a rename is free, and two names for one document
+would need explaining forever. Nothing in the tool or the spec mentions `index.md` any more.
+
+`graph --write` also refreshes a **provenance stamp** now, in its own markers beside the map: the
+archagent version and the repository revision that last generated the artifact. It answers the question a
+reader has on arrival — *is this current?* — which nothing else in the directory does without a second
+click.
+
+It is generated rather than authored on purpose. Issue #18 is a list of hand-written facts in an artifact
+that had drifted — "55 imports" was 58, "19 concrete models" was 20 — and a hand-maintained version string
+is the same defect at its quietest, since nothing ever prompts anyone to update it. No date either: git
+already shows a reader when the file last changed, and a date would make every re-run a diff.
+
+Unlike the system map, the stamp is refreshed but never *inserted*. An artifact whose author removed the
+markers does not get a block pushed back into prose it did not ask for.
+
+**STR-004 earned its keep here.** The first version of the stamp shelled out to `git` from `graph.py`, and
+`check` failed on the next run: one module owns the git plumbing (ADR 0003). Now via `drift._git`.

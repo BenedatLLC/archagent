@@ -922,7 +922,7 @@ def lint_docs_cmd(
 @app.command()
 def graph(
     project: Path = typer.Option(Path("."), help="Target repo root"),
-    write: bool = typer.Option(False, "--write", help="Splice the diagram into architecture/index.md (between the archagent:graph markers)"),
+    write: bool = typer.Option(False, "--write", help="Splice the diagram into the artifact's README.md (between the archagent:graph markers)"),
 ) -> None:
     """Generate a Mermaid system map from the subsystems' Connects/Tier metadata."""
     config = load_config(project.resolve())
@@ -933,7 +933,7 @@ def graph(
     if write:
         action = write_to_index(config, graph_block(config))
         console.print(f"[green]{action}[/] the system map in "
-                      f"{(config.architecture_dir / 'index.md').relative_to(config.project_root)} "
+                      f"{(config.architecture_dir / 'README.md').relative_to(config.project_root)} "
                       f"({len(subs)} subsystem(s)).")
         return
     print(graph_block(config))

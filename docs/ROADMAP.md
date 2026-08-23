@@ -109,7 +109,7 @@ release is how round 4's instruments ended up saturated. Batched so **round 6 ca
 
 - **Commands:** `init` (per-agent skill delivery, agent auto-detect, `--wire`, `upgrade`), `gen`, `check`
   (import-linter · dependency-cruiser · ast-grep · property-based-test tiers), `drift`, `evaluate`,
-  `status` (per-package coverage), `graph` (Mermaid system map from metadata, `--write` into index.md),
+  `status` (per-package coverage), `graph` (Mermaid system map from metadata, `--write` into the artifact's README.md),
   `lint-docs` (Mermaid syntax linter, no Node), `modules` (module-resolution diagnostic + collision check).
 - **Skills:** `describe` (build-or-update), `check`, `invariant`, `evaluate` — wired into one loop.
 - **`drift`** (reflexion-diff): dangling refs · git-stale docs · undocumented modules · subsystem

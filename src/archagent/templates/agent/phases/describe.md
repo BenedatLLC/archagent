@@ -123,7 +123,7 @@ the user first, and never overwrite their existing content.
    **Never re-tier a subsystem to silence a finding.** If tests or migrations show up as layering
    violations, the fix is `**Tier:** test` / `migration` (see step 3), not folding them into a production
    layer — the model has to keep describing the system.
-8. **Index + log.** Refresh `architecture/index.md` and append a line to `architecture/log.md` —
+8. **Index + log.** Refresh the artifact's `README.md` (its index) and append a line to `architecture/log.md` —
    **including the target revision and the archagent version** (`archagent --version`), because every
    claim here is relative to both. A reader who hits a command this artifact cites but their build lacks
    must be able to tell version skew from a stale document; that confusion cost a calibration round. The index
@@ -200,7 +200,7 @@ record in the `Why` column **how** you checked it and at which revision. If you 
 `archagent status` (packages + coverage) so you know whether this is a 3-package or a 30-package repo — a
 fixed "do 3 and stop" is wrong for anything large. Cover as many as you reasonably can this turn, then stop
 and ask (see the header). **Never** write "out of scope for this pass" / "not yet documented (first pass)"
-into the artifact (`index.md`, `invariants.md`, subsystem docs) — a should-be-durable doc that says what a
+into the artifact (`README.md`, `invariants.md`, subsystem docs) — a should-be-durable doc that says what a
 past pass *didn't* do rots the moment the next pass makes progress. Session/progress notes go in
 `architecture/log.md` (append-only, chronological, built for exactly this); the artifact states only what is
 true **now** (coverage as an "N of M" count, per step 8d).

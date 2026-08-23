@@ -68,6 +68,18 @@ as in `evaluate`, which is how a shared parsing rule ends up in three places; it
 **The graph is generated, never authored.** It is derived from the metadata lines, so a diagram cannot
 drift from the declarations — it *is* the declarations.
 
+**The index is `README.md`, and the name is for the forges rather than for archagent** (issue #28). GitHub
+renders a directory's `README.md` when a reader opens it and renders nothing otherwise, so the artifact's
+entry document was the one file a browsing reader never saw. Switched outright rather than aliased —
+pre-1.0 is when a rename is free, and two names for one document would need explaining forever.
+
+`graph --write` refreshes a **provenance stamp** beside the map: the archagent version and the repository
+revision that last generated the artifact, answering the question a reader has on arrival. It is generated
+because a hand-written one is issue #18's defect in its quietest form — right the day it is typed and
+wrong every day after, with nothing ever prompting an update. Unlike the map section, the stamp is never
+*inserted*: an artifact whose author removed the markers does not get a block pushed back into prose it
+did not ask for.
+
 **The caption is authored, never generated, and lives outside the replaced region.** `graph --write` seeds
 an obviously-unfinished placeholder between `archagent:graph-caption` markers and never touches it again,
 so a re-run refreshes the picture without eating the sentence someone wrote about it. The caption is not
@@ -78,7 +90,8 @@ placeholder as missing, because a slot that still holds it looks answered.
 
 ## State and tiering
 
-Read-only, except `graph --write`, which inserts a generated block into `index.md`.
+Read-only, except `graph --write`, which refreshes two generated blocks in the artifact's `README.md`:
+the system map and the provenance stamp.
 
 ## Lifecycles / key flows
 

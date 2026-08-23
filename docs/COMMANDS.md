@@ -181,12 +181,12 @@ document. Assignment is not description: a `**Covers:** src/**/*.py` glob claims
 says nothing about whether any of them is mentioned.
 
 Use it to size a `describe` pass — a fixed "document three subsystems and stop" is wrong for a large repo
-— and to state coverage in `index.md` as an "N of M" count.
+— and to state coverage in the artifact's `README.md` as an "N of M" count.
 
 ### `archagent graph`
 
 Generate a Mermaid system map — one node per subsystem, one edge per typed `**Connects:**` — from the
-metadata the docs already declare. `--write` splices it into `index.md` between the
+metadata the docs already declare. `--write` splices it into the artifact's `README.md` between the
 `<!-- archagent:graph -->` markers, idempotently, so the diagram stays in sync instead of being
 hand-redrawn.
 

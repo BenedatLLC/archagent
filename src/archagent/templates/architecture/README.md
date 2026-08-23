@@ -1,4 +1,8 @@
-# Architecture Index
+# Architecture
+
+<!-- archagent:provenance -->
+_Not generated yet — run `archagent graph --write`._
+<!-- /archagent:provenance -->
 
 _Open with two or three sentences on what this system **is** and what it does — a reader who has never
 seen the repo lands here first, and a catalog answers no question they are asking yet. Then say what to
