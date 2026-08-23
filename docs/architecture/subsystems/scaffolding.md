@@ -32,6 +32,20 @@ It names a likelier directory and never writes one. Choosing on the reader's beh
 visible bad guess with an invisible one, and `node_modules` holds more JavaScript than any project
 directory, so the candidate search skips vendored and build trees.
 
+**The likelier directory is the one that *contains* the package, not the one with the most files.** These
+give different answers, and the file-count answer is wrong for every repository whose package sits at the
+root. Rehearsing the 1.0.0rc1 onboarding on httpx, `init` guessed `root_package = httpx` correctly and
+then suggested `tests/` — because a real test suite is larger than the package it tests. Following that
+hint produces precisely the silent, total failure described two paragraphs above, offered as the remedy
+for it.
+
+`_containing_dir` uses the `root_package` already guessed a few lines earlier: `source_paths` names the
+parent of the package, so the answer is `.` for httpx, dspy and requests, and `backend` for a
+`backend/app/` layout. File counting remains the fallback for when no package was found at all.
+`_guess_python_root` searches one level down for the nested case, but only accepts an unambiguous
+answer — two candidates would make `root_package` a guess, and that is the other half of the same
+silent failure.
+
 **Tool-owned versus user-owned files.** `upgrade` refreshes the prompts and `architecture/AGENTS.md` and
 touches nothing else. This is why upgrading never overwrites an authored `invariants.md` — and why
 `init --force` is documented as the wrong way to upgrade.
