@@ -274,7 +274,7 @@ def test_no_history_does_not_claim_a_family_it_still_reported(tmp_path):
         '[project]\nlanguages = ["python"]\n\n[python]\nsource_paths = ["src"]\n')
     arch = tmp_path / "architecture/subsystems"
     arch.mkdir(parents=True)
-    for name, body in (("constitution.md", "# C\n"), ("index.md", "# I\n"), ("invariants.md", "# Inv\n")):
+    for name, body in (("constitution.md", "# C\n"), ("README.md", "# I\n"), ("invariants.md", "# Inv\n")):
         (tmp_path / "architecture" / name).write_text(body)
     (arch / "a.md").write_text("# A\n\n**Covers:** `src/**/*.py`\n**Tier:** domain\n")
     exe = Path(sys.executable).with_name("archagent")

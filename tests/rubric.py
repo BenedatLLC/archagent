@@ -80,7 +80,7 @@ class Scorecard:
 
 # --- ADL conformance ----------------------------------------------------------------------
 
-REQUIRED = ("constitution.md", "invariants.md", "index.md")
+REQUIRED = ("constitution.md", "invariants.md", "README.md")
 _COVERS = re.compile(r"^\s*\*\*\s*Covers\s*:?\s*\*\*\s*[:：]?\s*(.+)$", re.IGNORECASE | re.MULTILINE)
 _TRACEBACK = re.compile(r"Traceback \(most recent call last\)|^\s*File \"", re.MULTILINE)
 
@@ -302,15 +302,15 @@ def check_orientation(root: Path, arch_dir: str) -> Check:
     """Can a newcomer enter the artifact at all: a system map, and prose before the catalog.
 
     Both are already required — `describe` step 8(b) mandates the Mermaid flowchart and ships an
-    `index.md` with the markers pre-placed. archagent's own artifact had neither, and every check passed,
+    `README.md` with the markers pre-placed. archagent's own artifact had neither, and every check passed,
     because nothing looked. A mandated step with no verification is a step that silently stops happening.
 
     The map is the one part scored strictly, since `archagent graph --write` generates it from metadata
     already gathered — there is no excuse for its absence and no judgement involved in seeing it.
     """
-    index = _arch(root, arch_dir) / "index.md"
+    index = _arch(root, arch_dir) / "README.md"
     if not index.is_file():
-        return Check("artifact.orientation", "Artifact is enterable", 0.0, "no index.md")
+        return Check("artifact.orientation", "Artifact is enterable", 0.0, "no README.md")
     text = index.read_text(errors="replace")
     body = re.split(r"^\s*\|", text, maxsplit=1, flags=re.MULTILINE)[0]
     # diagram source is not prose: a flowchart above the table would otherwise satisfy both halves at once

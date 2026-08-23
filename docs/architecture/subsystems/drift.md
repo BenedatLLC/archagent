@@ -88,7 +88,7 @@ modules` is the one-command diagnostic for exactly this, and it said "No Python 
 is why the command exists.
 
 **`lstrip("./")` strips a set of characters, not a prefix.** `_resolve_ref` used it, so
-`.github/workflows/ci.py` became `github/workflows/ci.py` and `.env.example` became `env.example` — every
+a path like .github/workflows/ci.py became github/workflows/ci.py and and .env.example became env.example — every
 path under a dot-directory resolved to one that does not exist and was reported as a dangling reference.
 `removeprefix("./")` is what was meant. Found on dspy, whose artifact legitimately covers a file under
 `.github/`.

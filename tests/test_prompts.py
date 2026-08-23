@@ -67,3 +67,24 @@ def test_every_shipped_phase_prompt_is_non_empty(name):
     """A guard on the packaging rather than the wording: these ship as package data, and an empty one
     would silently give an agent no instructions at all."""
     assert len(_prompt(name).split()) > 50
+
+
+def test_nothing_still_refers_to_the_artifact_index_as_index_md():
+    """Issue #28 renamed the artifact's index to `README.md`. The rename touched the tool, the spec and
+    the prompts and missed `tests/rubric.py`, where the deterministic rubric scored a correct artifact
+    0.00 on "Artifact is enterable" and failed its `adl.required` gate — on dspy, in round 5, after the
+    artifact was written.
+
+    The gates in `tests/test_self.py` could not catch it: the rubric is evaluation harness, not shipped
+    code, so nothing exercised it."""
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1]
+    # Scoped to the modules that *decide* what the artifact's index is called. A fixture elsewhere may
+    # legitimately create a file called `index.md` — that is an arbitrary document name in a test project,
+    # not a claim about the format.
+    for name in ("rubric.py", "rubric_judged.py", "findings.py"):
+        f = root / "tests" / name
+        if f.is_file():
+            assert "index.md" not in f.read_text(), name
+    for f in (root / "scripts").glob("*.py"):
+        assert "index.md" not in f.read_text(), f.name

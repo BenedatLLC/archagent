@@ -227,8 +227,8 @@ structural signal silent, `check` reporting that all invariants hold. `archagent
 Python modules resolved", which is why that command exists.
 
 **A reference under a dot-directory was reported dangling.** `_resolve_ref` used `lstrip("./")`, which
-strips a *set of characters* rather than a prefix, so `.github/workflows/ci.py` became
-`github/workflows/ci.py` and resolved to nothing.
+strips a *set of characters* rather than a prefix, so a path like .github/workflows/ci.py became
+github/workflows/ci.py and resolved to nothing.
 
 **And the worst of the three: a scoped `forbid-pattern` enforced nothing and passed.** `_scope_to_globs`
 produced `./dspy/**` for a root source path, and ast-grep silently ignores globs with a `./` prefix. The
@@ -238,3 +238,17 @@ failure this tool exists to prevent, arriving through its own generator; it now 
 None of the three could have been found on archagent, paperless, wardrowbe or fastapi-template, because
 all four use a nested source path. The argument for a varied corpus rather than a large one keeps getting
 made by the corpus.
+
+### The #28 rename leaked into the evaluation harness
+
+Round 5 surfaced it: the deterministic rubric scored a correct dspy artifact **0.00 on "Artifact is
+enterable"** and failed its `adl.required` gate, because `tests/rubric.py` still required `index.md`. The
+rename touched the tool, the spec and the prompts and missed the harness — which the three CI gates could
+not catch, since the rubric is evaluation code rather than shipped code.
+
+Fixed, with a guard in `test_prompts.py` scoped to the modules that decide what the index is called. A
+fixture elsewhere may legitimately create a file named `index.md`; that is an arbitrary document in a test
+project, not a claim about the format.
+
+Two of this repository's own documents also grew dangling references while describing the fix, by naming
+example paths in backticks. The same trap `subsystems/drift.md` documents, sprung twice more.

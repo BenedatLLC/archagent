@@ -46,7 +46,7 @@ def _repo(tmp, files):
 SRC = {f"src/pkg/{n}.py": f"# {n}\nvalue = {i}\n" for i, n in enumerate(["a", "b", "c", "d"])}
 CORE = {
     "architecture/constitution.md": "# Constitution\n\nConventions.\n",
-    "architecture/index.md": "# Index\n",
+    "architecture/README.md": "# Index\n",
     "architecture/invariants.md": (
         "# Invariants\n\n| ID | Type | Tier | Applies-to | Rule | Severity | Why | Status |\n"
         "|----|------|------|-----------|------|----------|-----|--------|\n"
@@ -75,7 +75,7 @@ def _vague(tmp):
     """Documents too unspecific to contradict — perfect on drift, worthless as architecture."""
     files = {**SRC,
              "architecture/constitution.md": "# Constitution\n\nWe write good code.\n",
-             "architecture/index.md": "# Index\n",
+             "architecture/README.md": "# Index\n",
              "architecture/invariants.md": "# Invariants\n\nNone yet.\n",
              "architecture/subsystems/system.md": "# System\n\nIt does things well.\n"}
     return _repo(tmp, files)
@@ -147,7 +147,7 @@ def test_an_index_that_is_only_a_catalog_scores_badly_on_orientation(tmp_path):
 
 def test_an_index_that_orients_before_it_catalogs_passes(tmp_path):
     root = _repo(tmp_path, {**SRC, **CORE})
-    (root / "architecture/index.md").write_text(
+    (root / "architecture/README.md").write_text(
         "# Index\n\nThis is a widget service. It accepts orders and settles them nightly.\n"
         "Read `constitution.md` first, then `subsystems/alpha.md`.\n"
         "An ADR records why; an invariant row is enforced by `check`.\n\n"
@@ -160,7 +160,7 @@ def test_an_index_that_orients_before_it_catalogs_passes(tmp_path):
 def test_prose_after_the_catalog_does_not_count_as_orientation(tmp_path):
     """A reader meets the table first, so notes below it arrive too late to orient anyone."""
     root = _repo(tmp_path, {**SRC, **CORE})
-    (root / "architecture/index.md").write_text(
+    (root / "architecture/README.md").write_text(
         "# Index\n\n```mermaid\nflowchart LR\n  a --> b\n```\n\n| Document | What |\n|---|---|\n| x | y |\n"
         "\nThis is a widget service.\nIt accepts orders.\nIt settles them nightly.\n")
     c = check_orientation(root, "architecture")
@@ -171,7 +171,7 @@ def test_diagram_source_is_not_counted_as_entry_prose(tmp_path):
     """Otherwise one flowchart above the table satisfies both halves at once, and the map alone tells a
     reader what connects to what but never what the system is for."""
     root = _repo(tmp_path, {**SRC, **CORE})
-    (root / "architecture/index.md").write_text(
+    (root / "architecture/README.md").write_text(
         "# Index\n\n```mermaid\nflowchart LR\n  a --> b\n  b --> c\n  c --> d\n```\n\n"
         "| Document | What |\n|---|---|\n| x | y |\n")
     assert check_orientation(root, "architecture").score < 0.5
@@ -285,7 +285,7 @@ def test_a_vague_artifact_still_scores_zero_at_any_size(tmp_path):
 def _metadata_only(tmp, n=20):
     """Twenty subsystems annotated with Tier and Service and nothing else: no Covers, no invariants.
     Cheap to type, and it says nothing about which code belongs where."""
-    files = {**SRC, "architecture/constitution.md": "# C\n", "architecture/index.md": "# I\n",
+    files = {**SRC, "architecture/constitution.md": "# C\n", "architecture/README.md": "# I\n",
              "architecture/invariants.md": "# Invariants\n\nNone.\n"}
     for i in range(n):
         files[f"architecture/subsystems/s{i}.md"] = f"# S{i}\n\n**Tier:** domain\n**Service:** api\n"
@@ -333,11 +333,11 @@ def test_an_unwritten_graph_caption_does_not_count_as_captioned(tmp_path):
             "```mermaid\nflowchart LR\n  a --> b\n```\n\n"
             "<!-- archagent:graph-caption -->\n{cap}\n<!-- /archagent:graph-caption -->\n\n"
             "| Document | What |\n|---|---|\n| x | y |\n")
-    (root / "architecture/index.md").write_text(
+    (root / "architecture/README.md").write_text(
         body.format(cap="_What to notice: (unwritten — say what this map shows about **this** system.)_"))
     c = check_orientation(root, "architecture")
     assert c.score < 1.0 and "caption" in c.detail
 
-    (root / "architecture/index.md").write_text(
+    (root / "architecture/README.md").write_text(
         body.format(cap="_What to notice: b is reached only through a._"))
     assert check_orientation(root, "architecture").score == 1.0
