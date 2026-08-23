@@ -43,6 +43,12 @@ count (`All 10 checked invariant(s) hold`). This came from a reviewed artifact w
 of them false, where `check` printed an empty table and "All invariants hold." — ADR 0002's failure mode
 arriving through the report rather than through a scan.
 
+**A caveat about a number must print with the number.** `evaluate`'s severity caveat — *it counts files
+and commits, never consequences* — used to live inside the triage block, so a run where nothing was marked
+for investigation printed its findings with HIGH and MED severities and explained neither. Calibration
+round 5 read exactly such a run on dspy, 65 findings and none flagged, and scored the report 2 of 5 on
+restraint naming this. The caveat now prints with the findings and a test pins the ordering.
+
 **Findings carry their own next step.** A finding marked `investigate` prints the exact command that acts
 on it (`cli.py:538`). A reader who cannot act on a finding drops it.
 

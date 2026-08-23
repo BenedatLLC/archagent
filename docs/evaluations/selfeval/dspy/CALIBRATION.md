@@ -109,6 +109,32 @@ None of the first three was findable on archagent, paperless, wardrowbe or fasta
 a nested source path. The fourth was invisible to the CI gates because the rubric is evaluation code
 rather than shipped code.
 
+## The three defects, fixed
+
+All three were verified against the code before being corrected, and the correction of `ADP-002` found
+something the artifact had missed entirely.
+
+| defect | fix |
+|---|---|
+| `streaming.md` / `STR-002` overclaimed the final `Prediction` | lifecycle gained the suppressed branch; the rule now states the default and the three cases where a `False` flag still yields (`streamify.py:205-212`) |
+| `ADP-002` called `format`/`parse` pure | corrected to *deterministic in their arguments, not side-effect free*; `__init_subclass__` wraps both with `with_callbacks` |
+| the coverage claim read as a description claim | `flex/` and `experimental/` are described; the README states what the number does and does not mean |
+
+**The `ADP-002` correction surfaced a pattern.** `Adapter.__init_subclass__` wraps `format` and `parse`;
+`Teleprompter.__init_subclass__` wraps `compile`. Instrumentation in this library is applied by the base
+class rather than by implementers opting in — which is why replacing either method afterwards does not
+work, and which the artifact had described in one place and missed in the other. Now recorded as
+`PAT-001`.
+
+**Chasing the coverage defect took Described from 82% to 94%.** The optimizer and adapter files were named
+by *class* but not by *module*, so a reader could not locate them, and the adapters were named only inside
+a Mermaid block — which the scanner does not read, and which a reader skimming prose would also miss. Each
+table now carries the file. The deterministic score is 1.0.
+
+Both artifact revisions are on record: `findings-e5d391331.json` is the capture round 5 actually reviewed,
+and `findings-835f52e8e.json` is the corrected artifact. A later round compares against the second; the
+first is what the scores above describe.
+
 ## Provenance
 
 - Package: `/tmp/dspy-calibration-2026-08-23`, built by `selfeval.py package`
