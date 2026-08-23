@@ -24,18 +24,18 @@ and the order matters.*
 
 ### 1. Pre-work — three issues that change what a release can claim
 
-- [ ] **[#14](https://github.com/BenedatLLC/archagent/issues/14) — make the release trigger mechanical.**
+- [x] **[#14](https://github.com/BenedatLLC/archagent/issues/14) — make the release trigger mechanical.**
   Diff the documented usage surface (commands, and the commands the phase prompts tell agents to run)
   against the last tag. Answers *is a release warranted* with a number rather than a judgement made under
   pressure. First because it informs the 1.0 decision itself.
-- [ ] **[#13](https://github.com/BenedatLLC/archagent/issues/13) — an evaluation can use two archagents
+- [x] **[#13](https://github.com/BenedatLLC/archagent/issues/13) — an evaluation can use two archagents
   and record only one.** Half done: `--version` shipped. What remains is naming the tool in the review
   brief, in the artifact's `log.md`, and as a ledger column. **This is what makes the calibration round in
   step 3 recordable** — round 4 generated with the working tree and was reviewed against a July build, and
   nothing anywhere said so.
-- [ ] **[#17](https://github.com/BenedatLLC/archagent/issues/17) — separate assigned from described.**
+- [x] **[#17](https://github.com/BenedatLLC/archagent/issues/17) — separate assigned from described.**
   Built and wired into `status`; needs a look at its output on a couple of targets before closing.
-- [ ] **[#10](https://github.com/BenedatLLC/archagent/issues/10) — `configscan` is blind to
+- [x] **[#10](https://github.com/BenedatLLC/archagent/issues/10) — `configscan` is blind to
   pydantic-settings.** Detection spiked at 22 lines and finds all 25 fields on `fastapi-template`: a class
   whose bases end in `Settings`, its top-level annotated attributes, plus `env_prefix` from
   `model_config`. Remaining work is `class Config:` as the older prefix idiom, case handling (pydantic
@@ -55,7 +55,7 @@ and the order matters.*
 
 ### 2. Documentation
 
-- [ ] **[#22](https://github.com/BenedatLLC/archagent/issues/22) — review the docs, add a Quickstart,
+- [x] **[#22](https://github.com/BenedatLLC/archagent/issues/22) — review the docs, add a Quickstart,
   re-run archagent on itself.** The README is long and has no Quickstart, and `docs/architecture/` predates
   everything built this month. The self-describe is the part that matters most: it is the artifact a new
   user meets, and it should show 1.0 behaviour including the new invariant columns.
