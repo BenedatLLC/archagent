@@ -599,14 +599,18 @@ def evaluate(
     if not findings:
         console.print("[green]No system-level smells found in the active signals.[/]")
         return
+    # The caveat belongs to the severities, not to the triage block. It used to live inside `if flagged`,
+    # so a run where nothing was marked for investigation printed 65 findings with HIGH and MED severities
+    # and never said what those words mean. Round 5's reviewer scored `finding_restraint` 2 of 5 and named
+    # exactly this: "the body gives HIGH/MED severity without saying it is mechanical".
+    console.print("[dim]Severity above is mechanical — it counts files and commits, never consequences. A "
+                  "finding is\nonly minor, moderate or critical once someone has read the code.[/]\n")
     flagged = [f for f in findings if f.investigate]
     if flagged:
-        console.print(f"[bold]{len(flagged)} finding(s) marked for investigation.[/] Severity above is "
-                      "mechanical — it counts files and commits, not consequences. To find out whether one "
-                      "of these actually breaks something, run:")
+        console.print(f"[bold]{len(flagged)} finding(s) marked for investigation.[/] To find out whether "
+                      "one of these actually breaks something, run:")
         console.print(f"  [bold]archagent investigate {flagged[0].id}[/]")
-        console.print("[dim]  …which prints a brief for you or your agent to work through. A finding is "
-                      "only minor/moderate/critical once someone has read the code.[/]\n")
+        console.print("[dim]  …which prints a brief for you or your agent to work through.[/]\n")
     console.print("[dim]These are candidates — run /archagent-evaluate to judge, cluster, and prioritize.[/]")
     if exit_code:
         raise typer.Exit(code=1)

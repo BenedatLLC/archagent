@@ -556,3 +556,16 @@ def test_a_non_import_connector_does_not_become_an_import_edge(tmp_path):
     _sub(cfg, "top", "# T\n\n**Tier:** infra\n\n**Connects:** low via async-event\n\n**Covers:** `src/pkg/a.py`\n")
     _sub(cfg, "low", "# L\n\n**Tier:** domain\n\n**Covers:** `src/pkg/b.py`\n")
     assert "layer-inversion" not in _signs(evaluate(cfg))
+
+
+def test_the_mechanical_severity_caveat_is_not_gated_on_triage():
+    """It used to live inside `if flagged:`, so a run where nothing was marked for investigation printed
+    its findings with HIGH and MED severities and never said what those words mean. Round 5's reviewer
+    read exactly such a run on dspy — 65 findings, zero flagged — and scored `finding_restraint` 2 of 5,
+    naming this: "the body gives HIGH/MED severity without saying it is mechanical"."""
+    from pathlib import Path
+    src = (Path(__file__).resolve().parents[1] / "src" / "archagent" / "cli.py").read_text()
+    body = src[src.index("def evaluate_cmd") if "def evaluate_cmd" in src else 0:]
+    i_caveat = src.index("Severity above is mechanical")
+    i_flagged = src.index("flagged = [f for f in findings if f.investigate]")
+    assert i_caveat < i_flagged, "the caveat must print before, and independently of, the triage block"

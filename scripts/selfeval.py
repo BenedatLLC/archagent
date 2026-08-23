@@ -108,6 +108,35 @@ def do_findings(path: Path, repeat: bool = False, until: str | None = None) -> P
     if cap.mining_failed:
         print("\n  history mining FAILED — every history-based signal in this capture is void")
     print(f"\n  written to {dest}")
+
+
+def _report_impacts(text: str, root: Path, repo: str) -> None:
+    """Per-finding impact ratings — the judgement `evaluate` refuses to make (design §23.2).
+
+    Stored beside the criterion scores rather than inside them: they are a different measurement on a
+    different scale, and averaging a 0 that means "not a finding" into a 1-5 mean would be meaningless.
+    """
+    import json as _json
+
+    from rubric_judged import IMPACT_SCALE, impact_summary, parse_impacts
+    cap = _latest_capture(root)
+    ratings = parse_impacts(text)
+    if not ratings:
+        return
+    total = len(cap.findings) if cap else len(ratings)
+    s = impact_summary(ratings, total)
+    print(f"\n  finding impact — {s['rated']} rated"
+          + (f", {s['unrated']} of {total} not asked about" if s['unrated'] else ""))
+    for n in sorted(IMPACT_SCALE):
+        if s["counts"][n]:
+            label = IMPACT_SCALE[n][0]
+            print(f"    {n} {label:22} {'#' * s['counts'][n]} {s['counts'][n]}")
+    print(f"\n    worth acting on (3-5): {s['worth_acting_on']}    "
+          f"noise (0-1): {s['noise']}    not a finding: {s['not_a_finding']}")
+    dest = RESULTS / repo / f"impacts-{_slug(repo)}.json"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text(_json.dumps({"summary": s, "ratings": ratings}, indent=2) + "\n")
+    print(f"    written to {dest}")
     return dest
 
 
@@ -232,12 +261,25 @@ def do_check_brief(review: Path, project: Path | None) -> None:
 
 def do_judged(path: Path, review: Path, by: str) -> None:
     root = path.resolve()
+    # The repo name comes from the worksheet's own title, not the directory. In a calibration package the
+    # repository is checked out at `<package>/repo`, so `root.name` would file every result under "repo"
+    # and the findings capture — keyed by the real name — would never be found.
+    m = re.search(r"^#\s+.*?—\s*(\S+)\s*$", review.read_text(), re.MULTILINE)
+    repo = m.group(1).strip("`") if m else root.name
+    # Citations are resolved against this root, so pointing it at the wrong directory discards every
+    # score for "no citation resolves" — which reads as a reviewer who cited nothing. The first round-5
+    # ingest did exactly that and reported 0 of 6. Fail loudly instead.
+    if not (root / _arch_dir(root)).is_dir():
+        raise SystemExit(
+            f"{root} has no architecture directory, so no citation in the review can resolve and every\n"
+            f"score would be discarded as uncited. Pass the *repository* the review is about — in a\n"
+            f"calibration package that is `<package>/repo`, not the package root and not the data repo.")
     # root is passed so citations are resolved against the tree, not merely pattern-matched
-    r = review_from(review.read_text(), root.name, "", by, root=root)
+    r = review_from(review.read_text(), repo, "", by, root=root)
     # One file per reviewer. A fixed judged.json silently clobbered the previous reviewer's record —
     # which is fatal here, because the whole point is comparing two independent scorings of the same
     # artifact, so the second parse destroyed the thing it was about to be compared against.
-    dest = save_review(RESULTS / root.name / f"judged-{_slug(r.judged_by)}.json", r)
+    dest = save_review(RESULTS / repo / f"judged-{_slug(r.judged_by)}.json", r)
     kept, answered = r.coverage
     print(f"\n{root.name} — judged rubric ({r.judged_by})\n")
     for cid, s in r.scores.items():
@@ -261,6 +303,7 @@ def do_judged(path: Path, review: Path, by: str) -> None:
               f"so this mean\n  describes the part that survived, not the artifact")
     print(f"  [uncalibrated] no agreement with a human reviewer has been measured for these criteria,")
     print(f"  so this number has unknown meaning and gates nothing (design §11, §20.2)")
+    _report_impacts(review.read_text(), root, repo)
     print(f"\n  written to {dest}")
 
 
