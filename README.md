@@ -421,12 +421,25 @@ Every command takes `--project PATH` (default `.`). `archagent --version` prints
 Agent skills: `/archagent-describe` · `/archagent-check` · `/archagent-invariant` ·
 `/archagent-evaluate` · `/archagent-help`.
 
+## Configuration
+
+`archagent init` writes `archagent.toml` and prints every value it chose, marking each detected, guessed
+or defaulted, and flagging any that look wrong. That output is the fastest way to check it.
+
+The one to get right is `[python] root_package`: if it names nothing, every BOUNDARY contract scopes to an
+empty module set and `check` reports that all invariants hold having examined nothing. `archagent modules`
+diagnoses it in one command.
+
+Full reference — every key, the `source_paths` rule people get wrong, and worked examples for the three
+common layouts: **[`docs/CONFIGURATION.md`](docs/CONFIGURATION.md)**.
+
 ## What to read next
 
 | If you want | Read |
 |---|---|
 | to enforce rules: invariant types, the DSL, hooks and CI | [`docs/CHECKING.md`](docs/CHECKING.md) |
 | every command and option in full | [`docs/COMMANDS.md`](docs/COMMANDS.md) |
+| to configure `archagent.toml` for your layout | [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md) |
 | the artifact format, as a spec — fields, tiers, the rule DSL | [`docs/ADL-SPEC.md`](docs/ADL-SPEC.md) |
 | a real artifact, not a sample | [`docs/architecture/`](docs/architecture/) — this repo describes itself |
 | what the evaluation runs concluded, and how much to trust it | [`docs/evaluations/README.md`](docs/evaluations/README.md) |
@@ -435,41 +448,6 @@ Agent skills: `/archagent-describe` · `/archagent-check` · `/archagent-invaria
 
 The evaluations are worth a look before you rely on a signal. Several are measured against blind human
 labelling and the numbers are on the page, including the ones that came back badly.
-
-## Configuration
-
-A small `archagent.toml` at the repo root tells archagent where the code is:
-
-```toml
-[project]
-languages = ["python", "ts"]
-architecture_dir = "architecture"   # where the architecture docs live (default; e.g. "docs/architecture")
-
-[python]
-root_package = "app"
-source_paths = ["src"]
-
-[ts]
-source_paths = ["src"]
-```
-
-`architecture_dir` is set at `init` time and used everywhere the artifact is read or referenced (drift,
-check, evaluate, and the top-level wiring). Choose it non-interactively with `archagent init --arch-dir
-docs/architecture`; otherwise `init` finds your `docs/`/`design/`/`spec/` dirs and offers them (pass
-`--yes` to skip the prompt and take the default).
-
-## Try it
-
-```bash
-uv run archagent check --project examples/sample_py    # Python (import-linter + ast-grep)
-uv run archagent check --project examples/sample_ts    # TS (dependency-cruiser + ast-grep)
-```
-
-## What it composes
-
-import-linter (Python boundaries) · dependency-cruiser (JS/TS boundaries) · ast-grep (structural,
-any language) · grep/git for retrieval and history. archagent is the thin layer that turns one
-markdown table into those tools' configs and reports results per invariant.
 
 ## Repository layout
 
@@ -486,6 +464,7 @@ archagent/
 │   ├── evaluations/          what the evaluation runs concluded (the data lives in a separate repo)
 │   ├── CHECKING.md           guide: enforcing invariants (types, DSL, hooks, CI)
 │   ├── COMMANDS.md           the full CLI reference
+│   ├── CONFIGURATION.md      archagent.toml: every key, and the layouts people get wrong
 │   ├── ROADMAP.md            planned future work, grouped by theme (checkable)
 │   ├── ADL-SPEC.md           the architecture-artifact format, as a standards-style spec
 │   └── RELEASING.md          how to cut a new release to PyPI
@@ -540,5 +519,15 @@ uv run pytest            # unit tests (DSL + table parsing, config generation, i
                          # + an end-to-end check on examples/sample_py (real import-linter + ast-grep)
 ```
 
-Tests run in CI on every push/PR (`.github/workflows/ci.yml`). The TS/PBT paths need Node / a target
-test env, so they're validated via the examples rather than in the unit suite.
+Two end-to-end fixtures come with the repo, which is the quickest way to see a real `check` run without
+scaffolding anything:
+
+```bash
+uv run archagent check --project examples/sample_py    # Python — real import-linter + ast-grep
+uv run archagent check --project examples/sample_ts    # TS — dependency-cruiser + ast-grep (needs Node)
+```
+
+Tests run in CI on every push/PR (`.github/workflows/ci.yml`), which also runs `archagent check`,
+`archagent drift --exit-code` and `archagent lint-docs --exit-code` against this repository's own
+artifact. The TS/PBT paths need Node and a target test environment, so they're validated via the examples
+above rather than in the unit suite.
