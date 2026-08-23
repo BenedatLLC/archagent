@@ -600,6 +600,24 @@ def _unstable_dependencies(model: _Model) -> list[Finding]:
 # --- Group B (static half): Leaky Abstraction / layering ---------------------------------
 
 def _tier_violations(model: _Model) -> list[Finding]:
+    """Layering findings from the declared `**Tier:**` ranks.
+
+    **A skip is only reported over a tier the system actually has.** Calibration round 2 labelled three
+    `layer-skip` findings and a reviewer dismissed all three, for one reason each time: the layer the
+    finding says to route through does not exist. Neither repository declared anything at rank 3, so
+    every rank-4 → rank-2 edge counted as skipping a tier that was never in the system, and the
+    recommendation — "route through the intermediate layer" — named nothing.
+
+    The rule holds without naming a repository: an intermediate layer that is not declared cannot be
+    routed through, so an edge across the gap where it would be is not a leak, it is the shape of the
+    system. This only ever removes findings, and the ones it removes were incoherent as written.
+
+    `layer-inversion` is deliberately left alone. The same round scored it 2 of 4, but both dismissals
+    were test and migration packages — the edge was real and the *tier assignment* was what the reviewer
+    disputed. That is a question about how `describe` assigns tiers to non-production code, not about
+    this check, and one of the two dismissals restated guidance the worksheet itself supplied.
+    """
+    populated = {r for r in (_TIER_RANK.get(t or "") for t in model.tier.values()) if r is not None}
     out: list[Finding] = []
     for a in model.subs:
         ra = _TIER_RANK.get(model.tier.get(a, ""))
@@ -619,7 +637,8 @@ def _tier_violations(model: _Model) -> list[Finding]:
                                     "the higher layer implements, or move the shared type down."),
                     confidence="high",
                 ))
-            elif ra - rb >= 2:  # skips an intermediate layer => leaky detail knowledge
+            elif ra - rb >= 2 and any(rb < r < ra for r in populated):
+                # skips an intermediate layer that EXISTS => leaky detail knowledge
                 out.append(Finding(
                     sign="layer-skip", group="B", severity="med",
                     title="Leaky abstraction (layer skip)",

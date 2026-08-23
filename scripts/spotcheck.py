@@ -196,6 +196,21 @@ def _run(*args, cwd=None) -> None:
         raise SystemExit(f"{' '.join(args)}\n{r.stderr.strip()}")
 
 
+def _is_filled_in(sheet: Path) -> bool:
+    """Has somebody answered this sheet? A blank one has `verdict:` with nothing after it.
+
+    Matches `selfeval._is_completed`, which asks the same question of a review brief. Both exist because
+    a finished document and a freshly generated one are the same shape, so nothing about the file's
+    appearance stops a rebuild from overwriting hours of work.
+    """
+    import re as _re
+    try:
+        return bool(_re.search(r"^\s*verdict\s*:\s*\S", sheet.read_text(errors="replace"),
+                               _re.MULTILINE | _re.IGNORECASE))
+    except OSError:
+        return False
+
+
 def _fill_blobs(src: Path, rev: str) -> None:
     """Make a blobless corpus mirror complete enough to clone from.
 
@@ -253,6 +268,19 @@ def do_kit(worksheet: Path, out: Path, source: dict[str, Path]) -> None:
     for it in meta["items"].values():
         revs.setdefault(it["repo"], it.get("rev", ""))
 
+    # A completed sheet is hours of somebody's work and, until it is ingested, the only copy of the
+    # primary evidence. `selfeval.py do_brief` has refused to clobber one since round 3; this command
+    # shipped without the equivalent guard and destroyed a finished review on its second run. A blank
+    # kit looks exactly like a freshly built one, so the loss is invisible until someone asks for the
+    # results.
+    done = [p for p in out.glob("*.md") if _is_filled_in(p)]
+    if done:
+        raise SystemExit(
+            f"{out} already holds a completed review ({', '.join(p.name for p in done)}).\n"
+            f"Rebuilding would destroy it, and it may be the only copy.\n\n"
+            f"Ingest it first:\n"
+            f"    python scripts/spotcheck.py ingest {done[0]} --reviewer NAME\n"
+            f"or build the new kit somewhere else with --out, or move the finished sheet aside.")
     out.mkdir(parents=True, exist_ok=True)
     (out / "repos").mkdir(exist_ok=True)
     placed = {}
@@ -262,6 +290,12 @@ def do_kit(worksheet: Path, out: Path, source: dict[str, Path]) -> None:
             print(f"  ! no source known for {repo} — pass --source {repo}=<path to a clone or mirror>")
             continue
         dest = out / "repos" / repo
+        if dest.exists():
+            # Safe only because the completed-review guard above has already passed: rebuilding a kit
+            # whose sheet nobody has answered discards nothing. Doing this without that check is
+            # precisely what destroyed a finished review.
+            import shutil
+            shutil.rmtree(dest)
         _fill_blobs(src, rev)
         print(f"  cloning {repo} @ {rev} …")
         _run("git", "clone", "--quiet", "--no-hardlinks", str(src), str(dest))

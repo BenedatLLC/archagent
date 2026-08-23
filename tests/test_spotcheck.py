@@ -453,3 +453,30 @@ def test_the_kit_keeps_the_generated_filename(tmp_path):
     out = tmp_path / "kit"
     _kit_module().do_kit(ws, out, {"src-repo": src})
     assert (out / ws.name).is_file()
+
+
+def test_a_kit_refuses_to_overwrite_a_completed_review(tmp_path):
+    """This command destroyed a finished review on its second run. A completed sheet is hours of work
+    and, until it is ingested, the only copy of the primary evidence — and a blank kit looks exactly like
+    a freshly built one, so the loss stays invisible until someone asks for the results."""
+    m = _kit_module()
+    src = tmp_path / "src-repo"
+    rev = _tiny_repo(src)
+    ws = _worksheet_pair(tmp_path, "src-repo", rev)
+    out = tmp_path / "kit"
+    m.do_kit(ws, out, {"src-repo": src})
+    (out / ws.name).write_text((out / ws.name).read_text().replace("verdict:", "verdict: confirm"))
+    with pytest.raises(SystemExit, match="already holds a completed review"):
+        m.do_kit(ws, out, {"src-repo": src})
+    assert "confirm" in (out / ws.name).read_text()          # and it is still there
+
+
+def test_a_kit_rebuild_over_an_unanswered_sheet_is_allowed(tmp_path):
+    """Regenerating over a blank kit is ordinary. The guard must fire on answers, not on existence."""
+    m = _kit_module()
+    src = tmp_path / "src-repo"
+    rev = _tiny_repo(src)
+    ws = _worksheet_pair(tmp_path, "src-repo", rev)
+    out = tmp_path / "kit"
+    m.do_kit(ws, out, {"src-repo": src})
+    m.do_kit(ws, out, {"src-repo": src})       # no raise

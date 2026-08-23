@@ -139,10 +139,18 @@ def test_layer_inversion_flagged(tmp_path):
 
 
 def test_layer_skip_flagged(tmp_path):
+    """A skip past a layer that is actually there.
+
+    The `svc` subsystem is what makes this a skip rather than the shape of the system, and it was added
+    after calibration round 2: this fixture previously declared only `ui` and `data`, so it asserted the
+    exact false positive a reviewer dismissed three times — a leak past a layer the system did not have.
+    """
     cfg = _cfg(tmp_path)
     _src(cfg, "pkg/ui.py", "from pkg import db\n")     # ui reaches past domain to infra
+    _src(cfg, "pkg/svc.py", "y = 1\n")
     _src(cfg, "pkg/db.py", "z = 1\n")
     _sub(cfg, "ui", "# UI\n\n**Tier:** ui\n\n**Covers:** `src/pkg/ui.py`\n")
+    _sub(cfg, "svc", "# SVC\n\n**Tier:** domain\n\n**Covers:** `src/pkg/svc.py`\n")
     _sub(cfg, "db", "# DB\n\n**Tier:** data\n\n**Covers:** `src/pkg/db.py`\n")
     r = evaluate(cfg)
     assert "layer-skip" in _signs(r)
@@ -428,3 +436,44 @@ def test_a_restricted_origin_produces_no_finding(tmp_path):
         'app.add_middleware(CORSMiddleware, allow_origins=["https://app.example.com"])\n')
     _sub(cfg, "a", "# a\n\n**Covers:** `src/pkg/*.py`\n**Tier:** domain\n")
     assert _of(evaluate(cfg, history=False), "permissive-origin") == []
+
+
+# --- layer-skip only fires over a tier the system has (calibration round 2) --------------------------
+
+def _tiered(tiers: dict, edges: dict):
+    """A model carrying just the tier declarations and edges the layering check reads."""
+    from archagent.evaluate import _Model, _tier_violations
+    m = _Model.__new__(_Model)
+    m.subs = list(tiers)
+    m.tier = dict(tiers)
+    m.edges = {s: set(edges.get(s, ())) for s in tiers}
+    return _tier_violations(m)
+
+
+def test_a_skip_over_an_unpopulated_tier_is_not_reported():
+    """Round 2's whole layer-skip result: 3 findings, 3 dismissals, one reason. Neither repository
+    declared anything at rank 3, so a ui -> domain edge was counted as skipping a layer that was not in
+    the system, and the advice to "route through the intermediate layer" named nothing."""
+    found = _tiered({"cli": "ui", "core": "domain"}, {"cli": ["core"]})
+    assert [f.sign for f in found] == []
+
+
+def test_a_skip_over_a_tier_that_exists_is_still_reported():
+    """The check must not be turned off — only narrowed. With something declared at the intermediate
+    rank there is a real layer being bypassed and something concrete to route through."""
+    found = _tiered({"cli": "ui", "api": "app", "core": "domain"}, {"cli": ["core"]})
+    assert [f.sign for f in found] == ["layer-skip"]
+
+
+def test_the_intermediate_tier_must_lie_between_the_two_ends():
+    """A populated rank outside the gap is not something the edge could route through."""
+    found = _tiered({"ui1": "ui", "d": "domain", "i": "infra"}, {"ui1": ["d"]})
+    assert [f.sign for f in found] == []           # infra is below the target, not between
+
+
+def test_layer_inversion_is_unaffected_by_the_skip_narrowing():
+    """Round 2 scored inversion 2 of 4, but both failures were about how tiers were assigned to test and
+    migration packages rather than about this check. Narrowing it on that evidence would be acting on a
+    different finding than the one measured."""
+    found = _tiered({"infra1": "infra", "d": "domain"}, {"infra1": ["d"]})
+    assert [f.sign for f in found] == ["layer-inversion"]

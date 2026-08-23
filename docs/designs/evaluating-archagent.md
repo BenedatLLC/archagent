@@ -1656,6 +1656,57 @@ being thrown away, and that a round which never asks the question says so out lo
 
 ---
 
+### 22.9 What calibration round 2 decided
+
+Round 2 labelled groups B and C for the first time: 14 findings, 2 repositories, reviewer blind to
+severity, confidence and recommendation. Full results in `docs/evaluations/labels/CALIBRATION-2.md`.
+
+**The result that matters is not a precision figure. Not one of the fourteen measurements was
+disputed.** Every dismissal affirmed what the tool measured and rejected what it concluded — "the
+measurement is real, but", "the upward edge is real but reflects the tier assignment", "the numeric tier
+gap reports a skip, but there is no missing intermediate abstraction". Round 1 was different: there the
+measurement itself was wrong or misattributed 4 times in 19.
+
+So the static analysis under B and C does not need work, and the judgement around it does. That is a
+useful place for the errors to be, and it narrows what is worth changing.
+
+**Acted on — `layer-skip`, 0 of 3.** All three dismissals were one mechanism: the layer the finding says
+to route through does not exist. Neither repository declared any subsystem at tier rank 3, so every
+rank-4 → rank-2 edge counted as skipping a tier that was not in the system, and the recommendation named
+nothing. `_tier_violations` now reports a skip only when some subsystem occupies a rank strictly between
+the two ends.
+
+The rule passes §18's test — *an intermediate layer that is not declared cannot be routed through* names
+no repository — and it only ever removes findings, each of which was incoherent as written. It cleared
+two of the three dismissed items. One remains and is named below.
+
+**Not acted on — `layer-inversion`, 2 of 4.** Both failures were test and migration packages, where the
+edge is real and the *tier assignment* is what the reviewer disputed. That is a question about how
+`describe` assigns tiers to non-production code, not about this check, so narrowing the check would be
+acting on a different finding than the one measured. One of the two dismissals also restated guidance
+the worksheet itself supplied, making it less independent than the rest.
+
+**Not acted on — `unstable-interface`, 2 of 4.** Both confirmations are archagent and both dismissals are
+fastapi-template, so the split falls exactly along the repository boundary and two repositories cannot
+separate a signal weakness from a property of one codebase. The dismissal reason is coherent and worth
+testing later: the signal cannot distinguish an interface that is churning from a module everything
+depends on, changing along with the features that use it.
+
+**Not acted on — `cycle-subsystem` (2 of 2) and `god-component` (1 partial).** Too few to act on in
+either direction.
+
+#### What the narrowing does not fix
+
+`frontend-app` (ui) → `frontend-client` (infra) was dismissed and still fires. It skips rank 2, which
+*is* populated — by `backend-domain`, which a frontend module obviously cannot route through. The tier
+ranks are global while this repository has two independent stacks, and nothing in the model says so.
+Fixing it means knowing that a skip's intermediate layer must be reachable from the same stack, which
+needs either a stack/service scoping on tiers or a much better inference than "some subsystem has that
+rank". Recorded, not attempted.
+
+Also worth stating: the sample held 3 of the repositories' layer-skip findings, not all of them. The
+four that survive the narrowing were not labelled, so nothing here estimates their precision.
+
 ## Appendix A — Where this stands
 
 *Current as of 2026-08-16. This is the only part of the document that goes stale by design.*

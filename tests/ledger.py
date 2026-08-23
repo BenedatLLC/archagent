@@ -56,6 +56,11 @@ METRIC_KEYS: dict[str, tuple[str, ...]] = {
     "recurrence_pass": COMPARABILITY_KEYS,
     "evaluate_mean": FINDINGS_KEYS,
     "findings_count": FINDINGS_KEYS,
+    # Precision is a property of the findings, so the archagent build gates it: a retired or rescoped
+    # signal changes what the population even contains. Round 1 and round 2 differ on it and are
+    # correctly not a series.
+    "precision_confirmed": FINDINGS_KEYS,
+    "precision_n": FINDINGS_KEYS,
 }
 
 
@@ -115,6 +120,14 @@ class Row:
     evaluate_mean: str = ""
     evaluate_scored: str = ""        # same two denominators as the artifact half, for the same reason:
     evaluate_answered: str = ""      #   a mean over part of a review is not a score of the output
+    #: A `precision` round: findings labelled by a reviewer with the tool's claim withheld. Per-signal
+    #: precision is the useful form and does not fit a row, so it lives in the write-up; these are the
+    #: aggregates, which are what a later round can be compared against.
+    precision_n: str = ""            # findings rated (excludes `unsure`, which is missing data)
+    precision_confirmed: str = ""
+    precision_partial: str = ""      # something real, but not what the finding claimed
+    precision_dismissed: str = ""
+    precision_groups: str = ""       # which signal groups the round covered, e.g. "B,C"
     predecessor_run_id: str = ""     # set on the second run of an update pair (§16)
     notes: str = ""
 
