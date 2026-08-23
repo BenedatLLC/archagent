@@ -76,6 +76,17 @@ Not fixed by this, and a different shape: a key read by code in a language archa
 seven of obstudio's remaining dangling keys are read by its Go core, and two are *written* by the
 TypeScript extension for that Go process to read — a write is not a read, and the reader is invisible.
 
+**A source path of `.` means the repository root, and for a long time it meant nothing.** `_module_of`
+built its prefix as `sp + "/"`, so `"."` became `"./"` and no path started with it — a repository whose
+package sits at the root (`dspy/`, `requests/`, `flask/`) resolved **no modules at all**. Every target
+archagent had been run against used the other standard layout, `src/` or `backend/`, which is why it
+survived until a flat-layout repository was tried.
+
+Silent and total, in the usual shape: no modules means an empty import graph, so BOUNDARY contracts scope
+to nothing, every structural signal reports nothing, and `check` says all invariants hold. `archagent
+modules` is the one-command diagnostic for exactly this, and it said "No Python modules resolved" — which
+is why the command exists.
+
 **Every git-reading path takes `until`.** Three of them needed it and only two were obvious: the miner, the
 staleness comparison, and — the one that was missed — the commit-wording profile, which would otherwise
 learn from commits after a cutoff and use them to label commits before it.

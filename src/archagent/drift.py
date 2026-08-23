@@ -576,8 +576,22 @@ def _resolve_js(rel_file: str, spec: str, source_files: set[str]) -> str | None:
 
 
 def _module_of(rel_path: str, source_paths: list[str]) -> str | None:
+    """Which import module a file resolves to, given the directories that are on the path.
+
+    **A source path of `.` means the repository root**, and until this handled it the prefix was built as
+    `"." + "/"` — so no path ever matched and a repository whose package sits at the root resolved *no
+    modules at all*. That is one of the two standard Python layouts (`dspy/`, `requests/`, `flask/`);
+    every target archagent had been run against happened to use the other one (`src/`, `backend/`).
+
+    The failure was total and silent in the usual way: no modules means an empty import graph, so
+    BOUNDARY contracts scope to nothing and every structural signal reports nothing, while `check` says
+    all invariants hold.
+    """
     for sp in source_paths:
-        prefix = sp.rstrip("/") + "/"
+        # `src`, `src/`, `./src` and `"."` are all things a person writes in a config file and all mean
+        # something unambiguous. Normalising here beats a config-format rule nobody would read.
+        stripped = sp.strip().removeprefix("./").strip("/")
+        prefix = "" if stripped in ("", ".") else stripped + "/"
         if rel_path.startswith(prefix) and rel_path.endswith(".py"):
             parts = rel_path[len(prefix):-3].split("/")
             if parts[-1] == "__init__":
