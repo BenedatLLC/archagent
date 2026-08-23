@@ -67,6 +67,28 @@ guidelines.
 **Findings are candidates with a stable identity.** Each carries an id (`sign:owner:hash`) that survives
 re-runs, so a label or an investigation attaches to the finding rather than to a run.
 
+**The dependency graph is parsed *and* declared.** `model.edges` starts from the import graph and then
+takes in every `**Connects:** … via import` edge the artifact declares. DD-4 is the reason: the intended
+model is ground truth and inference corroborates it, so a dependency the author declared is a dependency
+whether or not archagent can parse the language it lives in.
+
+Without this, every structural signal was inert on a Go, Rust or Java majority repository — and said
+nothing. obstudio declares ten subsystems and seventeen connectors and produced **zero** code-derived
+edges, so six signals silently found nothing and the deterministic rubric scored the artifact 1.00 on
+*evaluate signal families active*: a perfect coverage mark over a gap no reader could see.
+
+Two things keep the trust bounded. **Only `via import` edges join** — an `async-event` connector is not a
+code dependency, and treating one as such would manufacture layering violations out of a message queue.
+And **a finding resting on an edge no parsed import corroborates is downgraded one confidence notch and
+says so in its detail**, because reporting a taken-on-trust finding identically to a measured one erases
+the distinction DD-4 draws. When the whole graph is declared, the coverage report names that too, with an
+empty `signs` list — those families are degraded rather than absent, and listing their signs would
+contradict the findings in the same report.
+
+Measured before shipping: on archagent, wardrowbe and fastapi-template the union adds **zero** edges,
+because `drift` reports any declared/actual disagreement as undeclared or stale, so a maintained artifact
+already agrees with its code. The entire effect falls on repositories archagent cannot parse.
+
 **Severity is mechanical; a rating is not.** `severity` counts files and commits. Whether something is
 minor, moderate or critical depends on what it *causes*, which only reading the code establishes — so
 findings that might have consequences are marked for investigation rather than rated.

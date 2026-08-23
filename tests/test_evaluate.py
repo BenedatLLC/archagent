@@ -477,3 +477,82 @@ def test_layer_inversion_is_unaffected_by_the_skip_narrowing():
     different finding than the one measured."""
     found = _tiered({"infra1": "infra", "d": "domain"}, {"infra1": ["d"]})
     assert [f.sign for f in found] == ["layer-inversion"]
+
+
+# --- declared Connects edges join the structural graph (issue #25) ----------------------------------
+
+def _sub_with(cfg, name, body):
+    _sub(cfg, name, body)
+
+
+def test_a_declared_import_edge_the_code_cannot_show_still_builds_the_graph(tmp_path):
+    """A Go, Rust or Java majority repo produces no import graph, so every structural signal was inert
+    and nothing said so. DD-4: the declared model is ground truth and inference corroborates it — a
+    dependency the author declared is a dependency whether or not archagent can parse the language."""
+    cfg = _cfg(tmp_path)
+    _src(cfg, "pkg/a.py", "x = 1\n")           # no imports between them anywhere in code
+    _src(cfg, "pkg/b.py", "y = 1\n")
+    _sub(cfg, "top", "# T\n\n**Tier:** infra\n\n**Connects:** low via import\n\n**Covers:** `src/pkg/a.py`\n")
+    _sub(cfg, "low", "# L\n\n**Tier:** domain\n\n**Covers:** `src/pkg/b.py`\n")
+    r = evaluate(cfg)
+    assert "layer-inversion" in _signs(r)
+
+
+def test_a_finding_resting_only_on_declarations_is_marked_and_downgraded(tmp_path):
+    """The honest cost of trusting declarations. Reporting a taken-on-trust finding at the same
+    confidence as a measured one hides the very distinction DD-4 draws."""
+    cfg = _cfg(tmp_path)
+    _src(cfg, "pkg/a.py", "x = 1\n")
+    _src(cfg, "pkg/b.py", "y = 1\n")
+    _sub(cfg, "top", "# T\n\n**Tier:** infra\n\n**Connects:** low via import\n\n**Covers:** `src/pkg/a.py`\n")
+    _sub(cfg, "low", "# L\n\n**Tier:** domain\n\n**Covers:** `src/pkg/b.py`\n")
+    f = _of(evaluate(cfg), "layer-inversion")[0]
+    assert f.confidence == "med"                       # down from "high"
+    assert "no parsed import corroborates" in f.detail
+
+
+def test_a_measured_edge_is_not_marked_or_downgraded(tmp_path):
+    """The same finding, with a real import behind it, must be unaffected."""
+    cfg = _cfg(tmp_path)
+    _src(cfg, "pkg/a.py", "from pkg import b\n")
+    _src(cfg, "pkg/b.py", "y = 1\n")
+    _sub(cfg, "top", "# T\n\n**Tier:** infra\n\n**Connects:** low via import\n\n**Covers:** `src/pkg/a.py`\n")
+    _sub(cfg, "low", "# L\n\n**Tier:** domain\n\n**Covers:** `src/pkg/b.py`\n")
+    f = _of(evaluate(cfg), "layer-inversion")[0]
+    assert f.confidence == "high" and "corroborates" not in f.detail
+
+
+def test_a_declared_only_graph_is_reported_as_unverified_coverage(tmp_path):
+    """Before this, obstudio scored 1.00 on the rubric's "evaluate signal families active" while six
+    structural signals produced nothing — a perfect coverage mark over a gap nobody could see."""
+    cfg = _cfg(tmp_path)
+    _src(cfg, "pkg/a.py", "x = 1\n")
+    _src(cfg, "pkg/b.py", "y = 1\n")
+    _sub(cfg, "top", "# T\n\n**Tier:** infra\n\n**Connects:** low via import\n\n**Covers:** `src/pkg/a.py`\n")
+    _sub(cfg, "low", "# L\n\n**Tier:** domain\n\n**Covers:** `src/pkg/b.py`\n")
+    r = evaluate(cfg)
+    entry = [i for i in r.inactive if "structural graph" in i.family]
+    assert entry, [i.family for i in r.inactive]
+    # signs stays EMPTY: these families are degraded, not absent — they still emit. Listing the signs
+    # would contradict the findings in the same report, which is what `signs` exists to prevent.
+    assert entry[0].signs == ()
+
+
+def test_a_parsed_graph_reports_no_unverified_coverage_entry(tmp_path):
+    cfg = _cfg(tmp_path)
+    _src(cfg, "pkg/a.py", "from pkg import b\n")
+    _src(cfg, "pkg/b.py", "y = 1\n")
+    _sub(cfg, "top", "# T\n\n**Tier:** infra\n\n**Connects:** low via import\n\n**Covers:** `src/pkg/a.py`\n")
+    _sub(cfg, "low", "# L\n\n**Tier:** domain\n\n**Covers:** `src/pkg/b.py`\n")
+    assert not [i for i in evaluate(cfg).inactive if "structural graph" in i.family]
+
+
+def test_a_non_import_connector_does_not_become_an_import_edge(tmp_path):
+    """`via async-event` is not a code dependency and must not create one — that would manufacture
+    layering violations out of a message queue."""
+    cfg = _cfg(tmp_path)
+    _src(cfg, "pkg/a.py", "x = 1\n")
+    _src(cfg, "pkg/b.py", "y = 1\n")
+    _sub(cfg, "top", "# T\n\n**Tier:** infra\n\n**Connects:** low via async-event\n\n**Covers:** `src/pkg/a.py`\n")
+    _sub(cfg, "low", "# L\n\n**Tier:** domain\n\n**Covers:** `src/pkg/b.py`\n")
+    assert "layer-inversion" not in _signs(evaluate(cfg))

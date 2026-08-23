@@ -194,6 +194,26 @@ class _Model:
     import_graph: dict[str, set[str]]     # file -> internal files it imports
     file_subs: dict[str, set[str]]        # file -> subsystems that cover it
     connectors: dict[tuple[str, str], str]  # declared (a, b) -> connector kind (**Connects:**)
+    #: Edges present in `**Connects:** … via import` but **not** found by parsing the code. Evidence of
+    #: a weaker kind — the author's claim, which nothing has corroborated — so a finding resting on one
+    #: says so and carries lower confidence. `drift` is what verifies these; `evaluate` only reports how
+    #: much of its own reasoning stands on unverified ground.
+    declared_only: set[tuple[str, str]] = field(default_factory=set)
+
+    def unverified(self, *subjects: str) -> bool:
+        """Does any edge among these subjects exist only as a declaration?"""
+        return any((a, b) in self.declared_only or (b, a) in self.declared_only
+                   for a in subjects for b in subjects if a != b)
+
+    @property
+    def graph_is_declared_only(self) -> bool:
+        """Every edge came from a declaration and none from parsed code.
+
+        True when the configured languages produced no import graph at all — a Go, Rust or Java majority
+        repository. Everything structural then rests on the artifact's own claims.
+        """
+        return bool(self.declared_only) and self.declared_only == {
+            (a, b) for a, bs in self.edges.items() for b in bs}
 
     def file_service(self, f: str) -> str | None:
         """The deployment service a file belongs to, via its subsystem's **Service:** (if any)."""
@@ -248,7 +268,25 @@ def _build_model(config: Config) -> _Model:
                         edges[name].add(tsub)
                         rev[tsub].add(name)
                         weight[(name, tsub)] = weight.get((name, tsub), 0) + 1
-    return _Model(list(files), files, tier, edges, rev, weight, service, import_graph, file_subs, connectors)
+
+    # Declared `via import` edges join the graph (issue #25). DD-4: the intended model is ground truth
+    # and inference corroborates it — so a dependency the author declared is a dependency, whether or not
+    # archagent can parse the language it lives in. Without this, every structural signal is inert on a
+    # Go, Rust or Java majority repository and nothing says so.
+    #
+    # Measured before shipping: on archagent, wardrowbe and fastapi-template this adds **zero** edges —
+    # declared and parsed agree exactly, because `drift` reports any disagreement as undeclared or stale.
+    # The whole effect is on repositories archagent cannot parse, which is the point.
+    declared_only: set[tuple[str, str]] = set()
+    for (a, b), kind in connectors.items():
+        if kind != "import" or a not in edges or b not in edges or a == b:
+            continue
+        if b not in edges[a]:
+            edges[a].add(b)
+            rev[b].add(a)
+            declared_only.add((a, b))
+    return _Model(list(files), files, tier, edges, rev, weight, service, import_graph, file_subs,
+                  connectors, declared_only)
 
 
 def _tier_of(text: str) -> str | None:
@@ -325,9 +363,40 @@ def evaluate(config: Config, history: bool = True, since: str | None = None,
     result.findings += _server_side_fetch(config)
     result.findings += _observability(root, model)
 
+    _mark_unverified(model, result)
     _attach_investigations(config.architecture_dir, result)
     result.inactive = _coverage(model, result, history_requested=history)
     return result
+
+
+#: Confidence, one notch down. A finding standing on a declaration nobody has corroborated is weaker
+#: evidence than the same finding standing on a parsed import, and reporting the two identically hides
+#: exactly the distinction DD-4 draws — declared metadata is the intended model, inference is what
+#: confirms or contradicts it. Here there is no inference to confirm anything.
+_DOWNGRADE = {"high": "med", "med": "low", "low": "low"}
+
+
+def _mark_unverified(model: _Model, result: "EvaluationResult") -> None:
+    """Flag structural findings that rest on `**Connects:**` edges the code never confirmed (issue #25).
+
+    Only the static structural families: the history signals read git, and the file-level ones read
+    source, so neither depends on the subsystem graph being verifiable.
+
+    This is the honest cost of letting declared edges into the graph. Without it, a Go repository's
+    layering findings would look exactly as solid as a Python repository's, when one was measured and the
+    other was taken on trust — and the reader has no way to tell them apart.
+    """
+    if not model.declared_only:
+        return
+    structural = {"layer-inversion", "layer-skip", "unstable-dependency", "unstable-interface",
+                  "god-component", "cycle-subsystem", "distributed-monolith",
+                  "extraneous-adjacent-connector"}
+    for f in result.findings:
+        if f.sign not in structural or not model.unverified(*f.subjects):
+            continue
+        f.confidence = _DOWNGRADE.get(f.confidence, f.confidence)
+        f.detail = (f.detail + "  [rests on **Connects:** declarations that no parsed import "
+                    "corroborates — `archagent drift` is what checks them]").strip()
 
 
 def _attach_investigations(arch_dir: Path, result: "EvaluationResult") -> None:
@@ -386,6 +455,22 @@ def _coverage(model: _Model, result: "EvaluationResult", history_requested: bool
         inactive.append(Inactive("B — layering (leaky abstraction)",
                                  f"needs **Tier:** on ≥2 subsystems ({len(tiers)} declared)",
                                  ("layer-inversion", "layer-skip")))
+    # A structural graph made entirely of declarations. `signs` stays EMPTY: these families are degraded,
+    # not absent — they still emit, on the artifact's own claims rather than on parsed code. Listing the
+    # signs here would contradict the findings in the same report, which is the failure the `signs` field
+    # was added to make impossible.
+    #
+    # Reported at all because the alternative is what obstudio did before issue #25: six structural
+    # signals produced nothing, the run said nothing about it, and the deterministic rubric scored the
+    # artifact **1.00 on "evaluate signal families active"** — a perfect coverage mark over a gap nobody
+    # could see.
+    if model.subs and model.graph_is_declared_only:
+        inactive.append(Inactive(
+            "B/C — structural graph (declared, unverified)",
+            "no import graph could be parsed from the configured languages, so the dependency graph is "
+            "the artifact's **Connects:** declarations alone — `drift` is what checks those against the "
+            "code, and nothing here corroborates them",
+            ()))
     if not model.connectors:
         inactive.append(Inactive("B/C — connector topology",
                                  "no **Connects:** declared (some service edges are still inferred "

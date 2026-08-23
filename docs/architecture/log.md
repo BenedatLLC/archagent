@@ -36,3 +36,21 @@ documents and one undocumented module; both lists are now empty.
 
 Coverage is 30 of 30 source files across 8 subsystem documents, and all 30 are named somewhere.
 `reporting` stays flagged `no diagram` on purpose — the reasoning is in that document.
+
+## 2026-08-23 — declared dependencies join the structural graph (issue #25)
+
+`evaluate` built its subsystem graph only from parsed imports, so on a repository in a language archagent
+cannot analyse every structural signal produced nothing and the run said so nowhere. obstudio is the
+worked example: ten subsystems, seventeen declared connectors, zero code-derived edges, six silent
+signals — and a **1.00** on the rubric's *evaluate signal families active*, which reads the tool's own
+coverage report and therefore certified a gap it could not see.
+
+Declared `**Connects:** … via import` edges now join the graph, per DD-4. Bounded three ways: only
+`import` kinds, a confidence downgrade plus a note on any finding resting on an uncorroborated edge, and
+a coverage entry when the whole graph is declared.
+
+The change was measured before it shipped rather than after. On archagent, wardrowbe and fastapi-template
+it adds zero edges — declared and parsed already agree, because `drift` reports any disagreement — so the
+blast radius is exactly the repositories that were blind. obstudio goes from 21 findings to 29, and its
+`implicit-coupling` count drops from 8 to 6 as two co-changing pairs turn out to have a declared
+dependency after all.
