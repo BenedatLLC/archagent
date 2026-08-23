@@ -340,3 +340,67 @@ def test_the_brief_records_its_own_rubric_versions():
     from rubric_judged import ARTIFACT_RUBRIC_VERSION, EVALUATE_RUBRIC_VERSION
     text = render_brief("architecture/", "demo", findings=_cap())
     assert ARTIFACT_RUBRIC_VERSION in text and EVALUATE_RUBRIC_VERSION in text
+
+
+# --- per-finding impact ratings (round 5) -----------------------------------------------------------
+
+def _finding(fid="g:ui:0", sign="god-component"):
+    return {"sign": sign, "group": "C", "severity": "high", "title": sign, "subjects": ["ui"],
+            "detail": "70/122 files", "recommendation": "Split it.", "id": fid, "confidence": "med"}
+
+
+def test_the_impact_scale_contains_the_investigate_ratings_verbatim():
+    """2, 3 and 4 are `minor` / `moderate` / `critical`, the vocabulary `archagent investigate --record`
+    already accepts, so a rating collected here can be written straight into the artifact and compared
+    with one produced by a full investigation."""
+    from archagent.investigations import RATINGS
+    from rubric_judged import IMPACT_SCALE
+    assert tuple(IMPACT_SCALE[n][0] for n in (2, 3, 4)) == RATINGS
+
+
+def test_zero_is_not_a_finding_rather_than_the_bottom_of_the_scale():
+    """"Wrong" and "unimportant" are different failures with different fixes, and collapsing them would
+    let a false finding average in as a harmless one."""
+    from rubric_judged import IMPACT_SCALE
+    assert IMPACT_SCALE[0][0] == "not a finding"
+    assert IMPACT_SCALE[1][0] == "trivial"
+
+
+def test_each_finding_gets_its_own_impact_block():
+    from rubric_judged import render_brief
+    text = render_brief("architecture/", "demo", findings=_cap(findings=[_finding(), _finding("l:a:0")]))
+    assert text.count("impact:") == 2
+
+
+def test_impacts_are_read_back_against_their_finding_ids():
+    from rubric_judged import parse_impacts
+    text = ("### `god-component` — G\n**id** `g:ui:0`\n\n```\nimpact: 4\nwhy: three teams edit it\n```\n"
+            "### `layer-skip` — L\n**id** `l:a:0`\n\n```\nimpact: 0\nwhy: no such layer\n```\n")
+    got = parse_impacts(text)
+    assert got["g:ui:0"]["impact"] == 4 and "three teams" in got["g:ui:0"]["why"]
+    assert got["l:a:0"]["impact"] == 0
+
+
+def test_an_unanswered_finding_is_absent_not_zero():
+    """A missing rating is missing data. Defaulting it to 0 would read every skipped item as "not a
+    finding" — the strongest verdict on the scale and the least likely to be meant."""
+    from rubric_judged import parse_impacts
+    assert parse_impacts("### `x` — X\n**id** `g:ui:0`\n\n```\nimpact:\nwhy:\n```\n") == {}
+
+
+def test_a_long_why_does_not_swallow_the_next_findings_rating():
+    from rubric_judged import parse_impacts
+    text = ("### `a` — A\n**id** `a:1:0`\n\n```\nimpact: 2\nwhy: several\nlines\nof reasoning\n```\n"
+            "### `b` — B\n**id** `b:2:0`\n\n```\nimpact: 5\nwhy: bad\n```\n")
+    got = parse_impacts(text)
+    assert got["a:1:0"]["impact"] == 2 and got["b:2:0"]["impact"] == 5
+
+
+def test_the_summary_reports_a_distribution_not_a_mean():
+    """A mean over a scale whose zero means "not a finding" is meaningless: one wrong finding and one
+    project-threatening one do not average to "moderate"."""
+    from rubric_judged import impact_summary
+    s = impact_summary({"a": {"impact": 0}, "b": {"impact": 1}, "c": {"impact": 4}}, total=5)
+    assert "mean" not in s
+    assert s["not_a_finding"] == 1 and s["noise"] == 2 and s["worth_acting_on"] == 1
+    assert s["rated"] == 3 and s["unrated"] == 2

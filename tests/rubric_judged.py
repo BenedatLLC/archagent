@@ -219,6 +219,28 @@ ARTIFACT_RUBRIC_VERSION = "brief-v3"
 EVALUATE_RUBRIC_VERSION = "eval-v1"
 
 
+#: How much a finding would matter if it is real, from a nitpick to something that could sink the project.
+#:
+#: **The middle three are verbatim the `investigate` ratings** (`archagent investigate --record --rating`),
+#: so a rating collected here can be written straight into the artifact and compared with one produced by
+#: a full investigation. The scale extends at both ends because those three do not cover what a reviewer
+#: actually meets: a correct finding not worth anyone's time is not "minor", and a finding that will force
+#: a rewrite is not "critical" in the same sense as one that already misbehaves.
+#:
+#: `0` is not a point on the scale. It is the escape hatch for a finding that describes nothing real, kept
+#: separate so that "wrong" never averages in as "unimportant" — they are different failures and the fix
+#: for each is different.
+IMPACT_SCALE: dict[int, tuple[str, str]] = {
+    0: ("not a finding", "The measurement is wrong, or it describes nothing that exists. Say which."),
+    1: ("trivial", "Correct, and not worth anyone's time. You would close it without acting."),
+    2: ("minor", "Untidy. Nothing depends on it, or it would fail loudly if it broke."),
+    3: ("moderate", "A real maintenance hazard: the parts can drift apart and nothing would catch it."),
+    4: ("critical", "It already misbehaves, or a plausible edit makes it misbehave *silently*."),
+    5: ("project-threatening", "It blocks a change the project must make, or compounds until something "
+                               "has to be rewritten."),
+}
+
+
 #: What `evaluate` reported, judged as a **report** rather than as a set of claims.
 #:
 #: The line these deliberately do not cross is whether a finding is *true*. That question needs the
@@ -395,6 +417,23 @@ def _evaluate_section(cap) -> list[str]:
         "",
         f"## The findings ({len(cap.findings)})",
         "",
+        "**Rate each one for impact** in the block beneath it, and say why in a sentence. This is the "
+        "judgement",
+        "the tool refuses to make: `evaluate`'s own severity counts files and commits, never consequences.",
+        "",
+        "| | |",
+        "|---|---|",
+    ] + [f"| **{n} — {label}** | {desc} |" for n, (label, desc) in sorted(IMPACT_SCALE.items())] + [
+        "",
+        "`0` is not the bottom of the scale, it is a different answer: the finding describes nothing real. "
+        "Keeping",
+        "it separate matters, because *wrong* and *unimportant* are different failures with different "
+        "fixes.",
+        "",
+        "**A finding can be real and still be a 1.** Saying so is the most useful thing you can do here — "
+        "a tool",
+        "that reports true trivia trains people to skim, and no amount of accuracy recovers from that.",
+        "",
     ]
     if not cap.findings:
         lines += ["_None reported._ That is a result, not a blank: read the coverage list below before "
@@ -410,6 +449,11 @@ def _evaluate_section(cap) -> list[str]:
             f.get("detail", "") or "_no detail recorded_",
             "",
             f"*Recommended:* {f.get('recommendation', '') or '_none given_'}",
+            "",
+            "```",
+            "impact:",
+            "why:",
+            "```",
             "",
         ]
     lines += ["## What did not run", ""]
@@ -616,3 +660,59 @@ def review_from(text: str, repo: str, rev: str, judged_by: str,
                 root: Path | None = None) -> JudgedReview:
     return JudgedReview(repo=repo, rev=rev, judged_by=judged_by or "(unrecorded)",
                         dated=date.today().isoformat(), scores=parse_brief(text, root))
+
+
+# --- per-finding impact ratings ----------------------------------------------------------------
+
+_FINDING_ID = re.compile(r"\*\*id\*\*\s*`([^`]+)`")
+_IMPACT = re.compile(r"^[ \t>*-]*impact\s*:[ \t]*(\S+)", re.IGNORECASE | re.MULTILINE)
+
+
+def parse_impacts(text: str) -> dict[str, dict]:
+    """`{finding_id: {"impact": int, "why": str}}` from a completed brief.
+
+    Unanswered findings are absent rather than defaulted. A missing rating is missing data — averaging it
+    in as a zero would read every skipped item as "not a finding", which is the strongest verdict on the
+    scale and the one least likely to be meant.
+
+    Split by the `###` finding headings rather than parsed as one blob, so a `why:` running to several
+    lines cannot swallow the next finding's rating.
+    """
+    out: dict[str, dict] = {}
+    for block in re.split(r"^###\s+", text, flags=re.MULTILINE)[1:]:
+        m = _FINDING_ID.search(block)
+        if not m:
+            continue
+        got = _fields(block)                      # reuses the lenient score/evidence/why reader
+        raw = _IMPACT.search(block)
+        if not raw:
+            continue
+        digits = re.sub(r"[^0-9]", "", raw.group(1))
+        if not digits or int(digits[0]) not in IMPACT_SCALE:
+            continue
+        out[m.group(1)] = {"impact": int(digits[0]), "why": got["why"].strip()}
+    return out
+
+
+def impact_summary(ratings: dict[str, dict], total: int) -> dict:
+    """What a set of impact ratings says, with the denominators that make it readable.
+
+    Reports the **distribution**, not a mean. A mean over a scale whose zero means "not a finding" is
+    meaningless — one wrong finding and one project-threatening one do not average to "moderate" — and the
+    shape is the thing anyone would act on: a tool reporting mostly 1s has a different problem from one
+    reporting mostly 0s.
+    """
+    counts = {n: 0 for n in IMPACT_SCALE}
+    for r in ratings.values():
+        counts[r["impact"]] += 1
+    rated = len(ratings)
+    return {
+        "rated": rated,
+        "unrated": max(0, total - rated),
+        "counts": counts,
+        "not_a_finding": counts[0],
+        # Everything a reader would act on. The line between 2 and 3 is where "untidy" becomes "this can
+        # break something", and it is the number that decides whether the signal earns its place.
+        "worth_acting_on": sum(counts[n] for n in (3, 4, 5)),
+        "noise": counts[0] + counts[1],
+    }

@@ -19,6 +19,7 @@ reading tea leaves. The seam is marked rather than faked.
 """
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -263,6 +264,148 @@ def do_judged(path: Path, review: Path, by: str) -> None:
     print(f"\n  written to {dest}")
 
 
+def do_package(path: Path, out: Path | None = None) -> None:
+    """Assemble a calibration review package: the repository, its artifact, the `evaluate` report, the
+    worksheet and instructions — everything a reviewer needs, and nothing that would anchor them.
+
+    `spotcheck.py kit` does the same job for a *blind* findings round. This one is not blind and cannot
+    be: an artifact review means reading the documents, and the documents are the thing being reviewed.
+    What that buys is the question a blind sheet cannot ask — how much each finding would actually matter
+    — and what it costs is that these impact ratings are agreement-with-context, not blind precision. The
+    write-up has to say so.
+    """
+    import datetime
+    import shutil
+    import subprocess
+
+    from findings import capture, load, save
+    from toolinfo import tool_info
+    root = path.resolve()
+    rev = _rev(root) or "unknown"
+    out = out or Path(f"/tmp/archagent-calibration-{datetime.date.today()}")
+
+    done = [p for p in out.glob("*.md") if _is_completed(p)]
+    if done:
+        raise SystemExit(f"{out} already holds a completed review ({', '.join(p.name for p in done)}).\n"
+                         f"Ingest it first or pass a different --out; rebuilding would destroy it.")
+
+    tool = tool_info()
+    cap = _latest_capture(root)
+    if cap is None:
+        cap = capture(root, repo=root.name, archagent=tool.stamp(),
+                      captured_at=datetime.date.today().isoformat())
+        save(RESULTS / root.name / f"findings-{cap.target_rev}.json", cap)
+
+    out.mkdir(parents=True, exist_ok=True)
+    dest = out / "repo"
+    if dest.exists():
+        shutil.rmtree(dest)
+    print(f"  cloning {root.name} @ {rev} …")
+    # A real clone, not a worktree: a worktree's `.git` is a pointer file naming the repository it came
+    # from, so every git command fails the moment the package is copied to another machine.
+    subprocess.run(["git", "clone", "--quiet", "--no-hardlinks", str(root), str(dest)], check=True)
+    subprocess.run(["git", "-C", str(dest), "checkout", "--quiet", "--detach", rev], check=True)
+
+    arch = _arch_dir(root)
+    brief = render_brief(arch, root.name, second_run=False, tool=tool.stamp(),
+                         target_rev=rev, findings=cap)
+    sheet = out / f"worksheet-{root.name}-{rev}.md"
+    sheet.write_text(brief)
+    (out / "evaluate-report.txt").write_text(_evaluate_report(root))
+    (out / "REVIEW.md").write_text(_package_readme(root.name, rev, arch, sheet.name, len(cap.findings)))
+
+    print(f"\npackage at {out}")
+    print(f"  repo/ @ {rev} (artifact at {arch}/), evaluate-report.txt, {sheet.name}, REVIEW.md")
+    print(f"  {len(cap.findings)} finding(s) to rate for impact")
+
+
+def _evaluate_report(root: Path) -> str:
+    """The rendered `evaluate` output, captured as text.
+
+    Included as well as the findings in the worksheet because the *report* is what a user actually meets:
+    the ordering, the coverage section naming what did not run, the caveats. A reviewer judging whether a
+    report is usable needs the report, not a reconstruction of it.
+    """
+    import subprocess
+    r = subprocess.run(["uv", "run", "archagent", "evaluate", "--project", str(root)],
+                       cwd=ROOT, capture_output=True, text=True,
+                       env={**os.environ, "NO_COLOR": "1", "TERM": "dumb"})
+    return r.stdout or "(evaluate produced no output)"
+
+
+def _package_readme(repo: str, rev: str, arch: str, sheet: str, n_findings: int) -> str:
+    return f"""# Reviewing the architecture documentation for `{repo}`
+
+Thank you for doing this. Expect two to three hours. Everything you need is in this directory — nothing
+to clone, install or configure.
+
+## What this is
+
+`archagent` reads a codebase and writes architecture documentation for it, then checks that documentation
+back against the code and reports where the *design itself* may have problems. You are reviewing both
+halves, on a real repository:
+
+| | |
+|---|---|
+| `repo/` | `{repo}` at `{rev}`, with the generated documentation in `repo/{arch}/` |
+| `evaluate-report.txt` | what `archagent evaluate` reported about that architecture |
+| `{sheet}` | **the worksheet — open this and work through it** |
+
+## The worksheet has two parts
+
+**Part one — the documentation.** Six criteria about what `describe` wrote: is it accurate, is anything
+significant missing, can a person read it, are the diagrams worth their space, do the invariants protect
+anything. Score each 1–5 against the anchors given.
+
+**Part two — the findings.** {n_findings} architectural problems the tool believes it found. Three
+criteria about the *report* — could you act on it, does it claim more than it showed, is it clear about
+what it never checked — and then **an impact rating for each individual finding**, from *trivial* to
+*project-threatening*.
+
+That per-finding rating is the judgement the tool deliberately refuses to make. Its own severity counts
+files and commits; it says nothing about whether anything would actually break. Only someone reading the
+code can say that, which is why you are being asked.
+
+## Two things that make a review usable
+
+**Cite what you judged from.** A score with a `file:line` behind it can be checked and argued with; one
+without it cannot be distinguished from a guess. Uncited scores are discarded rather than averaged in —
+not as a penalty, but because an artifact review is mostly prose and fluent prose with nothing behind it
+is the failure mode this instrument exists to catch.
+
+**Score `0` when you are unsure**, on any criterion, and say why. It is excluded from the average rather
+than counted against the tool. A guessed number is worse than an honest gap, because nothing downstream
+can tell the two apart.
+
+For a finding, `impact: 0` means something different — *this describes nothing real*. That is deliberately
+not the bottom of the impact scale: "wrong" and "unimportant" are different failures and the fix for each
+is different.
+
+## Please be harsh
+
+The most useful review this project has received found errors in **both** directions from the person who
+built the checks. Findings that look impressive and mean nothing are the specific thing we are trying to
+detect, and a polite review cannot detect them. If a finding is real and still not worth anyone's time,
+say `1` — a tool that reports true trivia trains people to skim, and accuracy does not recover from that.
+
+## Checking your work parses
+
+The worksheet is lenient about formatting, and you can verify it reads before handing it back:
+
+```bash
+python scripts/selfeval.py check-brief <this-worksheet> --project <path-to-repo/>
+```
+
+It reports which criteria were read and which citations resolve. It shows you no one else's review —
+deliberately, since a filled-in example would anchor your scores, the kind of problem you look for, and
+how much you write.
+
+## When you are done
+
+Send back `{sheet}`. Nothing else is needed.
+"""
+
+
 def do_run(url: str, rev_from: str, rev_to: str) -> None:
     raise SystemExit(
         "`run` is not implemented: steps 2 and 5 (describe at each revision) need a coding agent invoked\n"
@@ -290,6 +433,8 @@ if __name__ == "__main__":
                    help="capture twice and check the two runs agree (costs a second evaluate run)")
     s.add_argument("--no-repeat", dest="repeat", action="store_false",
                    help="capture once even on a calibration run")
+    pk = sub.add_parser("package", help="assemble a calibration review package for someone else")
+    pk.add_argument("path"); pk.add_argument("--out", default="")
     fi = sub.add_parser("findings", help="capture evaluate output on its own, without scoring")
     fi.add_argument("path")
     fi.add_argument("--kind", default="scoring")
@@ -315,6 +460,9 @@ if __name__ == "__main__":
         raise SystemExit(0)
     if args.cmd == "judged":
         do_judged(Path(args.path), Path(args.review), args.by); raise SystemExit(0)
+    if args.cmd == "package":
+        do_package(Path(args.path), Path(args.out).expanduser() if args.out else None)
+        raise SystemExit(0)
     if args.cmd == "findings":
         do_findings(Path(args.path), _repeat_for(args.kind, args.repeat), args.until)
         raise SystemExit(0)

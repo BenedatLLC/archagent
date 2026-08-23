@@ -1806,6 +1806,66 @@ rank". Recorded, not attempted.
 Also worth stating: the sample held 3 of the repositories' layer-skip findings, not all of them. The
 four that survive the narrowing were not labelled, so nothing here estimates their precision.
 
+## 23. Round 5 — the calibration package, and the question it adds
+
+Rounds 1 through 4 reviewed the artifact. Rounds 2 and 3 labelled findings blind. Round 5 does both in one
+package, and adds the one question neither instrument has ever asked.
+
+### 23.1 One package, two parts
+
+`selfeval.py package <repo>` assembles a directory a reviewer can be handed with no setup: the repository
+at its revision with the generated documentation inside it, the rendered `evaluate` report as the reader
+would meet it, a worksheet, and instructions. `spotcheck.py kit` does the same job for a blind findings
+round; this one is for a calibration and cannot be blind, because an artifact review means reading the
+documents and the documents are the thing under review.
+
+The worksheet carries the six artifact criteria, the three `evaluate`-report criteria from §22.3, and then
+a per-finding block that is new.
+
+### 23.2 Impact, on a scale that contains the ratings we already use
+
+**`evaluate`'s severity counts files and commits and says nothing about consequence.** The tool is
+explicit about this and refuses to rate — `investigate` exists precisely because a minor/moderate/critical
+verdict requires someone to read the code. Nothing has ever collected that judgement at scale.
+
+| | |
+|---|---|
+| 0 | **not a finding** — the measurement is wrong, or it describes nothing that exists |
+| 1 | **trivial** — correct, and not worth anyone's time |
+| 2 | **minor** — untidy; nothing depends on it, or it fails loudly |
+| 3 | **moderate** — a real maintenance hazard; the parts can drift and nothing would catch it |
+| 4 | **critical** — it already misbehaves, or a plausible edit makes it misbehave silently |
+| 5 | **project-threatening** — it blocks a change the project must make, or compounds into a rewrite |
+
+**2, 3 and 4 are verbatim the `investigate` ratings**, so a rating collected here can be written into the
+artifact with `investigate --record` and compared against one produced by a full investigation. The scale
+extends at both ends because those three do not cover what a reviewer actually meets: a correct finding
+nobody should spend time on is not "minor", and one that will force a rewrite is not "critical" in the
+same sense as one that already misbehaves.
+
+**`0` is not the bottom of the scale.** It is a different answer, kept separate so that *wrong* never
+averages in as *unimportant* — different failures, different fixes. For the same reason the summary
+reports a distribution rather than a mean: one false finding and one project-threatening finding do not
+average to "moderate".
+
+An unanswered finding is absent from the results rather than defaulted to 0, since 0 is the strongest
+verdict on the scale and the least likely to be meant by silence.
+
+### 23.3 What this measures, and what it does not
+
+**These impact ratings are not blind.** The reviewer has the report, the severities and the
+recommendations in front of them, because they are simultaneously judging whether that report is any good.
+So the numbers are agreement-with-context, not the blind precision rounds 2 and 3 produced, and a write-up
+may not present them as the same kind of evidence. The blind instrument is `spotcheck.py` and it stays.
+
+What the unblinded setting buys is the question blindness cannot ask. A blind sheet shows evidence without
+the tool's claim, which is right for *is this true* and useless for *how much would this matter*, since
+the second needs the recommendation and the severity to react to.
+
+The most useful number here is likely to be the count at 0 and 1 — findings that are wrong, plus findings
+that are right and worthless. A tool reporting true trivia trains its readers to skim, and no amount of
+accuracy recovers from that.
+
 ## Appendix A — Where this stands
 
 *Current as of 2026-08-16. This is the only part of the document that goes stale by design.*
