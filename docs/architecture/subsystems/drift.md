@@ -50,6 +50,22 @@ keeping the corpus varied rather than large.
 real citation, so this check flags it — twice, while this paragraph was being written, including once in
 the sentence explaining the problem.)
 
+**A subsystem can claim a layer it has no business on, and that is drift rather than a smell.**
+`_mistiered` reports a subsystem whose covered files are *entirely* test, migration or script code while
+declaring a production `**Tier:**`. The artifact is asserting something about the code that the code
+contradicts, which is this command's question, not `evaluate`'s.
+
+Issue #26 is why: four of seven labelled `layer-inversion` findings came from packages tiered `infra` —
+the bottom rank — so everything the tests imported read as upward. Correcting the two tiers on wardrowbe
+takes that signal from seven findings to two, dropping exactly the five a reviewer dismissed.
+
+**Every** covered file must be non-production, not merely most. A subsystem holding production code beside
+its tests is a production subsystem and belongs on the ladder; flagging it would relocate the false
+positives rather than remove them. That strictness is also why the check catches two of the four known
+cases and not four — one of the misses keeps its startup and seed files in the application package under
+no distinguishing path, and guessing from a filename is the heuristic this module has twice been burned
+by.
+
 **Every git-reading path takes `until`.** Three of them needed it and only two were obvious: the miner, the
 staleness comparison, and — the one that was missed — the commit-wording profile, which would otherwise
 learn from commits after a cutoff and use them to label commits before it.

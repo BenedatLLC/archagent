@@ -75,7 +75,7 @@ The fix is to pull the plumbing into a leaf module both can import._
 | `decisions/` | ADRs — why the structure is the way it is |
 | `investigations/` | what an `evaluate` finding turned out to mean (ADL-SPEC §6a) |
 
-**Coverage: 30 of 30 source files, across 8 subsystem documents, and all 30 are named in some document.**
+**Coverage: 31 of 31 source files, across 8 subsystem documents, and all 31 are named in some document.**
 The second number is the one worth watching. A `**Covers:**` glob claims a file; it does not describe it,
 and an artifact can sit at 100% coverage with a whole mechanism unmentioned. `archagent status` reports
 both, and the depth column beside them, so a reader can tell a document that is short from one that is

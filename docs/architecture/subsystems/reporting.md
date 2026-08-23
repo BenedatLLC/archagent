@@ -61,6 +61,10 @@ this tool follows, and leaving it standing is cheaper than adding a decorative d
 evaluation rubric later learned the same lesson the hard way: coverage alone is maximised by one glob
 claiming everything, so it has to be read alongside how the claims are spread.
 
+**`graph` reads the tier vocabulary rather than its own copy of it.** `tier_of` used to exist here as well
+as in `evaluate`, which is how a shared parsing rule ends up in three places; it now comes from
+`tiers.py`, a leaf both can import without closing a dependency cycle.
+
 **The graph is generated, never authored.** It is derived from the metadata lines, so a diagram cannot
 drift from the declarations — it *is* the declarations.
 

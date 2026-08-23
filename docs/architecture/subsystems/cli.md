@@ -46,6 +46,10 @@ arriving through the report rather than through a scan.
 **Findings carry their own next step.** A finding marked `investigate` prints the exact command that acts
 on it (`cli.py:538`). A reader who cannot act on a finding drops it.
 
+**A new drift category needs a renderer and a JSON key, and forgetting either is silent.** `mistiered`
+(issue #26) is reported in both, alongside a one-line instruction naming the tier to use — a finding that
+tells a reader what is wrong without telling them what to type is one they postpone.
+
 **Output is written for a pipe, not only for a terminal.** `--version` prints with a bare `print()` rather
 than through rich, which would highlight a bare version as a number and emit colour codes into whatever is
 capturing it. The same concern runs the other way in `check`, which strips ANSI from the tools it shells
