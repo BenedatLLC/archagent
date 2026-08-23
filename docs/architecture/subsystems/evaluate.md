@@ -89,6 +89,16 @@ Measured before shipping: on archagent, wardrowbe and fastapi-template the union
 because `drift` reports any declared/actual disagreement as undeclared or stale, so a maintained artifact
 already agrees with its code. The entire effect falls on repositories archagent cannot parse.
 
+**A tier token can say *not a layer*, and that is not the same as saying nothing.** The vocabulary lives
+in `tiers.py` (issue #26): `test`, `migration`, `ops` and friends are recognised and carry no rank, so the
+layering checks skip those subsystems. An unrecognised token was already skipped, so this buys no new
+behaviour — it buys the difference between a deliberate choice and a typo, which a silent skip cannot
+express.
+
+The coverage report counts **rankable** tiers, not declared ones. A repository with `domain` on one
+subsystem and `test` on another has two `**Tier:**` lines and nothing the layering check can compare, so
+counting declarations would report the family active over a comparison that never happened.
+
 **Severity is mechanical; a rating is not.** `severity` counts files and commits. Whether something is
 minor, moderate or critical depends on what it *causes*, which only reading the code establishes — so
 findings that might have consequences are marked for investigation rather than rated.
