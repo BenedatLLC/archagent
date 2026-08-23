@@ -1648,6 +1648,43 @@ covering `layer-inversion`, `layer-skip`, `unstable-interface`, `cycle-subsystem
 Two repositories is thin, and `generate` warns when a round draws on fewer than two. Whatever precision
 comes back is quoted with its interval and its sources, the way round 1's was.
 
+### 22.10 Round 3 — pre-registered, because only half its outcomes are decisive
+
+Six items, all wardrowbe at `wardrowbe-v1.7.0`: three `unstable-interface` and three `layer-inversion`.
+Handed over 2026-08-23. **How it will be read is written down here before the results exist**, for the
+same reason §7.1 pre-registers the defect study — the confound below is easy to rationalise away once
+there is a number attached to it.
+
+**The confound.** Round 2 split `unstable-interface` 2 confirm (archagent) / 2 dismiss
+(fastapi-template), exactly along the repository boundary. wardrowbe is architecturally the same shape as
+fastapi-template: Python `app` package under `backend/`, TypeScript frontend, `backend-*` / `frontend-*`
+subsystems, a shared `backend-domain` and a `backend-tests`. archagent — where both confirmations came
+from — is the odd one out, a CLI with no web layer.
+
+So the round is asymmetric:
+
+- **Confirmed → decisive.** It breaks the fastapi-template pattern inside a repository of the same shape,
+  which means those dismissals were about that codebase rather than about the signal.
+- **Dismissed → still confounded.** "The signal is weak" and "web backends with a shared domain module
+  co-change for ordinary reasons" both predict it, and two repositories of one shape cannot separate
+  them. A dismissed result may **not** be written up as having resolved the question. It raises the
+  dismissal count and leaves the cause open.
+
+**The genuinely independent third repository is obstudio, and it is blocked by
+[#25](https://github.com/BenedatLLC/archagent/issues/25).** Go, ten subsystems, an observability tool
+rather than a web application — and its structural signals produce nothing because `model.edges` is built
+only from the parsed import graph, so its seventeen declared `**Connects:**` edges are ignored. Unblocking
+it means deciding whether a finding may rest on a declaration `drift` has not verified, and probably
+carrying a lower `confidence` when it does.
+
+paperless-ngx is the other candidate and has no stored artifact — only reviews — so it needs a full
+`describe` run first.
+
+**Also changed for this round:** the `layer-inversion` guidance no longer says that a test subsystem
+depending on the code it tests is what tests are for. Round 2's `backend-tests` dismissal restated that
+sentence almost exactly, so the label measured the guidance. Four more test-package inversions are in
+front of a reviewer and the question is whether they arrive there unprompted.
+
 ### 22.8 What this still does not do
 
 It does not measure whether a finding is true. Three signals of twenty have that evidence and this
