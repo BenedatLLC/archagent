@@ -81,7 +81,10 @@ never said what those words mean. dspy's run had 65 findings and zero flagged, s
 exactly that report and scored `finding_restraint` 2 of 5 on it. The caveat now prints with the findings
 and a test pins the ordering.
 
-Three more, recorded and not yet acted on:
+Three more, now filed as [#31](https://github.com/BenedatLLC/archagent/issues/31) together with a fourth
+found while writing it up — **all four `hardcoded-endpoint` findings on dspy were in test files**, one of
+them recommending that a link-local metadata address used deliberately in a fixture be moved to service
+discovery:
 
 - **Recommendations are template advice, not code-specific changes** — the largest single reason
   `finding_actionability` scored 2. "Split this subsystem along its internal seams" does not name a seam.
@@ -93,6 +96,12 @@ Three more, recorded and not yet acted on:
 `finding_coverage_honesty` scored **5 of 5** — the one part of the report that did its job, naming the
 capped list as 10 of 12, the skipped cross-service family and the reason, and the history-discipline
 caution.
+
+**The three criteria together say something the individual scores do not.** Round 3 disputed none of its
+14 measurements; round 5 rates more than half its findings as not worth acting on; and the part of the
+report that was designed to say exactly what it knows scored full marks. The measurements are better than
+the reports, and the loss is between computing a fact and telling a reader what to do about it — which is
+why #31 is about interpolation and wording rather than about extraction accuracy.
 
 ## What round 5 cost, and what it bought
 
