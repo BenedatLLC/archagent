@@ -288,7 +288,9 @@ audit that confirms it, where `none` is a legitimate and more useful answer than
 **`Graduation path`** (what would make it mechanical, or that nothing would). Without them, "archagent
 cannot generate a checker for this" and "nobody checks this" look identical in the table.
 
-Full column and DSL reference: [ADL-SPEC §6](docs/ADL-SPEC.md).
+A walkthrough — what each type and tier actually enforces, how to verify a new rule catches
+something, and how to wire this into commits and CI — is in
+[`docs/CHECKING.md`](docs/CHECKING.md). The normative reference is [ADL-SPEC §6](docs/ADL-SPEC.md).
 
 ## How it works
 
@@ -423,6 +425,7 @@ Agent skills: `/archagent-describe` · `/archagent-check` · `/archagent-invaria
 
 | If you want | Read |
 |---|---|
+| to enforce rules: invariant types, the DSL, hooks and CI | [`docs/CHECKING.md`](docs/CHECKING.md) |
 | every command and option in full | [`docs/COMMANDS.md`](docs/COMMANDS.md) |
 | the artifact format, as a spec — fields, tiers, the rule DSL | [`docs/ADL-SPEC.md`](docs/ADL-SPEC.md) |
 | a real artifact, not a sample | [`docs/architecture/`](docs/architecture/) — this repo describes itself |
@@ -481,6 +484,7 @@ archagent/
 │   ├── architecture/         archagent's own artifact — it describes itself (archagent.toml points here)
 │   ├── designs/              one design doc per feature, with `status:` frontmatter
 │   ├── evaluations/          what the evaluation runs concluded (the data lives in a separate repo)
+│   ├── CHECKING.md           guide: enforcing invariants (types, DSL, hooks, CI)
 │   ├── COMMANDS.md           the full CLI reference
 │   ├── ROADMAP.md            planned future work, grouped by theme (checkable)
 │   ├── ADL-SPEC.md           the architecture-artifact format, as a standards-style spec

@@ -73,6 +73,9 @@ An invariant whose checker could not run is reported as **skipped**, never as pa
 than it sounds: a report that prints "all invariants hold" having checked none of them is worse than no
 report at all.
 
+For what each invariant type and tier actually enforces, how to verify a new rule catches something, and
+how to wire this into commit hooks and CI, see [`CHECKING.md`](CHECKING.md).
+
 ### `archagent gen`
 
 Regenerate only the checker configs from `architecture/invariants.md`. `check` does this for you; `gen`
