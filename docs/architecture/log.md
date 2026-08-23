@@ -214,3 +214,27 @@ The rest of the issue is documentation: a supported-languages and supported-agen
 two languages, and a reader with a C++ codebase deserves to learn that in the first screen), where ADRs
 come from, a Mermaid diagram of the two loops, an explicit statement that `drift` and `evaluate` write
 nothing, and a "What to read next" table.
+
+## 2026-08-23 — three bugs found by describing dspy
+
+Round 5's target is dspy, chosen partly because it is a shape archagent has never been run against: a
+library, with its package at the repository root rather than under `src/`. That one difference exposed
+three defects, all of the same family — a path form the tool had never met.
+
+**A package at the repository root resolved no modules.** `_module_of` built its prefix as `"." + "/"`, so
+`source_paths = ["."]` matched nothing: empty import graph, BOUNDARY contracts scoped to nothing, every
+structural signal silent, `check` reporting that all invariants hold. `archagent modules` printed "No
+Python modules resolved", which is why that command exists.
+
+**A reference under a dot-directory was reported dangling.** `_resolve_ref` used `lstrip("./")`, which
+strips a *set of characters* rather than a prefix, so `.github/workflows/ci.py` became
+`github/workflows/ci.py` and resolved to nothing.
+
+**And the worst of the three: a scoped `forbid-pattern` enforced nothing and passed.** `_scope_to_globs`
+produced `./dspy/**` for a root source path, and ast-grep silently ignores globs with a `./` prefix. The
+rule matched 0 of 154 `print(` sites and `check` reported PASS. A vacuous rule that reports a pass is the
+failure this tool exists to prevent, arriving through its own generator; it now reports 107 sites as WARN.
+
+None of the three could have been found on archagent, paperless, wardrowbe or fastapi-template, because
+all four use a nested source path. The argument for a varied corpus rather than a large one keeps getting
+made by the corpus.

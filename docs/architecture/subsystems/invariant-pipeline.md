@@ -76,6 +76,16 @@ says what would make it mechanical, or that nothing would. Without them, "archag
 checker for this" and "nobody checks this at all" are the same empty cell. `invariants.py` exposes the
 distinction as `is_prose` and `unverified` rather than leaving it to a reader to infer from two blanks.
 
+**A scoped rule must scope to something, and one silently did not.** `_scope_to_globs` turns
+`forbid-pattern print($$$) in dspy` into ast-grep globs by joining the scope to each source path. With
+`source_paths = ["."]` — a package at the repository root — that produced `./dspy/**`, and **ast-grep
+ignores any glob with a `./` prefix**. Measured on dspy at `4ed377ee9`: 0 of 154 `print(` sites matched,
+and `check` reported PASS.
+
+A scoped structural rule that enforces nothing while reporting a pass is the exact failure this tool
+exists to prevent, arriving through its own code generator. The generated globs are now normalised, and
+two tests pin both layouts.
+
 **Everything that could not run is reported as skipped, never as passing.** The failure this guards
 against is not a wrong answer but a clean one: when the ast-grep JSON failed to parse, the branch handling
 it returned `passed=True` for every invariant it touched, and the report was indistinguishable from a run

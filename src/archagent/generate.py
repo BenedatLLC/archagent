@@ -179,7 +179,16 @@ def _scope_to_globs(scope: str, inv: Invariant, config: Config) -> list[str]:
         exts, src_paths = [".ts", ".tsx", ".js"], config.ts.source_paths
     globs: list[str] = []
     for sp in src_paths:
-        base = f"{sp}/{slug}"
+        # `posixpath.join`-free normalisation, because a source path of "." (a package at the repository
+        # root: dspy/, requests/, flask/) would otherwise produce "./dspy/**" — and **ast-grep silently
+        # ignores any glob with a `./` prefix**. The rule then matches nothing and `check` reports PASS.
+        #
+        # Measured on dspy at 4ed377ee9: `forbid-pattern print($$$) in dspy` generated `./dspy/**`,
+        # matched 0 of 154 `print(` sites, and passed. A scoped structural rule that enforces nothing
+        # while reporting a pass is the failure this tool exists to prevent, arriving through its own
+        # code generator.
+        prefix = sp.strip().removeprefix("./").strip("/")
+        base = f"{prefix}/{slug}" if prefix and prefix != "." else slug
         globs += [f"{base}{ext}" for ext in exts]
         globs.append(f"{base}/**")
     return globs

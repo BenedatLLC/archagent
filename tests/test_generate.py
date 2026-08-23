@@ -177,3 +177,39 @@ def test_a_prose_row_asserted_active_without_evidence_is_detectable(tmp_path):
     flagged = [i.id for i in invs
                if i.tier == "prose" and i.status == "active" and not cites.search(i.why or "")]
     assert flagged == ["A-1"], "only the unevidenced *active* row should flag"
+
+
+# --- a scoped rule must actually scope to something (found on dspy) ----------------------------------
+
+def test_a_module_scope_under_a_root_source_path_has_no_dot_slash():
+    """**ast-grep silently ignores any glob with a `./` prefix.** With `source_paths = ["."]` — a package
+    at the repository root — the generated scope was `./dspy/**`, which matched 0 of 154 `print(` sites in
+    dspy and reported PASS.
+
+    A scoped structural rule that enforces nothing while reporting a pass is precisely the failure this
+    tool exists to prevent, arriving through its own code generator."""
+    from archagent.config import Config, PythonConfig, TSConfig
+    from archagent.generate import _scope_to_globs
+    from archagent.invariants import Invariant
+    from pathlib import Path
+    cfg = Config(project_root=Path("/tmp"), languages=["python"],
+                 python=PythonConfig(root_package="dspy", source_paths=["."]), ts=TSConfig())
+    inv = Invariant(id="X", type="STRUCTURAL", tier="structural", applies_to="python",
+                    rule="forbid-pattern print($$$) in dspy", severity="warn", why="", status="active")
+    globs = _scope_to_globs("dspy", inv, cfg)
+    assert not any(g.startswith("./") for g in globs), globs
+    assert "dspy/**" in globs
+
+
+def test_a_module_scope_under_a_nested_source_path_is_unchanged():
+    """The common layout must keep working: `src` + `archagent.cli` -> `src/archagent/cli.py`."""
+    from archagent.config import Config, PythonConfig, TSConfig
+    from archagent.generate import _scope_to_globs
+    from archagent.invariants import Invariant
+    from pathlib import Path
+    cfg = Config(project_root=Path("/tmp"), languages=["python"],
+                 python=PythonConfig(root_package="archagent", source_paths=["src"]), ts=TSConfig())
+    inv = Invariant(id="X", type="STRUCTURAL", tier="structural", applies_to="python",
+                    rule="forbid-pattern print($$$) in archagent.cli", severity="warn", why="",
+                    status="active")
+    assert "src/archagent/cli.py" in _scope_to_globs("archagent.cli", inv, cfg)

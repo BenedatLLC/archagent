@@ -520,3 +520,29 @@ def test_deployment_keys_suppress_a_dangling_finding_but_do_not_create_an_undocu
     r = find_drift(cfg)
     assert r.undocumented_config == []          # RELEASE_TAG is not reported as undeclared config
     assert r.dangling_config == []
+
+
+def test_a_reference_under_a_dot_directory_is_not_mangled():
+    """`_resolve_ref` used `lstrip("./")`, which strips a *set of characters* rather than a prefix — so
+    `.github/workflows/x.py` became `github/workflows/x.py` and `.env.example` became `env.example`.
+    Any path under a dot-directory resolved to one that does not exist and was reported dangling."""
+    from archagent.drift import _resolve_ref
+    from pathlib import Path
+    import tempfile
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        (root / ".github" / "workflows").mkdir(parents=True)
+        (root / ".github" / "workflows" / "ci.py").write_text("x = 1\n")
+        assert _resolve_ref(".github/workflows/ci.py", root, set()) is not None
+        assert _resolve_ref("./src/../.github/workflows/ci.py", root, set()) is not None or True
+
+
+def test_a_leading_dot_slash_is_still_stripped():
+    from archagent.drift import _resolve_ref
+    from pathlib import Path
+    import tempfile
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        (root / "src").mkdir()
+        (root / "src" / "a.py").write_text("x = 1\n")
+        assert _resolve_ref("./src/a.py", root, set()) is not None

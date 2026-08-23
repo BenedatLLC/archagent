@@ -302,7 +302,11 @@ def _resolve_ref(ref: str, root: Path, source_files: set[str]) -> str | None:
     """
     if (root / ref).exists():
         return ref
-    r = ref.lstrip("./")
+    # `removeprefix`, not `lstrip("./")`. `lstrip` strips a *set of characters*, so `.github/...` became
+    # `github/...` and `.env.example` became `env.example` — any path under a dot-directory was mangled
+    # into one that does not exist and then reported as a dangling reference. Only a leading `./` is
+    # meant here.
+    r = ref.removeprefix("./")
     if any(ch in r for ch in "*?["):
         if _glob_matches_any(root, r):
             return r

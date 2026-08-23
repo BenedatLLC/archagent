@@ -87,6 +87,12 @@ to nothing, every structural signal reports nothing, and `check` says all invari
 modules` is the one-command diagnostic for exactly this, and it said "No Python modules resolved" — which
 is why the command exists.
 
+**`lstrip("./")` strips a set of characters, not a prefix.** `_resolve_ref` used it, so
+`.github/workflows/ci.py` became `github/workflows/ci.py` and `.env.example` became `env.example` — every
+path under a dot-directory resolved to one that does not exist and was reported as a dangling reference.
+`removeprefix("./")` is what was meant. Found on dspy, whose artifact legitimately covers a file under
+`.github/`.
+
 **Every git-reading path takes `until`.** Three of them needed it and only two were obvious: the miner, the
 staleness comparison, and — the one that was missed — the commit-wording profile, which would otherwise
 learn from commits after a cutoff and use them to label commits before it.
