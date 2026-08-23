@@ -115,11 +115,35 @@ def describe_settings(root: Path, languages: list[str], arch_dir: str) -> list[S
         n = sum(1 for _ in _files_under(root / "src", exts))
         problem = ""
         if not n:
-            alt = _likeliest_dir(root, exts)
+            # The directory *containing* the package beats the directory with the most files. Counting
+            # files picks `tests/` on any repository whose package sits at the root — httpx, dspy,
+            # requests — and `tests/` is not on the import path, so following the hint reproduces the
+            # exact miss it was written to prevent.
+            alt = (_containing_dir(root, pkg, exts) if lang == "python" and pkg else "") \
+                or _likeliest_dir(root, exts)
             problem = (f"no {'/'.join(exts)} files under src/"
                        + (f" — {alt}/ looks likelier" if alt else ""))
         out.append(Setting(f"{lang}.source_paths", "src", "default", problem))
     return out
+
+
+def _containing_dir(root: Path, pkg: str, exts: tuple[str, ...]) -> str:
+    """The directory that holds `pkg`, expressed as a source path — `.` when it sits at the root.
+
+    `source_paths` names what is on the import path, which is the *parent* of the package, and getting
+    that distinction wrong is the failure `docs/CONFIGURATION.md` opens with. Since `root_package` has
+    already been guessed by the time the source path is checked, the answer is usually available rather
+    than needing to be inferred from file counts.
+    """
+    if not pkg or ".py" not in exts:
+        return ""
+    for marker in (root / pkg / "__init__.py", root / pkg / "__main__.py"):
+        if marker.is_file():
+            return "."
+    for d in sorted(p for p in root.iterdir() if p.is_dir() and p.name not in _SKIP):
+        if (d / pkg / "__init__.py").is_file():
+            return d.name
+    return ""
 
 
 def _files_under(d: Path, exts: tuple[str, ...]):
@@ -307,7 +331,16 @@ def _guess_python_root(root: Path) -> str | None:
     for p in sorted(root.iterdir()):
         if p.is_dir() and (p / "__init__.py").exists() and p.name not in {"tests", "test", "docs"}:
             return p.name
-    return None
+    # One level deeper, for the `backend/app/` shape `docs/CONFIGURATION.md` documents. Only reached when
+    # neither `src/<pkg>` nor a root-level package exists, and only when the answer is unambiguous — two
+    # candidates mean a guess, and a wrong `root_package` scopes every BOUNDARY contract to a module set
+    # that does not exist, which reports as all invariants holding.
+    nested = sorted({
+        child.name
+        for p in sorted(root.iterdir()) if p.is_dir() and p.name not in _SKIP | {"tests", "test", "docs"}
+        for child in sorted(p.iterdir()) if child.is_dir() and (child / "__init__.py").exists()
+    })
+    return nested[0] if len(nested) == 1 else None
 
 
 def _render_toml(languages: list[str], root: Path, arch_dir: str = "architecture") -> str:

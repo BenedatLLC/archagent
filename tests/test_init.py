@@ -277,3 +277,41 @@ def test_init_reports_its_settings(tmp_path):
     (tmp_path / "src" / "a.py").write_text("x = 1\n")
     result = init_project(tmp_path, agents=[])
     assert [s.key for s in result.settings][:2] == ["project.languages", "project.architecture_dir"]
+
+
+def test_source_path_hint_names_the_containing_directory_not_the_biggest(tmp_path):
+    """A package at the repository root — httpx, dspy, requests.
+
+    `_likeliest_dir` counts files per top-level directory, so it answers `tests/`: a real test suite is
+    larger than the package it tests. But `source_paths` names what is on the *import path*, and `tests/`
+    is not, so following the hint reproduces the miss it exists to prevent — and that miss is silent,
+    because a source path matching nothing scopes every rule to nothing and `check` then reports that all
+    invariants hold. Rehearsed on httpx before the 1.0.0rc1 release, where init said "tests/ looks
+    likelier" and the answer was `.`.
+    """
+    from archagent.init import describe_settings
+    (tmp_path / "httpx").mkdir()
+    (tmp_path / "httpx" / "__init__.py").write_text("")
+    (tmp_path / "httpx" / "_client.py").write_text("x = 1\n")
+    tests = tmp_path / "tests"
+    tests.mkdir()
+    for i in range(12):          # deliberately far more files than the package has
+        (tests / f"test_{i}.py").write_text("x = 1\n")
+
+    s = {x.key: x for x in describe_settings(tmp_path, ["python"], "architecture")}
+    assert s["python.root_package"].value == "httpx"
+    assert "`.`" in s["python.source_paths"].problem or "./ looks likelier" in s["python.source_paths"].problem \
+        or ". looks likelier" in s["python.source_paths"].problem, s["python.source_paths"].problem
+    assert "tests/ looks likelier" not in s["python.source_paths"].problem
+
+
+def test_source_path_hint_finds_a_nested_containing_directory(tmp_path):
+    """The same rule with the package one level down: `backend/app/` means `backend`, not `backend/app`."""
+    from archagent.init import describe_settings
+    (tmp_path / "backend" / "app").mkdir(parents=True)
+    (tmp_path / "backend" / "app" / "__init__.py").write_text("")
+    (tmp_path / "backend" / "app" / "main.py").write_text("x = 1\n")
+
+    s = {x.key: x for x in describe_settings(tmp_path, ["python"], "architecture")}
+    assert s["python.root_package"].value == "app"
+    assert "backend/ looks likelier" in s["python.source_paths"].problem
