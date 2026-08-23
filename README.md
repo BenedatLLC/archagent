@@ -8,6 +8,10 @@ You describe the architecture as markdown in your repo (including a table of mac
 ast-grep) from that single source and runs them, reporting adherence per invariant. The checkers
 are deterministic; the LLM only ever *proposes*.
 
+New to the project and want the reasoning rather than the usage? **[`docs/APPROACH.md`](docs/APPROACH.md)**
+covers the principles, how the commands form one loop, how this relates to prior work, and what the
+evaluations have and have not shown.
+
 **It enforces the rules you already wrote down.** Design docs and code are full of stated invariants —
 `# INVARIANT: the query set is always sorted`, "summaries must never be empty", "only the config layer
 reads the environment" — that nothing checks. `archagent scan-invariants` finds them across your docs and
@@ -437,6 +441,7 @@ common layouts: **[`docs/CONFIGURATION.md`](docs/CONFIGURATION.md)**.
 
 | If you want | Read |
 |---|---|
+| **why the project works this way, and how it relates to prior work** | **[`docs/APPROACH.md`](docs/APPROACH.md)** |
 | to enforce rules: invariant types, the DSL, hooks and CI | [`docs/CHECKING.md`](docs/CHECKING.md) |
 | every command and option in full | [`docs/COMMANDS.md`](docs/COMMANDS.md) |
 | to configure `archagent.toml` for your layout | [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md) |
@@ -462,6 +467,7 @@ archagent/
 │   ├── architecture/         archagent's own artifact — it describes itself (archagent.toml points here)
 │   ├── designs/              one design doc per feature, with `status:` frontmatter
 │   ├── evaluations/          what the evaluation runs concluded (the data lives in a separate repo)
+│   ├── APPROACH.md           the thinking: principles, the loop, prior work, what we measured
 │   ├── CHECKING.md           guide: enforcing invariants (types, DSL, hooks, CI)
 │   ├── COMMANDS.md           the full CLI reference
 │   ├── CONFIGURATION.md      archagent.toml: every key, and the layouts people get wrong
