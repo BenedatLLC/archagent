@@ -46,6 +46,11 @@ arriving through the report rather than through a scan.
 **Findings carry their own next step.** A finding marked `investigate` prints the exact command that acts
 on it (`cli.py:538`). A reader who cannot act on a finding drops it.
 
+**Commands that write into the artifact name one file, and it is `README.md`.** `graph --write` splices
+the system map and the provenance stamp into the artifact's `README.md` (issue #28) — forges render that
+name when a reader opens a directory and render nothing otherwise. The help text says so, because a flag
+whose target a reader has to guess is one they will point at the wrong file.
+
 **A new drift category needs a renderer and a JSON key, and forgetting either is silent.** `mistiered`
 (issue #26) is reported in both, alongside a one-line instruction naming the tier to use — a finding that
 tells a reader what is wrong without telling them what to type is one they postpone.

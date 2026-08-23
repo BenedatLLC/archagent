@@ -17,3 +17,18 @@ jobs:
         run: uv sync --group dev
       - name: Run tests
         run: uv run pytest -q
+
+      # archagent, run against archagent. The README offers this repository's artifact as the worked
+      # example — "not a sample … this repository's own artifact" — and until these steps existed nothing
+      # held it to that. A planted STR-004 violation left `pytest` at 815 passed while `check` reported it.
+      - name: check — archagent holds its own invariants
+        run: uv run archagent check
+
+      # `--exit-code` makes drift a gate here, which is stricter than the README asks of users, where it is
+      # informational. A worked example that has drifted teaches the wrong thing. This is also where the
+      # staleness comparison belongs: it reads commit timestamps, so only committed state can answer it.
+      - name: drift — the documents still match the code
+        run: uv run archagent drift --exit-code
+
+      - name: lint-docs — diagrams parse and cited invariant IDs exist
+        run: uv run archagent lint-docs --exit-code

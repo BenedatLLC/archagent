@@ -158,3 +158,27 @@ markers does not get a block pushed back into prose it did not ask for.
 
 **STR-004 earned its keep here.** The first version of the stamp shelled out to `git` from `graph.py`, and
 `check` failed on the next run: one module owns the git plumbing (ADR 0003). Now via `drift._git`.
+
+## 2026-08-23 — archagent now checks archagent, in CI and in the suite
+
+The README claimed this artifact was "checked by `archagent check` on every commit". It was not. CI ran
+`pytest -q` and nothing else, no pre-commit hook existed, and no test pointed any of the three checks at
+this repository's own architecture directory.
+
+Demonstrated rather than argued: re-planting the STR-004 violation from earlier today — `graph.py`
+shelling out to `git`, which ADR 0003 forbids — left the suite at **815 passed** while `archagent check`
+reported it. CI would have shipped it; it was caught by hand, by luck.
+
+Three gates in `ci.yml` (`check`, `drift --exit-code`, `lint-docs --exit-code`) and the same three in
+`tests/test_self.py`, so a contributor sees the failure before pushing rather than after a round trip.
+All three run in under a second here.
+
+`drift` gating is stricter than the README asks of users, where it is informational and its output is a
+work-list. For this repository it gates because the artifact is offered as the worked example, and a
+worked example that has drifted teaches the wrong thing.
+
+**Two things the new gate found on its first run.** `cli.md` was stale: the issue #28 commit changed
+`cli.py` and never updated it, and the manual `drift` run that reported clean had been made *before* that
+commit. And the staleness check cannot be asserted from a working tree at all — it compares commit
+timestamps, so editing the document does not clear it and the test stays red until the fix is committed.
+That belongs in CI, which runs on committed state; the local test asserts the other nine categories.
