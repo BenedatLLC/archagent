@@ -31,6 +31,7 @@ Mixing the two would produce a number that looks like precision and is agreement
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
@@ -41,8 +42,19 @@ _PATHISH = ("/", ".py", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".go", ".r
             ".rs", ".toml", ".json", ".yaml", ".yml", ".sql", ".tf", ".md")
 
 
+#: `hardcoded-endpoint` and `server-side-fetch` name a *location*, not a file: `app/api/prefs.py:137`.
+#: Checking that against the filesystem asks whether a file called `prefs.py:137` exists, which it never
+#: does — so every one of those findings was reported as naming missing code. The check that exists to
+#: catch fabricated citations was itself fabricating them.
+_LINE_SUFFIX = re.compile(r":\d+(?::\d+)?$")
+
+
+def _subject_path(subject: str) -> str:
+    return _LINE_SUFFIX.sub("", subject.strip())
+
+
 def _looks_like_path(subject: str) -> bool:
-    s = subject.strip()
+    s = _subject_path(subject)
     if not s or " " in s:
         return False
     return s.endswith(_PATHISH) or "/" in s
@@ -153,7 +165,7 @@ def unresolved_subjects(cap: Capture, root: Path) -> list[Problem]:
     out = []
     for f in cap.findings:
         for s in f.get("subjects", []):
-            if _looks_like_path(s) and not (root / s.strip()).exists():
+            if _looks_like_path(s) and not (root / _subject_path(s)).exists():
                 out.append(Problem("unresolved-subject", f"{f['sign']} names {s!r}, which is not in "
                                                         f"the tree at {cap.target_rev}", f["id"]))
     return out

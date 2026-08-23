@@ -101,8 +101,13 @@ def collect(signs: tuple[str, ...] = JUDGED) -> tuple[list[dict], list[dict]]:
 def do_generate(cap: int, reviewer: str, signs: tuple[str, ...]) -> None:
     store = LabelStore(LABELS)
     items, unusable = collect(signs)
-    already = {k for it in items for k in store.load(it["repo"])}
-    fresh = [it for it in items if it["key"] not in already]
+    # Per repository, not pooled. A finding key is `sign:owner:digest` and `owner` is a subsystem name,
+    # so `layer-inversion:backend-tests:...` is the same string in every repo that happens to call a
+    # subsystem `backend-tests` — and generic names like that are the norm. Pooling the keys meant a
+    # label recorded against fastapi-template silently suppressed the corresponding wardrowbe finding,
+    # dropping two items from round 3 including the one the round most needed relabelled independently.
+    labels_by_repo = {r: store.load(r) for r in {it["repo"] for it in items}}
+    fresh = [it for it in items if it["key"] not in labels_by_repo[it["repo"]]]
     repos = {i["repo"] for i in items}
     print(f"{len(items)} findings across {len(repos)} repos; "
           f"{len(items) - len(fresh)} already labelled")

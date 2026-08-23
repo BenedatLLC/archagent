@@ -480,3 +480,20 @@ def test_a_kit_rebuild_over_an_unanswered_sheet_is_allowed(tmp_path):
     out = tmp_path / "kit"
     m.do_kit(ws, out, {"src-repo": src})
     m.do_kit(ws, out, {"src-repo": src})       # no raise
+
+
+def test_a_label_in_one_repo_does_not_suppress_another_repos_finding(tmp_path, monkeypatch):
+    """A finding key is `sign:owner:digest` and `owner` is a subsystem name, so
+    `layer-inversion:backend-tests:...` is the same string in every repo that calls a subsystem
+    `backend-tests` — which is a very ordinary name. Pooling the keys across repositories dropped two
+    wardrowbe items from round 3, including the one the round most needed judged independently."""
+    from spotcheck import Label, LabelStore
+    m = _kit_module()
+    store = LabelStore(tmp_path / "labels")
+    store.record(Label(key="layer-inversion:backend-tests:da39a3ee", repo="repo-a",
+                       sign="layer-inversion", verdict="dismiss", why="tests are tests",
+                       reviewer="r", dated="2026-08-22"))
+    a = store.load("repo-a")
+    b = store.load("repo-b")
+    assert "layer-inversion:backend-tests:da39a3ee" in a
+    assert "layer-inversion:backend-tests:da39a3ee" not in b, "repo-b must be unaffected"

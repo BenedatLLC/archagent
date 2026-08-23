@@ -223,12 +223,17 @@ _GUIDANCE: dict[str, str] = {
     "change-prone-file":
         "**change-prone-file** — the question is whether the file is genuinely absorbing special cases. "
         "Only reading it answers that; churn alone never does.",
+    # The sentence that used to end this entry — "a test subsystem depending on the code it tests is what
+    # tests are for" — was removed after round 2. The reviewer's `backend-tests` dismissal restated it
+    # almost exactly, so that label measured this guidance rather than their reading. Round 3 puts seven
+    # more inversions in front of a reviewer, four of them test packages, and the whole point is to find
+    # out whether they reach that conclusion unprompted. Guidance may say what to check; it must not say
+    # what to conclude.
     "layer-inversion":
         "**layer-inversion / layer-skip** — half of this claim lives in the architecture documents. "
         "`extraction (infra) depends up on drift (domain)` asserts three things: the two `**Tier:**` "
-        "declarations in `subsystems/*.md`, and an import between them in the code. Check all three. "
-        "Note that a test subsystem depending on the code it tests is what tests are for, and may say "
-        "more about how the tiers were assigned than about the code.",
+        "declarations in `subsystems/*.md`, and an import between them in the code. Check all three, "
+        "and judge what the edge means for this system.",
     "cycle-subsystem":
         "**cycle-subsystem** — read the declared `**Connects:**` edges *and* the imports. A cycle "
         "recorded in an ADR as an accepted cost is still a true finding: `confirm`, with a note.",

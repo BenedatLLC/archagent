@@ -153,3 +153,19 @@ def test_capturing_this_repo_produces_findings_that_all_resolve():
     cap = capture(root, repo="archagent", archagent="test", captured_at="2026-08-22")
     assert cap.findings, "evaluate produced nothing on archagent itself — the capture is not wired up"
     assert unresolved_subjects(cap, root) == []
+
+
+def test_a_subject_naming_a_line_is_checked_as_a_file(tmp_path):
+    """`hardcoded-endpoint` and `server-side-fetch` name a location, not a file. Stat-ing
+    `prefs.py:137` asks whether a file with a colon in its name exists, so every one of those findings
+    came back as naming missing code — the check against fabricated citations fabricating them."""
+    (tmp_path / "app").mkdir()
+    (tmp_path / "app" / "prefs.py").write_text("x = 1\n")
+    cap = _cap(findings=[_f(sign="hardcoded-endpoint", subjects=["app/prefs.py:137"])])
+    assert unresolved_subjects(cap, tmp_path) == []
+
+
+def test_a_line_reference_to_a_missing_file_is_still_reported(tmp_path):
+    """Stripping the line must not disable the check."""
+    cap = _cap(findings=[_f(sign="hardcoded-endpoint", subjects=["app/gone.py:137"])])
+    assert len(unresolved_subjects(cap, tmp_path)) == 1
