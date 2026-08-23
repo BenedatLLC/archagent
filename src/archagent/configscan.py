@@ -101,7 +101,13 @@ _TEST_DIRS = {"test", "tests", "__tests__", "testdata", "fixtures", "examples"}
 _TEST_FILE = re.compile(r"(^|[._-])(test|spec)s?[._]")
 
 
-def _is_test_path(rel: str) -> bool:
+def is_test_path(rel: str) -> bool:
+    """Does this path look like test code?
+
+    Public because three subsystems need the same answer and a fourth reading would be a fourth
+    behaviour. `drift` uses it to decide what is exempt from documentation, `evaluate` to decide which
+    reading of a hard-coded endpoint applies.
+    """
     parts = set(PurePosixPath(rel).parts)
     return bool(parts & _TEST_DIRS) or bool(_TEST_FILE.search(PurePosixPath(rel).name))
 
@@ -281,7 +287,7 @@ def read_config_keys(root: Path, source_files: set[str], report_unresolved: bool
     keys: set[str] = set()
     texts: dict[str, str] = {}
     for rel in source_files:
-        if not rel.endswith(_CODE_EXTS) or _is_test_path(rel):
+        if not rel.endswith(_CODE_EXTS) or is_test_path(rel):
             continue
         try:
             texts[rel] = (root / rel).read_text()

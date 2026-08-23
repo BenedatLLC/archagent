@@ -88,3 +88,15 @@ def test_nothing_still_refers_to_the_artifact_index_as_index_md():
             assert "index.md" not in f.read_text(), name
     for f in (root / "scripts").glob("*.py"):
         assert "index.md" not in f.read_text(), f.name
+
+
+def test_the_cochange_guidance_does_not_assert_causation_from_a_count():
+    """#31.4. The prompt told the agent that in a co-change pair "a change to one keeps forcing a change
+    to the other" — a claim about habit and causation drawn from as few as four observations, in a report
+    whose own severity is explicitly mechanical. The agent reads this before judging the finding, so an
+    overclaim here propagates into the write-up."""
+    text = _prompt("evaluate")
+    assert "keeps forcing" not in text
+    assert "keeps changing with its dependents" not in text
+    # and it must tell the agent to look at the evidence the finding now carries
+    assert "read the cited commits" in text.lower()

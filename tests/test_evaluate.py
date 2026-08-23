@@ -186,6 +186,45 @@ def test_hardcoded_endpoint_flags_only_real_service_endpoints(tmp_path):
     assert not any("internal.host" in h for h in hits)  # in a comment
 
 
+def test_reserved_ranges_are_not_endpoints_anywhere(tmp_path):
+    """An address the IETF reserved for documentation or made unroutable cannot be infrastructure, so
+    neither reading of this finding applies. On dspy, half of `hardcoded-endpoint`'s entire output was
+    `169.254.169.254` — the cloud metadata address, used in a fixture *because* it is unreachable — and
+    the report advised moving it to service discovery."""
+    cfg = _cfg(tmp_path)
+    _src(cfg, "pkg/net.py",
+         'META = "http://169.254.169.254/latest/meta-data/"\n'   # RFC 3927 link-local
+         'DOC = "http://192.0.2.10:8080/"\n'                     # RFC 5737 TEST-NET-1
+         'REAL = "http://10.2.3.4:8080/api"\n')                  # routable — still flagged
+    _sub(cfg, "net", "# Net\n\n**Covers:** `src/pkg/net.py`\n")
+    hits = [f.detail for f in _of(evaluate(cfg), "hardcoded-endpoint")]
+    assert not any("169.254" in h for h in hits)
+    assert not any("192.0.2" in h for h in hits)
+    assert any("10.2.3.4" in h for h in hits), "the routable one must survive the exclusion"
+
+
+def test_an_endpoint_in_a_test_gets_the_reading_that_applies_to_tests(tmp_path):
+    """Not skipped — *re-read*. Pinning is a claim about deployment and a test has no environment to be
+    pinned to, so the production recommendation is not merely unhelpful there, it is wrong. The finding
+    that remains is about hermeticity, and it drops to `low`."""
+    cfg = _cfg(tmp_path)
+    _src(cfg, "pkg/net.py", 'PROD = "http://10.2.3.4:8080/api"\n')
+    _src(cfg, "pkg/tests/test_net.py", 'HOST = "http://20.102.90.50:2017/"\n')
+    _sub(cfg, "net", "# Net\n\n**Covers:** `src/pkg/**`\n")
+    found = {f.subjects[0].split(":")[0]: f for f in _of(evaluate(cfg), "hardcoded-endpoint")}
+    prod = found["src/pkg/net.py"]
+    test = found["src/pkg/tests/test_net.py"]
+
+    assert prod.severity == "med" and test.severity == "low"
+    # the test finding must not repeat the pinning advice, which is the part that was wrong
+    assert "service discovery" not in test.recommendation
+    assert "config" not in test.recommendation
+    assert "infrastructure the suite does not control" in test.recommendation
+    # and both name the address they found rather than advising in the abstract
+    assert "10.2.3.4" in prod.recommendation
+    assert "20.102.90.50" in test.recommendation
+
+
 # --- Service cycle (distributed monolith) -------------------------------------------------
 
 def test_service_cycle_from_compose(tmp_path):
@@ -569,3 +608,43 @@ def test_the_mechanical_severity_caveat_is_not_gated_on_triage():
     i_caveat = src.index("Severity above is mechanical")
     i_flagged = src.index("flagged = [f for f in findings if f.investigate]")
     assert i_caveat < i_flagged, "the caveat must print before, and independently of, the triage block"
+
+
+# --- What a god-component finding tells the reader to do (#31) -----------------------------
+
+def test_god_component_names_the_seam_it_measured(tmp_path):
+    """"Split this subsystem along its internal seams; extract the most-depended-on responsibilities"
+    named no seam and no responsibility — while the finding held both. Fan-in was computed from the very
+    edges that say which files other subsystems reach for."""
+    cfg = _cfg(tmp_path)
+    # `core` is a hub: three subsystems import it and it imports three. Only core/api.py is reached from
+    # outside; core/impl*.py are internal.
+    _src(cfg, "pkg/core/api.py", "from pkg.x import a\nfrom pkg.y import b\nfrom pkg.z import c\n")
+    _src(cfg, "pkg/core/impl1.py", "from pkg.core import api\n")
+    _src(cfg, "pkg/core/impl2.py", "from pkg.core import api\n")
+    for n in ("p", "q", "r"):
+        _src(cfg, f"pkg/{n}.py", "from pkg.core import api\n")
+    for n in ("x", "y", "z"):
+        _src(cfg, f"pkg/{n}.py", "v = 1\n")
+    _sub(cfg, "core", "# Core\n\n**Covers:** `src/pkg/core/**`\n")
+    for n in ("p", "q", "r", "x", "y", "z"):
+        _sub(cfg, n, f"# {n}\n\n**Covers:** `src/pkg/{n}.py`\n")
+
+    found = _of(evaluate(cfg), "god-component")
+    assert found, "fan-in 3 / fan-out 3 is the hub threshold"
+    rec = [f for f in found if f.subjects == ["core"]][0].recommendation
+
+    assert "src/pkg/core/api.py" in rec, "the file other subsystems reach for must be named"
+    assert "`p`" in rec and "`q`" in rec, "the dependents must be named"
+    # and the two internal files are identified as the movable body, not left for the reader to work out
+    assert "imported only from inside" in rec
+
+
+def test_god_component_advice_survives_an_empty_import_graph(tmp_path):
+    """The seam clause comes from the file-level import graph. A declared-only model (a Go or Rust repo)
+    has none, and the recommendation must degrade to the general advice rather than to a half-sentence
+    naming nothing."""
+    from archagent.evaluate import _seam_advice, _Model
+    m = _Model(subs=["a"], files={"a": {"x.go"}}, tier={}, edges={"a": set()}, rev={"a": set()},
+               weight={}, service={}, import_graph={}, file_subs={"x.go": {"a"}}, connectors={})
+    assert _seam_advice(m, "a") == ""

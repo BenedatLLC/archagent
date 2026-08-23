@@ -339,3 +339,44 @@ def test_triage_reaches_the_finding(tmp_path):
         "src/web/panel.tsx": _escaper(["summarized", "sem-search", "research"]),
     })
     assert found[0].investigate and "language boundary" in found[0].triage_reason
+
+
+# --- What a co-change finding tells the reader to do (#31) ---------------------------------
+
+def test_implicit_coupling_cites_a_commit_and_the_files_it_touched(tmp_path):
+    """The finding used to state a count and then advise in the abstract: "a change to one keeps forcing
+    a change to the other". A maintainer could not act on that without redoing the mining — which four
+    commits, and what did they touch in both? The miner had the answer and dropped it."""
+    cfg = _cfg(tmp_path)
+    _sub(cfg, "alpha", "src/pkg/alpha/**")
+    _sub(cfg, "beta", "src/pkg/beta/**")
+    _commit(cfg, "init", {"src/pkg/alpha/a.py": "x = 0\n", "src/pkg/beta/b.py": "y = 0\n"})
+    for i in range(1, 6):   # co-change with no import either way
+        _commit(cfg, f"sync the shared vocabulary {i}",
+                {"src/pkg/alpha/a.py": f"x = {i}\n", "src/pkg/beta/b.py": f"y = {i}\n"})
+
+    found = _of(evaluate(cfg), "implicit-coupling")
+    assert found, "five co-changes with no dependency should raise the sign"
+    rec = found[0].recommendation
+
+    assert "src/pkg/alpha/a.py" in rec and "src/pkg/beta/b.py" in rec, "must name what co-changed"
+    assert "sync the shared vocabulary" in rec, "must quote a commit subject"
+    # the escape hatch matters as much as the advice: most of these are noise, and the reader is told
+    # exactly what would make this one noise
+    assert "dismissing" in rec
+
+
+def test_no_cochange_recommendation_claims_causation_from_a_count(tmp_path):
+    """#31.4. Four observations do not support "keeps forcing" — a claim about habit and causation, in a
+    report whose own severity is explicitly mechanical. The counts stay; the causal verbs go."""
+    cfg = _cfg(tmp_path)
+    _sub(cfg, "alpha", "src/pkg/alpha/**")
+    _sub(cfg, "beta", "src/pkg/beta/**")
+    _commit(cfg, "init", {"src/pkg/alpha/a.py": "x = 0\n", "src/pkg/beta/b.py": "y = 0\n"})
+    for i in range(1, 6):
+        _commit(cfg, f"c{i}", {"src/pkg/alpha/a.py": f"x = {i}\n", "src/pkg/beta/b.py": f"y = {i}\n"})
+
+    banned = ("keeps forcing", "keeps changing", "forces churn", "always ", "will break")
+    for f in evaluate(cfg).findings:
+        for phrase in banned:
+            assert phrase not in f.recommendation.lower(), f"{f.sign}: {phrase!r}"

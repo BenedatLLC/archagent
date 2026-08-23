@@ -27,7 +27,7 @@ except ModuleNotFoundError:  # py < 3.11
     tomllib = None
 
 from .config import Config
-from .configscan import _is_test_path, declared_config_keys, read_config_keys
+from .configscan import declared_config_keys, is_test_path, read_config_keys
 from .connscan import sync_call_targets
 from .tiers import tier_of as _tier_of, tier_rank
 from .mdutil import is_empty_value, strip_code_fences
@@ -290,7 +290,7 @@ def _mistiered(covered: set[str], tier: str | None) -> str:
     if not covered or tier_rank(tier) is None:
         return ""
     def _non_production(rel: str) -> bool:
-        return _is_test_path(rel) or bool(set(PurePosixPath(rel).parts) & _MIGRATION_DIRS)
+        return is_test_path(rel) or bool(set(PurePosixPath(rel).parts) & _MIGRATION_DIRS)
     return tier if all(_non_production(f) for f in covered) else ""
 
 

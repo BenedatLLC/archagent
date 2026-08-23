@@ -130,16 +130,22 @@ shape before acting:
 ## History signals (regime B, from git co-change)
 Mined from `git log`; require a git repo (skip with `--no-history`, window with `--since`).
 - **Shotgun surgery / implicit cross-module coupling** (group B) — two subsystems co-change often but neither
-  *directly* imports the other. A change to one keeps forcing a change to the other with no direct code link —
-  often the boundary is wrong. Merge the shared concern, or add the missing explicit interface. The
+  *directly* imports the other — a coupling the code does not declare, and often a boundary in the wrong
+  place. Merge the shared concern, or add the missing explicit interface. Note what the count is and is
+  not: co-changing in four commits is four observations, not a habit, so **read the cited commits before
+  repeating the claim** — the finding now names one and the files it touched on each side. If those
+  commits touched unrelated corners of the two subsystems, it is release-shaped noise. The
   highest-value smell here — **but verify the link is truly absent before concluding "no dependency."** The
   signal only sees *direct* import edges; two subsystems can be genuinely coupled through **one hop of
   indirection** — both depend on a third module (a shared factory, a common helper, a base class) that the
   co-change check doesn't credit as a link between them. Read the code: if the coupling runs through a shared
   intermediary, the interface already exists (it's that third module) — the finding is then "this shared
   module is a change-magnet," not "these two need a new interface."
-- **Unstable interface** (B) — a widely-depended-on subsystem that keeps changing with its dependents,
-  spreading churn. Freeze its contract, or split the volatile part from the stable one.
+- **Unstable interface** (B) — a widely-depended-on subsystem that changes in the same commits as its
+  dependents, spreading churn. The finding names which dependents co-change and which do not: that split
+  is the useful part, because the quiet dependents show what part of the contract is already stable and
+  therefore what the volatile part could be separated from. When *every* dependent co-changes there is no
+  stable subset to split toward, and the move is a narrower contract rather than a rearrangement.
 - **Permissive cross-origin policy** (group D) — the service sets `Access-Control-Allow-Origin: *`,
   accepts every WebSocket `Origin`, or configures CORS with a wildcard. Reported `high` when the same
   component also registers a `POST`/`PUT`/`PATCH`/`DELETE` route, `med` otherwise.

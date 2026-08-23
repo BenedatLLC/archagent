@@ -32,6 +32,30 @@ _CONVENTIONAL = re.compile(
 )
 
 
+#: Worked examples kept per pair. Three is enough to show a pattern and cheap enough to keep for every
+#: pair in a large repository.
+EVIDENCE_CAP = 3
+#: Files named per side of one example. The point is to name the seam, not to list the commit.
+EVIDENCE_FILES = 2
+
+
+@dataclass
+class CoChangeExample:
+    """One commit that touched two subsystems, and what it touched in each."""
+    sha: str
+    subject: str
+    files: dict[str, list[str]]   # subsystem -> the files this commit touched in it
+
+    def named(self, a: str, b: str) -> str:
+        """`a`'s and `b`'s files in this commit, as one readable clause."""
+        parts = []
+        for s in (a, b):
+            fs = self.files.get(s, [])
+            if fs:
+                parts.append(f"{s}: " + ", ".join(f"`{f}`" for f in fs))
+        return "; ".join(parts)
+
+
 @dataclass
 class CoChange:
     sub_commits: dict[str, int] = field(default_factory=dict)              # subsystem -> commits touching it
@@ -46,6 +70,11 @@ class CoChange:
     file_commits: dict[str, int] = field(default_factory=dict)      # file -> commits touching it
     file_fix_commits: dict[str, int] = field(default_factory=dict)  # file -> fix-labeled commits touching it
     fix_commits: int = 0          # non-bulk commits the learned recognizer labels as fixes
+    #: Up to `EVIDENCE_CAP` worked examples per co-changing pair: the commit that touched both, and which
+    #: files it touched on each side. A count alone ("4 commits") is a claim a maintainer must redo the
+    #: mining to act on; one commit hash and two filenames make it a lead they can open. Capped because
+    #: this is evidence for a sentence, not an inventory — and because pairs are quadratic in subsystems.
+    pair_evidence: dict[frozenset[str], list["CoChangeExample"]] = field(default_factory=dict)
     # Whether the `git log` walk itself failed. Without this a timeout is indistinguishable from a
     # repository with no commits: every count is zero, every history check goes quiet, and the run looks
     # clean. Found by the pinned-corpus harness, which recorded exactly such a run as litellm's baseline.
@@ -90,7 +119,7 @@ def mine_cochange(
         result.mining_failed = True
         return result
 
-    for subject, files in _commits(out):
+    for sha, subject, files in _commits(out):
         result.commits_seen += 1
         if _CONVENTIONAL.match(subject):
             result.conventional += 1
@@ -116,11 +145,24 @@ def mine_cochange(
         result.commits_analyzed += 1
         for s in subs:
             result.sub_commits[s] = result.sub_commits.get(s, 0) + 1
+        # which of this commit's files landed in which subsystem — the evidence a pair finding cites
+        touched: dict[str, list[str]] = {}
+        for f in sorted(files):
+            for s in file_subs.get(f, ()):
+                touched.setdefault(s, []).append(f)
+
         ordered = sorted(subs)
         for i in range(len(ordered)):
             for j in range(i + 1, len(ordered)):
-                key = frozenset((ordered[i], ordered[j]))
+                a, b = ordered[i], ordered[j]
+                key = frozenset((a, b))
                 result.pair[key] = result.pair.get(key, 0) + 1
+                ex = result.pair_evidence.setdefault(key, [])
+                if len(ex) < EVIDENCE_CAP:
+                    ex.append(CoChangeExample(
+                        sha=sha[:9], subject=subject,
+                        files={s: touched.get(s, [])[:EVIDENCE_FILES] for s in (a, b)},
+                    ))
     return result
 
 
@@ -150,16 +192,18 @@ def tree_newer_than(root: Path, until: str) -> bool:
 
 
 def _commits(log: str):
-    """Yield `(subject, files)` per commit from the `@@@commit@@@<hash>\\x1f<subject>` + name-only stream."""
+    """Yield `(sha, subject, files)` per commit from the `@@@commit@@@<hash>\\x1f<subject>` + name-only
+    stream. The sha was parsed and thrown away until findings needed to cite one."""
     cur: set[str] | None = None
-    subject = ""
+    sha = subject = ""
     for line in log.splitlines():
         if line.startswith(_BOUNDARY):
             if cur is not None:
-                yield subject, cur
+                yield sha, subject, cur
             cur = set()
-            subject = line[len(_BOUNDARY):].split(_SUBJ_SEP, 1)[1] if _SUBJ_SEP in line else ""
+            head = line[len(_BOUNDARY):]
+            sha, _, subject = head.partition(_SUBJ_SEP)
         elif line.strip() and cur is not None:
             cur.add(line.strip())
     if cur is not None:
-        yield subject, cur
+        yield sha, subject, cur

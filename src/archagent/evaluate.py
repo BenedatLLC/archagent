@@ -22,6 +22,7 @@ from pathlib import Path
 
 from .cochange import mine_cochange, tree_newer_than
 from .config import Config
+from .configscan import is_test_path as _is_test_path
 from .connscan import sync_call_targets
 from .datamap import store_touches, table_defs
 from .deployscan import extract_service_edges
@@ -61,7 +62,17 @@ _EPS = 1e-9
 
 _IPV4 = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}(?::\d{2,5})?\b")
 _URL_WITH_PORT = re.compile(r"https?://([A-Za-z0-9._-]+):\d{2,5}", re.IGNORECASE)  # explicit :port only
+_BARE_V4 = re.compile(r"(?:\d{1,3}\.){3}\d{1,3}")
 _LOCAL_HOSTS = {"localhost", "127.0.0.1", "0.0.0.0", "example.com", "example.org", "::1"}
+# Addresses reserved by the IETF for documentation and examples, or unroutable by design. None of these
+# can be real infrastructure, so a literal one is never "pinned to an environment" — it is chosen
+# *because* it goes nowhere. dspy's four `hardcoded-endpoint` findings in round 5 were all in tests and
+# two were 169.254.169.254: the link-local metadata address, used precisely because it is unreachable.
+_RESERVED_V4 = (
+    "169.254.",              # RFC 3927 link-local, incl. the cloud metadata endpoint
+    "192.0.2.", "198.51.100.", "203.0.113.",   # RFC 5737 TEST-NET-1/2/3
+    "240.",                  # RFC 1112 reserved
+)
 _COMMENT_STARTS = ("#", "//", "*", '"""', "'''")
 
 
@@ -516,6 +527,61 @@ def _history_cautions(cc: "CoChange") -> list[str]:
 
 # --- Group C: God Component --------------------------------------------------------------
 
+#: How many of a god component's files to name as its de-facto interface. Enough to point at a seam,
+#: few enough that the recommendation stays a sentence.
+_SEAM_FILES = 3
+
+
+def _external_pull(model: _Model, name: str) -> list[tuple[str, int]]:
+    """Which of a subsystem's files are imported from *outside* it, most-depended-on first.
+
+    This is the seam the god-component recommendation used to gesture at without naming. The advice
+    "extract the most-depended-on responsibilities" is only useful if the reader is told which those are,
+    and the finding already holds what it takes to say: fan-in was computed from these very edges.
+
+    Counts are distinct external *importers*, not import statements, so a single caller reaching for six
+    names does not outrank six independent callers.
+    """
+    own = model.files.get(name, set())
+    if not own:
+        return []
+    pull: dict[str, set[str]] = {}
+    for src, targets in model.import_graph.items():
+        if src in own:
+            continue                      # internal use says nothing about the interface
+        for t in targets:
+            if t in own:
+                pull.setdefault(t, set()).add(src)
+    return sorted(((f, len(v)) for f, v in pull.items()), key=lambda kv: (-kv[1], kv[0]))
+
+
+def _seam_advice(model: _Model, name: str) -> str:
+    """The concrete half of the god-component recommendation, or "" when the graph cannot support one."""
+    pull = _external_pull(model, name)
+    if not pull:
+        return ""
+    own = len(model.files.get(name, ()))
+    head = pull[:_SEAM_FILES]
+    named = ", ".join(f"`{f}` ({n})" for f, n in head)
+    quiet = own - len(pull)
+    lead = (f"All {own} of its files are imported from outside" if quiet == 0
+            else f"Of its {own} files, {len(pull)} are imported from outside")
+    if len(pull) > len(head):
+        lead += f"; the most-reached-for are {named}"
+    else:
+        lead += f": {named}"
+    lead += " (counts are distinct external importers)."
+    if quiet > 0:
+        return (lead + f" The other {quiet} are imported only from inside, so the split this signal "
+                       "argues for already has a shape: that set is the body, the rest is the interface.")
+    # Every file is reached from outside — there is no hidden body, and advising a split toward one
+    # would be advice the measurement does not support.
+    return (lead + " There is therefore no internal core to extract: if this is a problem it is one of "
+                   "breadth — the subsystem exposes a wide surface — rather than of a body and an "
+                   "interface tangled together, and narrowing what it exports is the move, not splitting "
+                   "it.")
+
+
 def _god_components(model: _Model) -> list[Finding]:
     total = sum(len(fs) for fs in model.files.values())
     out: list[Finding] = []
@@ -534,12 +600,27 @@ def _god_components(model: _Model) -> list[Finding]:
             bits.append(f"fan-in {fan_in}, fan-out {fan_out}")
         if is_big:
             bits.append(f"{len(model.files[name])}/{total} files ({share:.0%})")
+        rec = []
+        if is_hub:
+            dependents = sorted(model.rev[name])
+            shown = ", ".join(f"`{d}`" for d in dependents[:4])
+            more = f" and {len(dependents) - 4} more" if len(dependents) > 4 else ""
+            rec.append(f"{shown}{more} depend on `{name}`, so its shape is {fan_in} subsystems' problem.")
+        seam = _seam_advice(model, name)
+        if seam:
+            rec.append(seam)
+        else:
+            # No file-level graph to reason from, so the only honest advice is the general one.
+            rec.append("Splitting it means separating the responsibilities other subsystems depend on "
+                       "from the ones they do not.")
+        rec.append("If the grouping is deliberate and these files genuinely share a reason to change, say "
+                   "so in the subsystem document — this signal counts edges and cannot tell a cohesive "
+                   "subsystem from an accumulated one.")
         out.append(Finding(
             sign="god-component", group="C", severity=sev,
             title="God Component / Blob",
             subjects=[name], detail="; ".join(bits),
-            recommendation=("Split this subsystem along its internal seams; extract the most-depended-on "
-                            "responsibilities into their own subsystem with a narrow interface."),
+            recommendation=" ".join(rec),
             confidence="med",
         ))
     return out
@@ -921,6 +1002,27 @@ def _shared_libraries(model: _Model) -> list[Finding]:
 
 # --- Group B (history / regime B): co-change smells --------------------------------------
 
+def _shared_files(cc, a: str, b: str) -> str:
+    """A worked example of a co-change, or "" if the miner kept none.
+
+    "`a` and `b` co-change in 4 commits" is a number the reader cannot check without redoing the mining.
+    One commit and the files it touched on each side turns the same measurement into somewhere to look —
+    and, more usefully, lets the reader dismiss it in one click when the commits turn out to be a rename.
+    """
+    ex = cc.pair_evidence.get(frozenset((a, b)), [])
+    if not ex:
+        return ""
+    first = ex[0]
+    named = first.named(a, b)
+    if not named:
+        return ""
+    subj = first.subject.strip()
+    if len(subj) > 60:
+        subj = subj[:57] + "…"
+    more = f" (and {len(ex) - 1} more of them kept)" if len(ex) > 1 else ""
+    return f"For instance `{first.sha}` \"{subj}\" touched {named}{more}."
+
+
 def _cochange_smells(model, cc) -> list[Finding]:
     out: list[Finding] = []
 
@@ -942,14 +1044,22 @@ def _cochange_smells(model, cc) -> list[Finding]:
                 continue
             seen.add(key)
             sev = "high" if n >= 2 * COCHANGE_THR else "med"
+            share = f" ({n} of {cc.sub_commits.get(a, n)} commits touching {a})" if cc.sub_commits.get(a) else ""
+            rec = [f"{n} commits changed both `{a}` and `{b}` while no import connects them{share}."]
+            ev = _shared_files(cc, a, b)
+            if ev:
+                rec.append(ev)
+            rec.append(
+                "If those commits keep landing in the same pair of files, the concern is shared and the "
+                "boundary is drawn across it — either move the shared part into one subsystem or give "
+                "them the explicit interface the code currently lacks. If instead each commit touched "
+                "unrelated corners, this is release-shaped noise and worth dismissing.")
             out.append(Finding(
                 sign="implicit-coupling", group="B", severity=sev,
                 title="Shotgun surgery (implicit cross-module coupling)",
                 subjects=[a, b],
                 detail=f"{a} and {b} co-change in {n} commits but neither depends on the other",
-                recommendation=("A change to one keeps forcing a change to the other with no code link — the "
-                                "boundary is in the wrong place. Merge the shared concern, or introduce the "
-                                "missing explicit interface between them."),
+                recommendation=" ".join(rec),
                 regime="history", confidence="med",
             ))
 
@@ -960,15 +1070,30 @@ def _cochange_smells(model, cc) -> list[Finding]:
             continue
         churny = sorted(d for d in dependents if cc.between(s, d) >= COCHANGE_THR)
         if len(churny) >= UNSTABLE_DEPENDENTS_MIN:
+            quiet = sorted(set(dependents) - set(churny))
+            named = ", ".join(f"`{d}` ({cc.between(s, d)})" for d in churny)
+            rec = [f"{len(dependents)} subsystems depend on `{s}`, and {len(churny)} of them change in the "
+                   f"same commits it does: {named}."]
+            ev = _shared_files(cc, s, churny[0])
+            if ev:
+                rec.append(ev)
+            if quiet:
+                who = (f"`{quiet[0]}` depends" if len(quiet) == 1
+                       else ", ".join(f"`{q}`" for q in quiet[:3]) + " depend")
+                rec.append(
+                    f"{who} on `{s}` without changing alongside it — so part of this interface is "
+                    "already stable, and the split worth looking for is between what those consumers "
+                    "use and what the co-changing ones do.")
+            else:
+                rec.append("Every dependent co-changes with it, so there is no stable subset to split "
+                           "toward; what this argues for is a narrower contract, not a rearrangement.")
             out.append(Finding(
                 sign="unstable-interface", group="B", severity="high",
                 title="Unstable interface",
                 subjects=[s],
                 detail=(f"{len(dependents)} subsystems depend on {s}; it co-changes frequently with "
                         f"{', '.join(churny)}"),
-                recommendation=("A high-impact interface that keeps changing forces churn across its "
-                                "dependents. Stabilize it: freeze the contract, or split the volatile part "
-                                "out from the stable one."),
+                recommendation=" ".join(rec),
                 regime="history", confidence="med",
             ))
     return out
@@ -1225,6 +1350,17 @@ def _server_side_fetch(config: Config) -> list[Finding]:
 
 
 def _hardcoded_endpoints(config: Config) -> list[Finding]:
+    """A literal service address in the source.
+
+    Test files are reported differently rather than skipped. The smell in production code is *pinning*:
+    the address travels with the code and blocks relocation. A test has no environment to be pinned to,
+    so that reading does not apply — but the opposite reading does, and it is worth more: a real address
+    in a test suggests the test reaches infrastructure it does not control. Same measurement, different
+    consequence, so it stays a finding with the recommendation that actually follows from it, at `low`.
+
+    Reserved and documentation ranges are dropped outright by `_endpoint_in` — those are unreachable by
+    design and cannot be either kind of problem.
+    """
     root = config.project_root
     out: list[Finding] = []
     for rel in sorted(_source_files(config)):
@@ -1232,16 +1368,37 @@ def _hardcoded_endpoints(config: Config) -> list[Finding]:
             text = (root / rel).read_text()
         except OSError:
             continue
+        in_test = _is_test_path(rel)
         for lineno, line in enumerate(text.splitlines(), 1):
             hit = _endpoint_in(line)
-            if hit:
+            if not hit:
+                continue
+            if in_test:
+                out.append(Finding(
+                    sign="hardcoded-endpoint", group="D", severity="low",
+                    title="A test names a routable address",
+                    subjects=[f"{rel}:{lineno}"],
+                    detail=f"{hit} — in a test file",
+                    recommendation=(
+                        f"`{hit}` is routable, so this test may depend on infrastructure the suite does "
+                        "not control: it will fail off-network and can hang when the host is merely "
+                        "unreachable. If the address is meant to be dead, an address from a reserved "
+                        "range (`192.0.2.0/24`, `169.254.0.0/16`) says so and is never mistaken for "
+                        "real. If it is meant to be live, that is an integration test and worth marking "
+                        "as one. This is not the pinning problem — a test has no environment to be "
+                        "pinned to."),
+                    confidence="med",
+                ))
+            else:
                 out.append(Finding(
                     sign="hardcoded-endpoint", group="D", severity="med",
                     title="Hard-coded endpoint",
                     subjects=[f"{rel}:{lineno}"],
                     detail=hit,
-                    recommendation=("Move the address to config / service discovery so it isn't pinned to one "
-                                    "environment (a barrier to local development and relocation)."),
+                    recommendation=(
+                        f"`{hit}` travels with the code, so every environment that is not this one needs "
+                        "a patch to run. Move it to config or service discovery and name the setting in "
+                        "`deployment.md`."),
                     confidence="high",
                 ))
     return out
@@ -1254,11 +1411,21 @@ def _endpoint_in(line: str) -> str | None:
         return None
     for m in _IPV4.finditer(line):
         host = m.group(0).split(":")[0]
-        if host not in _LOCAL_HOSTS and not host.startswith(("0.", "127.")):
-            return m.group(0)
+        if host in _LOCAL_HOSTS or host.startswith(("0.", "127.")):
+            continue
+        if host.startswith(_RESERVED_V4):
+            continue
+        return m.group(0)
     for m in _URL_WITH_PORT.finditer(line):
-        if m.group(1).lower() not in _LOCAL_HOSTS:
-            return m.group(0)
+        host = m.group(1).lower()
+        if host in _LOCAL_HOSTS:
+            continue
+        # A bare IPv4 host was already judged by the loop above, which knows about reserved ranges; this
+        # branch exists for *named* hosts. Without the guard `http://192.0.2.10:8080` is excluded as an
+        # address and then re-admitted as a URL.
+        if _BARE_V4.fullmatch(host):
+            continue
+        return m.group(0)
     return None
 
 
