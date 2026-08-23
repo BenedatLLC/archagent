@@ -20,6 +20,7 @@ artifact. The archagent test suite does not read it — all tests pass with the 
 | Document | What it concludes |
 |---|---|
 | [`defect-study/RESULTS.md`](defect-study/RESULTS.md) | Files flagged change-prone-and-complex accumulate significantly more defect-fixing commits than churn-matched controls, in 3 of 4 adequately powered repositories. Pre-registered; every deviation recorded. Magnitudes are **not** comparable across repositories. |
+| [`labels/CALIBRATION-3.md`](labels/CALIBRATION-3.md) | Findings, round 3 — wardrowbe. `layer-inversion`'s four dismissals across three repos are **all** test or migration packages, with three of three confirms on production code. `unstable-interface` 0 of 3, and the pre-registered confound is **not** resolved. |
 | [`labels/CALIBRATION-2.md`](labels/CALIBRATION-2.md) | Findings, round 2 — groups B and C, labelled for the first time. **Not one of the 14 measurements was disputed**; every error was in the judgement, not the extraction. `layer-skip` 0 of 3 with a single shared cause, since fixed. |
 | [`labels/CALIBRATION.md`](labels/CALIBRATION.md) | Findings, round 1. 68% agreement between an independent reviewer and the person who built the checks, with errors in **both** directions. Precision by signal, with intervals. |
 | [`selfeval/archagent/CALIBRATION.md`](selfeval/archagent/CALIBRATION.md) | Judged rubric, round 1. The instrument broke three ways before it measured anything, and the review's evidence was fabricated wherever it was checkable. |

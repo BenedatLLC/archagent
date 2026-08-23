@@ -1685,6 +1685,68 @@ depending on the code it tests is what tests are for. Round 2's `backend-tests` 
 sentence almost exactly, so the label measured the guidance. Four more test-package inversions are in
 front of a reviewer and the question is whether they arrive there unprompted.
 
+### 22.11 What calibration round 3 decided
+
+Results in `docs/evaluations/labels/CALIBRATION-3.md`. Two outcomes, and they point opposite ways.
+
+**The pre-registration held, and cost something.** §22.10 said a dismissed `unstable-interface` result
+"may not be written up as having resolved the question". It came back 0 of 3, both confirmations are
+still archagent, every dismissal is still a web backend, and the confound stands. Writing that down
+beforehand is the only reason it is not being narrated now as a signal that has been shown to misfire.
+
+#### `layer-inversion` — act
+
+Seven labels across three repositories, and every one falls on one side of a single attribute:
+
+- **confirm:** `extraction`, `backend-core`, `backend-platform` — all production code
+- **dismiss:** `backend-ops`, `backend-tests`, `backend-migrations`, `backend-tests` — all test or
+  migration packages
+
+Four of four dismissals, three of three confirmations, no exceptions. The round-2 `backend-tests` label
+was discounted for restating the worksheet's own guidance; that sentence was removed before round 3 and a
+reviewer reached the same conclusion unprompted, in a different repository. It can now be read straight.
+
+The mechanism is in the artifacts, not in the check: both repositories tier their test package as
+`infra`, the *bottom* rank, so everything a test imports is "upward" and every production subsystem it
+exercises becomes an inversion — four of them in wardrowbe alone. Migrations are the same shape.
+
+Stated without naming a repository: **test and migration packages are not layers. Placing them on the
+production tier ladder makes every dependency they legitimately have look like a violation.**
+
+Where the fix belongs is a real choice and is not being made unilaterally:
+
+- **In `describe`** — stop assigning a production tier to test and migration subsystems. ADL-SPEC §4.5
+  already says an unrecognised `Tier` token means the layering check skips that subsystem, so this needs
+  no code change at all. It does nothing for artifacts that already exist, and both current ones tier
+  tests as `infra`.
+- **In the ADL** — recognise a non-layered tier (`test`, `migration`, or a `**Tier:** none`). Additive
+  and gated per §1.2, and it makes the intent explicit rather than relying on a token happening to be
+  unrecognised. It is still a spec change before 1.0.
+- **In `evaluate`** — skip subsystems whose name or `**Covers:**` marks them as tests or migrations.
+  Defends existing artifacts, and is the name-based heuristic this project has twice regretted:
+  `described.py` credited a whole package from a bare directory name, and `configscan`'s wrapper rule
+  matched every `dict.get` in the codebase.
+
+#### `unstable-interface` — do not act, but the hypothesis is now sharp
+
+29% precision, interval [0.08, 0.64], consistent with anything from badly broken to acceptable.
+
+What round 3 added is not a number but a mechanism, stated independently in five dismissals across two
+repositories: **a module that is deliberately a shared contract co-changes with its consumers by
+construction.** That is the contract working, not instability, and neither fan-in nor co-change can tell
+it from an interface churning because it is badly placed.
+
+The two confirmations fit the same rule rather than contradicting it. archagent's `drift` and
+`extraction` are also shared hubs — but ADR 0003 records that sharing as a defect with a planned remedy,
+and the reviewer confirmed them on exactly that basis. One rule, **intended sharing is not instability;
+accidental sharing is**, explains all seven labels.
+
+It is also untested. No repository in the sample has an intended shared kernel that was confirmed, or an
+accidental one that was dismissed, so the rule has never had a chance to fail. Testing it needs a
+repository with accidental sharing that is not a Python web backend — which is obstudio, blocked by
+[#25](https://github.com/BenedatLLC/archagent/issues/25). That issue is now on the critical path for a
+second signal, not just for coverage.
+
 ### 22.8 What this still does not do
 
 It does not measure whether a finding is true. Three signals of twenty have that evidence and this
