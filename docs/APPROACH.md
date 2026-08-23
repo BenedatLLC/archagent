@@ -7,7 +7,7 @@ a reference — `docs/COMMANDS.md`, `docs/CHECKING.md` and `docs/ADL-SPEC.md` ar
 [The gap](#the-gap-nobody-closes-the-loop-back-onto-the-code) · [Four principles](#four-principles) ·
 [The commands as one loop](#the-commands-as-one-loop) · [Why we think this adds value](#why-we-think-this-adds-value) ·
 [What we have actually measured](#what-we-have-actually-measured) · [Related tools](#related-tools) ·
-[Limits](#limits-and-what-would-change-our-mind)
+[Limits](#limits-and-what-would-change-our-mind) · [Bibliography](#bibliography)
 
 ---
 
@@ -254,3 +254,145 @@ repository was not worth acting on.
 **The strongest disconfirming evidence would be** a controlled comparison where agents with the artifact
 write no better code than agents without it. Nothing here rules that out, and it is the experiment the
 project most needs and has not run.
+
+---
+
+## Bibliography
+
+Grouped by the part of the approach each supports. **Bold** entries are load-bearing — the design would
+be different without them. The rest is the background the choices were made against.
+
+Local copies of the papers live in `~/research/architecture-agent/papers/`, indexed in `papers.md`.
+
+### The diff — declared versus actual
+
+- **Murphy, G. C., Notkin, D., & Sullivan, K. (1995). *Software Reflexion Models: Bridging the Gap between
+  Source and High-Level Models.*** [researchgate.net](https://www.researchgate.net/publication/2753342) —
+  convergence / divergence / absence, and the demonstration that the diff is cheap. `drift`'s categories
+  are these.
+- **Ducasse, S., & Pollet, D. (2009). *Software Architecture Reconstruction: A Process-Oriented Taxonomy.*
+  IEEE TSE.** [inria.hal.science](https://inria.hal.science/inria-00498407/file/Duca09c-TSE-SOAArchitectureExtraction.pdf)
+  — the survey that places the reflexion loop as the field's archetype, and names behavioural aspects as
+  the open question.
+- Mancoridis, S., et al. (1998). *Using Automatic Clustering to Produce High-Level System Organizations*
+  ("Bunch"). [drexel.edu](https://www.cs.drexel.edu/~mancors/papers/iwpc98.pdf) — the other way to get a
+  high-level model: infer it. archagent asks the author instead.
+- Passos, L., et al. (2009). *Static Architecture-Conformance Checking: An Illustrative Overview.* IEEE
+  Software. *(No stable public link; local copy `passos09.pdf`.)*
+- Knodel, J., & Popescu, D. (2007). *A Comparison of Static Architecture Compliance Checking Approaches.*
+  WICSA. [PDF](https://d1wqtxts1xzle7.cloudfront.net/45428777/A_Comparison_of_Static_Architecture_Comp20160507-11454-32ayw3-libre.pdf)
+
+### The enforceability spectrum — the `Tier` column
+
+- **Sangal, N., et al. (2005). *Using Dependency Models to Manage Complex Software Architecture.* OOPSLA
+  (Lattix; DSM).** [dl.acm.org](https://dl.acm.org/doi/pdf/10.1145/1094811.1094824)
+- **Terra, R., & Valente, M. T. (2009). *A Dependency Constraint Language to Manage Object-Oriented
+  Software Architectures.* SPE.** [ufmg.br](https://homepages.dcc.ufmg.br/~mtov/pub/2009_spe.pdf) — the
+  closest ancestor of the `forbid a -> b` rule syntax.
+- Meyer, B. (1992). *Applying "Design by Contract."* IEEE Computer.
+  [doi:10.1109/2.161279](https://doi.org/10.1109/2.161279) — the `contract` tier.
+- Claessen, K., & Hughes, J. (2000). *QuickCheck: A Lightweight Tool for Random Testing of Haskell
+  Programs.* ICFP. [doi:10.1145/351240.351266](https://doi.org/10.1145/351240.351266) — the `pbt` tier,
+  which archagent reaches through Hypothesis and fast-check.
+- Lamport, L. (2002). *Specifying Systems: The TLA+ Language and Tools.*
+  [lamport.azurewebsites.net](https://lamport.azurewebsites.net/tla/book.html) — and Jackson, D.
+  *Software Abstractions* (Alloy), [softwareabstractions.org](http://softwareabstractions.org/) — the
+  `model-check` tier, which archagent names and does not implement.
+- Newcombe, C., et al. (2015). *How Amazon Web Services Uses Formal Methods.* CACM.
+  [doi:10.1145/2699417](https://doi.org/10.1145/2699417) — the case for the expensive end being worth it,
+  sometimes.
+
+### Describing an architecture at all
+
+- Perry, D. E., & Wolf, A. L. (1992). *Foundations for the Study of Software Architecture.*
+  [dl.acm.org](https://dl.acm.org/doi/pdf/10.1145/141874.141884)
+- Garlan, D. (2000). *Software Architecture: a Roadmap.* FOSE.
+  [dl.acm.org](https://dl.acm.org/doi/pdf/10.1145/336512.336537)
+- Medvidovic, N., & Taylor, R. N. (2000). *A Classification and Comparison Framework for Software
+  Architecture Description Languages.* IEEE TSE.
+  [uci.edu](https://ics.uci.edu/~taylor/documents/2000-ADLs-TSE.pdf) — why the ADL here is markdown and
+  not an ADL in their sense.
+- Garlan, D., Monroe, R., & Wile, D. (1997). *Acme: An Architecture Description Interchange Language.*
+  [cmu.edu](https://www.cs.cmu.edu/afs/cs/project/compose/ftp/pdf/acme-cascon97.pdf)
+- Allen, R., & Garlan, D. (1997). *A Formal Basis for Architectural Connection* (Wright).
+  [dl.acm.org](https://dl.acm.org/doi/pdf/10.1145/258077.258078) — typed connectors, which is where
+  `**Connects:** … via <kind>` comes from.
+
+### Agents, architecture, and externalised context
+
+- **ACE: *Agentic Context Engineering — Evolving Contexts for Self-Improving Language Models* (2025).**
+  [arXiv:2510.04618](https://arxiv.org/abs/2510.04618) — never whole-rewrite; itemise with stable IDs and
+  merge deltas deterministically. And the caveat that made this project worth building: an evolving
+  artifact only improves given a trustworthy feedback signal.
+- **ToCS: *Theory of Code Space — Do Code Agents Understand Software Architecture?*
+  [arXiv:2603.00601](https://arxiv.org/abs/2603.00601)** — belief instability between probes, and the
+  measured gain from keeping an externalised map.
+- **Codified Context: *Infrastructure for AI Agents in a Complex Codebase.*
+  [arXiv:2602.20478](https://arxiv.org/abs/2602.20478)** — the hot/cold tiering, productionised over a
+  108K-line build, with stale specs as the dominant failure mode.
+- AgenticAKM: *Enroute to Agentic Architecture Knowledge Management.*
+  [arXiv:2602.04445](https://arxiv.org/abs/2602.04445) — extract and describe, no enforce.
+- RAD-AI: *Rethinking Architecture Documentation for AI-Augmented Ecosystems.*
+  [arXiv:2603.28735](https://arxiv.org/abs/2603.28735) — the richest *describe* vocabulary, all human prose.
+- *Constraint Decay: The Fragility of LLM Agents in Backend Code Generation.*
+  [arXiv:2605.06445](https://arxiv.org/abs/2605.06445) — the failure mode this project exists to
+  counteract.
+- *Agentic Software Engineering: Foundational Pillars and a Research Roadmap.*
+  [arXiv:2509.06216](https://arxiv.org/abs/2509.06216)
+- On agent manifests and context files, empirically: *On the Use of Agentic Coding Manifests*
+  [arXiv:2509.14744](https://arxiv.org/abs/2509.14744); *Agent READMEs*
+  [arXiv:2511.12884](https://arxiv.org/abs/2511.12884); *On the Impact of AGENTS.md Files*
+  [arXiv:2601.20404](https://arxiv.org/abs/2601.20404).
+
+### Extraction — why the backbone is deterministic
+
+- **Reliable Graph-RAG for Codebases: *AST-Derived Graphs vs LLM-Extracted Knowledge Graphs.*
+  [arXiv:2601.08773](https://arxiv.org/abs/2601.08773)** — LLM graph extraction fails by *silent
+  omission*, and a skipped file becomes a phantom "missing component" in any diff. The single strongest
+  argument for archagent's import graph being an `ast` walk.
+- Codebase-Memory: *Tree-Sitter-Based Knowledge Graphs for LLM Code Exploration via MCP.*
+  [arXiv:2603.27277](https://arxiv.org/abs/2603.27277)
+- CodePlan: *Repository-level Coding using LLMs and Planning.*
+  [arXiv:2309.12499](https://arxiv.org/abs/2309.12499)
+
+### The smells `evaluate` looks for
+
+- **Fontana, F. A., et al. *Arcan: a Tool for Architectural Smells Detection.*
+  [unimib.it](https://boa.unimib.it/bitstream/10281/155470/1/PID4705339.pdf)** — the instability metric
+  `I = Ce/(Ca+Ce)` and the cycle-shape severities.
+- **Garcia, J., Popescu, D., Edwards, G., & Medvidovic, N. *Toward a Catalogue of Architectural Bad
+  Smells.*** [uci.edu](https://jgarcia.ics.uci.edu/wp-content/uploads/10.1.1.183.9958.pdf) — the
+  model-level smells, as distinct from code smells.
+- **Mo, R., Cai, Y., Kazman, R., & Xiao, L. *Hotspot Patterns: The Formal Definition and Automatic
+  Detection of Architecture Smells.*** [dtic.mil](https://apps.dtic.mil/sti/tr/pdf/ADA621415.pdf) — the
+  co-change threshold `evaluate` uses is theirs.
+- Taibi, D., & Lenarduzzi, V. (2018). *On the Definition of Microservice Bad Smells.* IEEE Software.
+  [PDF](https://www.academia.edu/download/56190485/IEEESW-Preprint.pdf) — the harm ranking behind the
+  distributed-monolith and shared-persistence signals.
+- MacCormack, A., & Sturtevant, D. (2016). *Technical debt and system architecture: the impact of
+  coupling on defect-related activity.* JSS.
+  [hbs.edu](https://www.hbs.edu/ris/Publication%20Files/2016-JSS%20Technical%20Debt_d793c712-5160-4aa9-8761-781b444cc75f.pdf)
+  — coupling predicts defects, which is the hypothesis the held-out defect study tests.
+- Xiao, L., Cai, Y., Kazman, R., et al. *A Case Study in Locating the Architectural Roots of Technical
+  Debt.* [dtic.mil](https://apps.dtic.mil/sti/tr/pdf/ADA614220.pdf)
+
+### Tools archagent composes or competes with
+
+- **[import-linter](https://import-linter.readthedocs.io/)** — Python boundary contracts.
+- **[dependency-cruiser](https://github.com/sverweij/dependency-cruiser)** — the JS/TS equivalent.
+- **[ast-grep](https://ast-grep.github.io/)** — structural pattern matching, any language.
+- [Hypothesis](https://hypothesis.readthedocs.io/) · [fast-check](https://fast-check.dev/) — the `pbt` tier.
+- [Archy](https://github.com/hslee16/archy) — the closest neighbour; see
+  [Related tools](#related-tools) for the comparison.
+- [Spec-Kit](https://github.com/github/spec-kit) — the install-once, scaffold-per-repo delivery model.
+- [arc42](https://arc42.org/) · [C4](https://c4model.com/) — established documentation templates. The six
+  dimensions overlap both; neither is machine-checked, which is the difference.
+
+### This project's own evidence
+
+Not literature, but cited throughout and kept to the same standard:
+
+- [`docs/designs/evaluating-archagent.md`](designs/evaluating-archagent.md) — the evaluation methodology,
+  including what each instrument can and cannot measure.
+- [`docs/evaluations/`](evaluations/README.md) — every round's write-up, including the ones that came back
+  badly. The data lives in a separate private repository; the reasoning is here.
