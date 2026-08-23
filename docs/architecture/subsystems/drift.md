@@ -59,6 +59,12 @@ Issue #26 is why: four of seven labelled `layer-inversion` findings came from pa
 the bottom rank — so everything the tests imported read as upward. Correcting the two tiers on wardrowbe
 takes that signal from seven findings to two, dropping exactly the five a reviewer dismissed.
 
+The predicate behind "is this test code" is `configscan.is_test_path`, imported rather than reimplemented.
+That is deliberate and load-bearing: `evaluate` asks the same question of the same files when it decides
+which reading of a hard-coded endpoint applies, and two definitions would let the two commands disagree
+about whether a given file is a test — one exempting it from documentation while the other treats it as
+production. The edge to `extraction` is the price of that agreement.
+
 **Every** covered file must be non-production, not merely most. A subsystem holding production code beside
 its tests is a production subsystem and belongs on the ladder; flagging it would relocate the false
 positives rather than remove them. That strictness is also why the check catches two of the four known

@@ -103,6 +103,29 @@ counting declarations would report the family active over a comparison that neve
 minor, moderate or critical depends on what it *causes*, which only reading the code establishes — so
 findings that might have consequences are marked for investigation rather than rated.
 
+**A recommendation may only say what the finding measured.** Every recommendation used to be a constant
+string, so a finding computed specifics and then advised in the abstract: `god-component` knew which files
+other subsystems reach for — fan-in was derived from exactly those edges — and said "split along its
+internal seams". Calibration round 5 scored `finding_actionability` 2 of 5 and rated 11 of 19 sampled
+findings as noise, while the underlying measurements went undisputed. The gap was never in the extraction.
+
+So the interpolation is not decoration. `_external_pull` re-reads the file-level import graph to name the
+externally-imported files and separate the internal-only ones, `_shared_files` cites a co-change commit
+and the files it touched on each side, and both co-change findings state what would make them noise. The
+constraint this creates is that a recommendation must **withdraw** when the evidence does not support it:
+when every file of a god component is reached from outside there is no body to extract, and the finding
+says so instead of repeating generic advice. The same rule removed "keeps forcing" — four co-changes are
+four observations, and the phrase asserted a habit — from the findings and from the shipped `evaluate`
+prompt, which had been telling the agent the same thing before it judged anything.
+
+**A finding whose subject changes meaning must change reading, not disappear.** `hardcoded-endpoint` in
+production code is about *pinning*: the address travels with the code. In a test that reading is simply
+false — a test has no environment to be pinned to — and on dspy it produced a recommendation to move a
+deliberately unreachable fixture address into service discovery. Skipping test paths would have traded one
+error for another, because a routable address in a test is a real signal about hermeticity. The check
+reports the same measurement with the consequence that applies, at reduced severity. Addresses the IETF
+reserved for documentation or made unroutable are dropped everywhere, since they can be neither.
+
 **The two exposure signals in group D are architectural findings, not a security scan.** Both ask a
 question about the shape of the system that no linter positioned inside one file can ask, and both refuse
 to state more than the evidence supports.

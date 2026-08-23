@@ -145,6 +145,15 @@ blank line or `**Field:**`, not to the end of its first line. A real manifest is
 whoever writes it wraps it; reading only the first line silently honours part of the declaration and
 reports the rest as undeclared — a confident, wrong finding against a document that does declare them.
 
+**"Is this a test path?" is one question with one answer here — and three others elsewhere.**
+`configscan.is_test_path` is public because `drift` uses it to decide what is exempt from documentation
+and `evaluate` uses it to decide which reading of a hard-coded endpoint applies; a second definition would
+be a second behaviour, and the two commands would disagree about the same file. Three further definitions
+do still exist (`described.py`, `originscan.py` inline twice, `hotspots.py`) with **three different
+directory sets** — `e2e/` is test code to one and not the others — which is the scattered-source-of-truth
+shape this tool's own group F looks for, recorded as issue #32 rather than quietly unified, because some
+of the divergence is legitimate and the interesting question is why `dupdecide` did not report it.
+
 **Conservative by design.** `connscan` drops a call whose target it cannot resolve rather than guessing;
 `datamap` requires a real table definition. A scanner that guesses produces findings nobody can act on.
 
