@@ -81,8 +81,8 @@ never said what those words mean. dspy's run had 65 findings and zero flagged, s
 exactly that report and scored `finding_restraint` 2 of 5 on it. The caveat now prints with the findings
 and a test pins the ordering.
 
-Three more, now filed as [#31](https://github.com/BenedatLLC/archagent/issues/31) together with a fourth
-found while writing it up — **all four `hardcoded-endpoint` findings on dspy were in test files**, one of
+Three more, filed as [#31](https://github.com/BenedatLLC/archagent/issues/31) together with a fourth
+found while writing it up, **all four now fixed** — **all four `hardcoded-endpoint` findings on dspy were in test files**, one of
 them recommending that a link-local metadata address used deliberately in a fixture be moved to service
 discovery:
 
@@ -96,6 +96,19 @@ discovery:
 `finding_coverage_honesty` scored **5 of 5** — the one part of the report that did its job, naming the
 capped list as 10 of 12, the skipped cross-service family and the reason, and the history-discipline
 caution.
+
+**What #31 changed, measured on this same checkout.** The two `169.254.169.254` findings are gone — a
+reserved range cannot be either kind of endpoint problem — and the two remaining are `low` and read as
+test hermeticity rather than deployment pinning. `adapters`' unstable-interface went from *"Stabilize it:
+freeze the contract, or split the volatile part out from the stable one"* to naming all seven dependents
+with their co-change counts, citing `0312f0da6` and the files it touched on each side, and concluding
+that with no stable dependent there is nothing to split toward. The `god-component` finding names the
+fifteen externally-imported files and the five internal ones.
+
+Whether that moves `finding_actionability` off 2 of 5 is **not measured**. The fair test is a fresh
+reviewer on a fresh target, not a re-read of the repository the fixes were written against — these
+recommendations were tuned while looking at this output, which is exactly the condition the blinding
+boundary exists to keep out of the numbers.
 
 **The three criteria together say something the individual scores do not.** Round 3 disputed none of its
 14 measurements; round 5 rates more than half its findings as not worth acting on; and the part of the
