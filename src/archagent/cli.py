@@ -81,6 +81,33 @@ def _resolve_agents(root: Path, agents_opt: str, detected_when_auto) -> tuple[li
     return [a for a in selected if a in KNOWN_AGENTS], msg
 
 
+def _report_settings(result) -> None:
+    """Show what went into `archagent.toml` and ask for it to be checked here, not in the README.
+
+    Issue #27. The README used to say "open archagent.toml and check root_package and source_paths",
+    which is a check a reader means to perform and does not. The tool knows which values it detected,
+    which it defaulted, and whether a source path holds any matching files at all — printing that turns an
+    instruction into a decision in front of them.
+
+    Worth the space because the failure is silent and total: a `root_package` naming nothing scopes every
+    BOUNDARY contract to an empty module set, and `check` then reports that all invariants hold, having
+    examined none of them.
+    """
+    if not result.settings:
+        return
+    console.print("\n[bold]Configuration written to archagent.toml[/] — check these before continuing:\n")
+    for s in result.settings:
+        mark = "[red]![/]" if s.problem else " "
+        console.print(f"  {mark} [cyan]{s.key:24}[/] {s.value:22} [dim]({s.origin})[/]")
+        if s.problem:
+            console.print(f"      [red]{s.problem}[/]")
+    if any(s.problem for s in result.settings):
+        console.print("\n  [yellow]Fix the flagged values in archagent.toml before running "
+                      "`archagent check`.[/]\n  A path that matches no files scopes every rule to "
+                      "nothing, and the run then reports\n  that all invariants hold, having checked "
+                      "none of them.")
+
+
 def _report(result, root: Path) -> None:
     if result.languages:
         console.print(f"Detected languages: [bold]{', '.join(result.languages)}[/]")
@@ -148,6 +175,7 @@ def init(
     location = _resolve_arch_dir(root, arch_dir, yes)
     result = init_project(root, agents=selected, force=force, wire=wire, arch_dir=location)
     _report(result, root)
+    _report_settings(result)
     console.print(f"\nArchitecture docs: [bold]{location}/[/]")
     if selected and not wire:
         console.print("Tip: wire archagent into your agent's top-level instructions with [bold]--wire[/], "

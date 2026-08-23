@@ -46,6 +46,11 @@ arriving through the report rather than through a scan.
 **Findings carry their own next step.** A finding marked `investigate` prints the exact command that acts
 on it (`cli.py:538`). A reader who cannot act on a finding drops it.
 
+**`init` prints what it configured, and it is the CLI that renders it.** `init.py` returns a list of
+`Setting` rows — value, provenance, and a problem string where one looks wrong — and this module decides
+how they look. The layering rule is what forces that split, and it pays here: the same rows are what a
+future `--json` would emit without touching the detection.
+
 **Commands that write into the artifact name one file, and it is `README.md`.** `graph --write` splices
 the system map and the provenance stamp into the artifact's `README.md` (issue #28) — forges render that
 name when a reader opens a directory and render nothing otherwise. The help text says so, because a flag

@@ -214,3 +214,66 @@ def test_codex_is_a_known_agent(tmp_path):
     from archagent.cli import _resolve_agents
     selected, advisory = _resolve_agents(tmp_path, "codex", detect_agents)
     assert selected == ["codex"] and not advisory
+
+
+# --- what init tells you about its own guesses (issue #27) ------------------------------------------
+
+from archagent.init import describe_settings
+
+
+def _s(settings, key):
+    return next(s for s in settings if s.key == key)
+
+
+def test_a_source_path_holding_no_matching_files_is_flagged(tmp_path):
+    """The layout miss this exists to catch: `source_paths` is a fixed default of `src`, so a project
+    keeping its TypeScript under `web/src` gets a config that scopes every structural rule to nothing —
+    and `check` then reports that all invariants hold, having examined none of them."""
+    (tmp_path / "web" / "src").mkdir(parents=True)
+    (tmp_path / "web" / "src" / "a.ts").write_text("export const a = 1\n")
+    s = _s(describe_settings(tmp_path, ["ts"], "architecture"), "ts.source_paths")
+    assert s.problem and "web/ looks likelier" in s.problem
+
+
+def test_a_source_path_that_holds_files_is_not_flagged(tmp_path):
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "a.py").write_text("x = 1\n")
+    assert not _s(describe_settings(tmp_path, ["python"], "architecture"), "python.source_paths").problem
+
+
+def test_an_unguessable_root_package_is_flagged_rather_than_left_blank(tmp_path):
+    """A `root_package` naming nothing scopes every BOUNDARY contract to an empty module set. Commenting
+    it out in the generated file said so only to a reader who opened the file."""
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "loose.py").write_text("x = 1\n")     # no package, so nothing to guess
+    s = _s(describe_settings(tmp_path, ["python"], "architecture"), "python.root_package")
+    assert s.value == "(unset)" and "BOUNDARY" in s.problem
+
+
+def test_a_guessed_root_package_is_reported_as_guessed(tmp_path):
+    """Provenance per value: a reader checks a guess differently from something detected."""
+    pkg = tmp_path / "src" / "myapp"
+    pkg.mkdir(parents=True)
+    (pkg / "__init__.py").write_text("")
+    s = _s(describe_settings(tmp_path, ["python"], "architecture"), "python.root_package")
+    assert s.value == "myapp" and s.origin == "guessed" and not s.problem
+
+
+def test_vendored_directories_do_not_win_the_likeliest_guess(tmp_path):
+    """`node_modules` holds more JavaScript than any project directory, and suggesting it would be worse
+    than suggesting nothing."""
+    (tmp_path / "node_modules" / "dep").mkdir(parents=True)
+    for i in range(5):
+        (tmp_path / "node_modules" / "dep" / f"m{i}.js").write_text("x\n")
+    (tmp_path / "app").mkdir()
+    (tmp_path / "app" / "a.ts").write_text("export const a = 1\n")
+    s = _s(describe_settings(tmp_path, ["ts"], "architecture"), "ts.source_paths")
+    assert "app/ looks likelier" in s.problem
+
+
+def test_init_reports_its_settings(tmp_path):
+    """The list must reach the caller — this is what the CLI renders."""
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "a.py").write_text("x = 1\n")
+    result = init_project(tmp_path, agents=[])
+    assert [s.key for s in result.settings][:2] == ["project.languages", "project.architecture_dir"]

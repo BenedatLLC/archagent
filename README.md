@@ -29,9 +29,11 @@ archagent init .
 ```
 
 `init` detects your languages and your coding agent, asks where the architecture docs should live, and
-writes `archagent.toml` plus an empty `architecture/` scaffold. Open `archagent.toml` and check
-`root_package` and `source_paths` — a wrong `root_package` scopes the boundary checks to nothing, and it
-guesses.
+writes `archagent.toml` plus an empty `architecture/` scaffold. **It then prints every setting it wrote,
+says whether each was detected, guessed or defaulted, and flags any that look wrong** — a source path
+holding no matching files, or a `root_package` it could not find. Fix anything flagged before you go on:
+a path that matches nothing scopes every rule to nothing, and `check` will then report that all
+invariants hold having examined none of them.
 
 **2. See what is already there.**
 
@@ -69,6 +71,39 @@ archagent install-hook        # run `check` on every commit
 From here on: `archagent drift` tells you where the docs and the code have diverged, `archagent evaluate`
 judges the architecture itself for system-level smells, and re-running `/archagent-describe` updates the
 artifact. See [Workflow](#workflow) for when to reach for each.
+
+## What it supports
+
+**Languages.** archagent parses two, and this is the honest limit — if your codebase is mostly C++, Rust
+or Java, the structural half of the tool has nothing to work with:
+
+| | BOUNDARY (layering) | STRUCTURAL (code shape) | PBT (behavioural) | parsed by |
+|---|---|---|---|---|
+| **Python** | import-linter | ast-grep | Hypothesis | `ast` |
+| **JavaScript / TypeScript** | dependency-cruiser | ast-grep | fast-check | regex |
+| **anything else** | — | — | — | — |
+
+Two things still work on an unparsed language. The **artifact** is prose and diagrams, so an agent can
+describe a Go or Rust system perfectly well. And `evaluate`'s dependency graph falls back to the
+`**Connects:**` edges your documents declare, so the structural signals still run — reported at lower
+confidence, and labelled as resting on declarations nothing corroborated. What you lose is enforcement:
+`check` has no checker to compile your invariants into.
+
+**Coding agents.** The skills are one neutral source installed per agent:
+
+| Agent | Installed into | Detected by `init`? |
+|---|---|---|
+| Claude Code | `.claude/skills/` | yes |
+| Cursor | `.cursor/skills/` | yes |
+| OpenHands | `.openhands/microagents/` | yes |
+| Codex | `.agents/skills/` | **no — opt in with `--agents codex`** |
+
+Codex keeps no per-repo directory, so nothing in your checkout says it is in use; it is fully supported
+and simply cannot be auto-detected. It also reads a root `AGENTS.md` from the repo down, so `archagent
+init --wire` alone gives it a working integration even with no skills installed.
+
+Everything else — `drift`, `evaluate`, `status`, `graph`, `lint-docs` — is language-agnostic to the
+degree its evidence allows, and each says in its own output when it could not see something.
 
 ## Install
 
@@ -123,7 +158,7 @@ shared source of truth that both humans and agents read and write:
 | `constitution.md` | hot (always loaded) | terse conventions + the handful of patterns the system relies on, and how to work here |
 | `invariants.md` | hot | the **single source of truth** for checkable rules (the table archagent parses) |
 | `subsystems/<name>.md` | cold (on demand) | one doc per subsystem, the narrative architecture across the six dimensions |
-| `decisions/NNNN-*.md` | cold | ADRs — the *why* behind decisions, and the rejected alternatives |
+| `decisions/NNNN-*.md` | cold | ADRs — the *why* behind decisions, and the rejected alternatives ([where they come from](#where-adrs-come-from)) |
 | `investigations/*.md` | cold | what an `evaluate` finding turned out to mean once someone read the code, with a minor/moderate/critical rating |
 | `README.md` | hot | the entry document: what the system is, what to read first, the generated system map (forges render it when a reader opens the directory) |
 | `log.md` | — | append-only, chronological change log (grep/tail friendly) |
@@ -135,6 +170,25 @@ The **cold** files (subsystem docs, ADRs) are retrieved only when relevant, so t
 narrative — written so a new engineer can learn a subsystem by reading one doc, without chasing links.
 
 The format is specified in full in [`docs/ADL-SPEC.md`](docs/ADL-SPEC.md).
+
+### Where ADRs come from
+
+Three sources, and it is worth knowing which because they arrive at different times:
+
+1. **Ones you already have.** `describe` looks for existing design docs, RFCs, specs and ADR directories
+   before it reads any code, and carries the decisions it finds into `decisions/` — verifying each against
+   the code first, and flagging where the two disagree rather than quietly siding with the document.
+2. **Ones it writes to explain a structure it found.** When a subsystem's shape has a reason that is not
+   obvious from the code, that reason belongs in an ADR and the invariant enforcing it links there. This
+   is why the `Why` column of the invariants table is a link: a rule with no rationale is one nobody can
+   safely delete.
+3. **Ones you write when you accept a finding.** An `evaluate` smell is a design decision — change the
+   structure, or accept it and record why. Accepting without an ADR is how a deliberate trade-off becomes
+   indistinguishable from an oversight six months later.
+
+archagent's own [ADR 0003](docs/architecture/decisions/0003-drift-holds-shared-git-plumbing.md) is the
+third kind: `evaluate` reports a dependency cycle in this codebase, and the ADR records it as a known cost
+with a planned remedy rather than suppressing the finding.
 
 ### See a real one: [`docs/architecture/`](docs/architecture/)
 
@@ -265,6 +319,33 @@ misreads your convention.
 
 ## Workflow
 
+```mermaid
+flowchart TB
+    subgraph once["Once per repo"]
+        I["archagent init"] --> D
+    end
+    subgraph loop["Design review · periodically"]
+        D["/archagent-describe<br/><i>write or update the artifact</i>"]
+        DR["archagent drift<br/><i>docs vs code</i>"]
+        EV["archagent evaluate<br/><i>candidate smells</i>"]
+        JE["/archagent-evaluate<br/><i>judge · cluster · prioritise</i>"]
+        DR --> D
+        D --> EV --> JE --> D
+    end
+    subgraph commit["Every commit"]
+        C["archagent check<br/><i>enforce the invariants</i>"]
+    end
+    D -->|"lift a rule into the table"| C
+    C -->|"a rule the code violates"| D
+    JE -->|"graduate an accepted fix"| C
+```
+
+_Two loops at two speeds. The **inner** one is `check`, on every commit, and it is the only gate — it
+exits nonzero and drops into a hook or CI unchanged. The **outer** one runs at design review and
+periodically: `drift` says where the documents stopped matching the code, `evaluate` proposes what might
+be wrong with the design itself, and `describe` is what reconciles both back into the artifact. Nothing
+in the outer loop blocks a commit; its output is a work-list._
+
 **Set up the architecture (once per repo)** — this is the [Quickstart](#quickstart) above:
 `archagent init .`, then `/archagent-describe` in your coding agent, then `archagent check`.
 
@@ -293,6 +374,14 @@ misreads your convention.
   items are record fixes; evaluate findings are design decisions — change the structure or accept it with an
   ADR, and graduate the fixes you want to hold into `check` invariants.
 - **Upgrade the prompts** — update the tool, then `archagent upgrade`. See [Upgrading](#upgrading).
+
+**Where the output goes.** `drift` and `evaluate` **write nothing** — they print a report, or JSON with
+`--json`, and that is the whole of it. Findings live only in your terminal until something records them,
+which is deliberate: a signal is a candidate, and a candidate written into the artifact before anyone
+judged it is a claim nobody made. Two commands do write: `archagent investigate <id> --record <file.md>`
+stores a verdict under `<arch-dir>/investigations/` so a settled finding stops asking, and
+`/archagent-evaluate` turns accepted findings into ADRs and invariant rows through `describe`. `check`
+writes only the derived configs under `.archagent/generated/`.
 
 > Cadence: `describe` + `evaluate` at design-review time and periodically; `check` on every commit.
 > archagent enforces *your system's* design rules and flags *system-level* smells (candidates its skill
@@ -329,6 +418,20 @@ Every command takes `--project PATH` (default `.`). `archagent --version` prints
 
 Agent skills: `/archagent-describe` · `/archagent-check` · `/archagent-invariant` ·
 `/archagent-evaluate` · `/archagent-help`.
+
+## What to read next
+
+| If you want | Read |
+|---|---|
+| every command and option in full | [`docs/COMMANDS.md`](docs/COMMANDS.md) |
+| the artifact format, as a spec — fields, tiers, the rule DSL | [`docs/ADL-SPEC.md`](docs/ADL-SPEC.md) |
+| a real artifact, not a sample | [`docs/architecture/`](docs/architecture/) — this repo describes itself |
+| what the evaluation runs concluded, and how much to trust it | [`docs/evaluations/README.md`](docs/evaluations/README.md) |
+| what is planned, and in what order | [`docs/ROADMAP.md`](docs/ROADMAP.md) |
+| how a release is cut | [`docs/RELEASING.md`](docs/RELEASING.md) |
+
+The evaluations are worth a look before you rely on a signal. Several are measured against blind human
+labelling and the numbers are on the page, including the ones that came back badly.
 
 ## Configuration
 

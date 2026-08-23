@@ -85,6 +85,11 @@ gitignored — it is derived from the table and rebuilt on every `check`.
 
 These two are informational. Neither gates a commit; both produce a work-list.
 
+**Neither writes anything.** They print a report, or JSON with `--json`, and that is all. A signal is a
+candidate, and a candidate written into the artifact before anyone judged it is a claim nobody made. Two
+commands do record: `archagent investigate --record` stores a verdict under `<arch-dir>/investigations/`,
+and `/archagent-evaluate` turns accepted findings into ADRs and invariant rows by way of `describe`.
+
 ### `archagent drift`
 
 Diff the architecture docs against the code and report where they disagree:

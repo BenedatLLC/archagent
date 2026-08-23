@@ -194,3 +194,23 @@ A red workflow nobody watches is worse than no workflow: it trains everyone to i
 is what would have happened to the three new gates. CI now installs ripgrep so those tests are actually
 exercised, and they carry a `skipif` so a contributor without `rg` is not blocked by a tool the project
 does not otherwise require.
+
+## 2026-08-23 — init reports its own guesses (issue #27)
+
+The README told readers to open `archagent.toml` and check `root_package` and `source_paths`. That is a
+check a reader means to perform and does not, and the tool already knew the answer: which values were
+detected, which guessed, which defaulted, and whether a source path holds any matching file at all.
+
+`init` now prints every setting with its provenance and flags the ones that look wrong, naming a likelier
+directory where it can. It never writes that suggestion — choosing on the reader's behalf would replace a
+visible bad guess with an invisible one.
+
+Worth the output because the failure is silent and total: `source_paths` is not inferred at all, only
+defaulted to `src`, so a project keeping its TypeScript under `web/src` got a config that scoped every
+structural rule to nothing — and `check` would then report that all invariants hold, having examined none
+of them.
+
+The rest of the issue is documentation: a supported-languages and supported-agents table (archagent parses
+two languages, and a reader with a C++ codebase deserves to learn that in the first screen), where ADRs
+come from, a Mermaid diagram of the two loops, an explicit statement that `drift` and `evaluate` write
+nothing, and a "What to read next" table.

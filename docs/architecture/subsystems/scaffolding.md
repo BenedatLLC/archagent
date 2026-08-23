@@ -17,6 +17,21 @@ the tool-owned files; `install-hook` adds a pre-commit hook running `archagent c
 
 ## Key abstractions
 
+**`init` reports its own guesses rather than delegating the check to the README** (issue #27). It writes
+`archagent.toml` from very little: languages are detected, `root_package` is guessed from the package
+layout, and `source_paths` is not inferred at all — it is a fixed `src`. `describe_settings` annotates
+every value with its provenance and verifies each source path by counting files of the right kind under
+it, so a TypeScript project keeping its code in `web/src` is told so at the moment the config is written.
+
+The failure it guards is silent and total. A `root_package` naming nothing scopes every BOUNDARY contract
+to an empty module set; a `source_paths` pointing at the wrong directory scopes every structural rule to
+no files. In both cases `check` reports that all invariants hold, having examined none of them — this
+project's recurring defect wearing a configuration hat.
+
+It names a likelier directory and never writes one. Choosing on the reader's behalf would replace a
+visible bad guess with an invisible one, and `node_modules` holds more JavaScript than any project
+directory, so the candidate search skips vendored and build trees.
+
 **Tool-owned versus user-owned files.** `upgrade` refreshes the prompts and `architecture/AGENTS.md` and
 touches nothing else. This is why upgrading never overwrites an authored `invariants.md` — and why
 `init --force` is documented as the wrong way to upgrade.

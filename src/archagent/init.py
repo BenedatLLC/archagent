@@ -66,6 +66,83 @@ class InitResult:
     wired: list[Path] = field(default_factory=list)     # top-level files given a pointer
     languages: list[str] = field(default_factory=list)
     agents: list[str] = field(default_factory=list)
+    #: What went into `archagent.toml`, and how sure we are of each value (issue #27).
+    settings: list["Setting"] = field(default_factory=list)
+
+
+@dataclass
+class Setting:
+    """One line of the generated config, with its provenance and whether it looks right.
+
+    `init` guesses, and it guesses from very little. Telling a reader in the README to "check
+    archagent.toml" puts the burden in the wrong place: the tool knows which values it detected, which it
+    defaulted, and — for a source path — whether any matching file actually lives there. Printing that is
+    the difference between a check a user performs and one they mean to.
+
+    The failure being guarded is silent and total. A `root_package` naming nothing scopes every BOUNDARY
+    contract to an empty module set, and a `source_paths` pointing at the wrong directory scopes every
+    structural rule to no files — in both cases `check` reports that all invariants hold, having examined
+    nothing. That is this project's recurring defect wearing a configuration hat.
+    """
+    key: str                 # "python.root_package"
+    value: str
+    origin: str              # "detected" | "guessed" | "default"
+    problem: str = ""        # non-empty when the value looks wrong
+
+
+#: Extensions that make a directory a plausible source root for each language.
+_LANG_EXTS = {"python": (".py",), "ts": (".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs")}
+_SKIP = {".git", "node_modules", ".venv", "venv", "__pycache__", "dist", "build", ".archagent"}
+
+
+def describe_settings(root: Path, languages: list[str], arch_dir: str) -> list[Setting]:
+    """The generated configuration, annotated for a reader to check.
+
+    A source path is verified by counting files of the right kind under it, which catches the common
+    layout miss — TypeScript under `web/src` while the default says `src` — without pretending to infer
+    the right answer. Where nothing matches, the message names a directory that does.
+    """
+    out = [Setting("project.languages", ", ".join(languages), "detected"),
+           Setting("project.architecture_dir", arch_dir, "default" if arch_dir == "architecture" else "chosen")]
+    for lang in languages:
+        exts = _LANG_EXTS.get(lang, ())
+        if lang == "python":
+            pkg = _guess_python_root(root)
+            out.append(Setting("python.root_package", pkg or "(unset)",
+                               "guessed" if pkg else "default",
+                               "" if pkg else "no importable package found — BOUNDARY rules for Python "
+                                             "cannot be scoped until this is set"))
+        n = sum(1 for _ in _files_under(root / "src", exts))
+        problem = ""
+        if not n:
+            alt = _likeliest_dir(root, exts)
+            problem = (f"no {'/'.join(exts)} files under src/"
+                       + (f" — {alt}/ looks likelier" if alt else ""))
+        out.append(Setting(f"{lang}.source_paths", "src", "default", problem))
+    return out
+
+
+def _files_under(d: Path, exts: tuple[str, ...]):
+    if not d.is_dir() or not exts:
+        return
+    for p in d.rglob("*"):
+        if p.is_file() and p.suffix in exts and not (set(p.parts) & _SKIP):
+            yield p
+
+
+def _likeliest_dir(root: Path, exts: tuple[str, ...]) -> str:
+    """The top-level directory holding the most files of this kind, or "".
+
+    A hint, never a value written into the config. Naming a candidate turns "this is wrong" into
+    something the reader can act on in one edit; choosing for them would replace a visible bad guess with
+    an invisible one.
+    """
+    best, best_n = "", 0
+    for d in sorted(p for p in root.iterdir() if p.is_dir() and p.name not in _SKIP):
+        n = sum(1 for _ in _files_under(d, exts))
+        if n > best_n:
+            best, best_n = d.name, n
+    return best
 
 
 # --- detection -----------------------------------------------------------
@@ -120,6 +197,7 @@ def init_project(project_root: Path, agents: list[str], force: bool = False, wir
                  arch_dir: str = "architecture") -> InitResult:
     arch_dir = arch_dir.strip("/") or "architecture"
     result = InitResult(languages=detect_languages(project_root), agents=agents)
+    result.settings = describe_settings(project_root, result.languages, arch_dir)
 
     # user-owned: config + architecture templates (create once)
     _write_user(project_root / "archagent.toml", _render_toml(result.languages, project_root, arch_dir), force, result)
