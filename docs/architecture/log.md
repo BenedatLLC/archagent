@@ -81,6 +81,6 @@ could not live in either without closing a second cycle. It absorbed the three c
 had accumulated.
 
 The drift check catches two of the four known cases. It misses fastapi-template's `backend-ops`, whose
-startup and seed files sit in the app package under no distinguishing path. Inferring intent from
-`backend_pre_start.py` is the name-based guess this project has twice regretted, so it is left to
+startup and seed files sit in the app package under no distinguishing path. Inferring intent from a
+filename like backend_pre_start is the name-based guess this project has twice regretted, so it is left to
 `describe`.
