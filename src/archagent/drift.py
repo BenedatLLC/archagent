@@ -71,6 +71,9 @@ class DriftResult:
     #: (subsystem, declared tier) — covers only non-production code but claims a place on the layer
     #: ladder. Issue #26: the artifact says something the code contradicts, which is this command's job.
     mistiered: list[tuple[str, str]] = field(default_factory=list)
+    #: (extension, file count) for languages the repository is substantially written in and archagent
+    #: cannot parse. Not drift — a statement about how much of the repo the checks above could see.
+    unparsed: list[tuple[str, int]] = field(default_factory=list)
     openapi_spec: str | None = None  # the committed spec used as the intended interface, if any
     git_available: bool = False
     covers_declared: bool = False  # did any subsystem doc declare **Covers:**? (gates undocumented)
@@ -194,6 +197,7 @@ def find_drift(config: Config, until: str | None = None) -> DriftResult:
     # connector-kind mismatch: a declared connector the code contradicts (declared async-event, but the
     # code makes a resolved synchronous HTTP call to that target)
     result.connector_mismatches = _connector_mismatch(root, subs, sub_service)
+    result.unparsed = _unparsed_languages(root, config)
 
     return result
 
@@ -241,6 +245,40 @@ def _file_refs(text: str) -> list[str]:
 #: regretted. `describe` emitting the right tier is what covers those; this is the backstop for artifacts
 #: that already exist, and a backstop that only catches the unambiguous cases is still worth having.
 _MIGRATION_DIRS = {"migrations", "migration", "alembic", "versions", "scripts"}
+
+
+#: Extensions worth naming when archagent cannot parse them. Bounded on purpose: a repository contains
+#: `.json`, `.css` and `.lock` files nobody expects a dependency graph from, and listing those would make
+#: the caveat noise. These are languages whose absence changes what a check *means*.
+_PARSEABLE = {".py": "python", ".ts": "ts", ".tsx": "ts", ".js": "ts", ".jsx": "ts",
+              ".mjs": "ts", ".cjs": "ts"}
+_UNPARSED_LANGS = {".go": "Go", ".rs": "Rust", ".java": "Java", ".kt": "Kotlin", ".rb": "Ruby",
+                   ".cs": "C#", ".cpp": "C++", ".cc": "C++", ".c": "C", ".swift": "Swift",
+                   ".php": "PHP", ".scala": "Scala", ".ex": "Elixir"}
+#: Below this a stray file is not a language the repo is written in.
+_UNPARSED_MIN = 5
+
+
+def _unparsed_languages(root: Path, config: Config) -> list[tuple[str, int]]:
+    """Languages the repository is substantially written in and archagent cannot read (issue #29).
+
+    Every check in this command compares something declared against something *found in code*, and code
+    it cannot parse is code it cannot find. On obstudio — a Go core with a TypeScript extension — five
+    correctly-declared config keys are reported as never read, because `os.Getenv` in Go is invisible.
+    The findings are accurate about what was scanned and misleading about what exists.
+
+    Same shape as issue #25 in `evaluate`, and the same remedy: say so. This is not drift and is never
+    counted as such; it is the caveat that makes the drift findings readable.
+    """
+    counts: dict[str, int] = {}
+    for p in root.rglob("*"):
+        if not p.is_file() or set(p.parts) & _SKIP_DIRS:
+            continue
+        lang = _UNPARSED_LANGS.get(p.suffix)
+        if lang:
+            counts[lang] = counts.get(lang, 0) + 1
+    return sorted(((l, n) for l, n in counts.items() if n >= _UNPARSED_MIN),
+                  key=lambda kv: -kv[1])
 
 
 def _mistiered(covered: set[str], tier: str | None) -> str:

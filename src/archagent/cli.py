@@ -372,6 +372,7 @@ def drift(
             "connector_mismatches": [{"subsystem": s, "target": t, "declared": d, "observed": o}
                                      for s, t, d, o in result.connector_mismatches],
             "mistiered": [{"subsystem": s, "tier": tr} for s, tr in result.mistiered],
+            "unparsed": [{"language": l, "files": n} for l, n in result.unparsed],
             "openapi_spec": result.openapi_spec,
             "git_available": result.git_available,
             "covers_declared": result.covers_declared,
@@ -465,6 +466,14 @@ def drift(
 
     if not result.git_available:
         console.print("[dim](git not available — stale-doc check skipped)[/]")
+    if result.unparsed:
+        langs = ", ".join(f"{lang} ({n} files)" for lang, n in result.unparsed)
+        console.print(f"[yellow]Partly unreadable[/] — this repository is substantially written in "
+                      f"{langs},\nwhich archagent does not parse. Every check above compares a "
+                      f"declaration against something\nfound in code, so a declaration about that code "
+                      f"looks unsupported whether or not it is.\n"
+                      f"[dim]Config keys and imports in those files are invisible; the findings are "
+                      f"accurate about what\nwas scanned, not about what exists.[/]\n")
     if result.mistiered:
         console.print(f"[yellow]Mis-tiered subsystems ({len(result.mistiered)})[/] — covers only test or "
                       f"migration code but claims a place on the layer ladder:")

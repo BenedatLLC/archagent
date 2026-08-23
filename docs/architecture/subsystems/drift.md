@@ -93,6 +93,16 @@ path under a dot-directory resolved to one that does not exist and was reported 
 `removeprefix("./")` is what was meant. Found on dspy, whose artifact legitimately covers a file under
 `.github/`.
 
+**Every check here compares a declaration against something found in code — so code it cannot parse is
+code it cannot find.** `_unparsed_languages` counts source files in languages outside the configured set
+and, above a small floor, says so. On obstudio five correctly-declared config keys are reported as never
+read because `os.Getenv` in Go is invisible: accurate about what was scanned, misleading about what
+exists.
+
+It is never counted as drift. It is the caveat that makes the drift findings readable, and it is the same
+remedy #25 applied in `evaluate` — the tool cannot see everything, and the honest move is to say which
+part it could not see rather than to report a clean half as a whole.
+
 **Every git-reading path takes `until`.** Three of them needed it and only two were obvious: the miner, the
 staleness comparison, and — the one that was missed — the commit-wording profile, which would otherwise
 learn from commits after a cutoff and use them to label commits before it.

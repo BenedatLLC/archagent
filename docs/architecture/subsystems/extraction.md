@@ -65,6 +65,18 @@ form, so a GitHub Actions `env:` mapping does not pull CI variables into the con
 `${tag}` and `$ID` are rejected on the conventional shape of an environment name, or every template
 placeholder in every compose file would qualify.
 
+**A key a process *writes* is configuration too** (issue #29). obstudio's TypeScript extension does
+`env.WEAVER_PATH = weaver` and builds an `env: { … }` object for the Go binary it spawns; the reader is
+invisible because archagent does not parse Go, but the writer is right there, and both keys were reported
+as declared-but-never-read. A write is arguably better evidence than a read — whoever wrote it knew the
+name mattered.
+
+The object form is anchored on `env:` and **brace-matched**, not on the launcher call with a fixed
+window: obstudio's block is fourteen keys and the one that mattered sat past any reasonable distance from
+the `spawn(`, while a window wide enough to reach it would sweep in whatever followed. `{ FOO: bar }` on
+its own is a dictionary; the `env:` label is what makes this specific rather than a hunt for shouting
+keys.
+
 **`webapi`** — given `@app.get("/orders/{order_id}")`, `extract_routes` returns
 `Route(method="GET", path="orders/{}")`, keeping the original string in `raw` and the file in `source`.
 The normalisation is the interesting part: parameter names are erased and surrounding slashes stripped

@@ -252,3 +252,22 @@ project, not a claim about the format.
 
 Two of this repository's own documents also grew dangling references while describing the fix, by naming
 example paths in backticks. The same trap `subsystems/drift.md` documents, sprung twice more.
+
+## 2026-08-23 — a key a process writes is configuration too (issue #29)
+
+`configscan` looked for reads. obstudio's TypeScript extension *writes* `env.WEAVER_PATH = weaver` and
+builds an `env: { … }` object for the Go binary it spawns, and both keys were reported as declared and
+never read — the reader being invisible, since archagent does not parse Go. A write is arguably better
+evidence than a read: whoever wrote it knew the name mattered.
+
+Five write shapes now count, and the object form is **brace-matched from `env:`** rather than windowed
+from the launcher call. obstudio's block is fourteen keys long and the one that mattered sat past any
+reasonable fixed distance, while a window wide enough to reach it would have swept in whatever followed.
+obstudio goes from seven dangling keys to five, and dspy gained a real finding nothing had reported:
+`env["DENO_NO_PACKAGE_JSON"]` configures its Deno sandbox and is in no manifest.
+
+The remaining five on obstudio are genuinely read by Go, so `drift` now **says when it could not read the
+repository**: source files in unparsed languages are counted and named above the findings, not below,
+because a reader who has already concluded the manifest is stale will not revise that on a footnote. It
+is never counted as drift. Same remedy as #25 in `evaluate` — the honest move is to name the part that
+could not be seen rather than report a clean half as a whole.

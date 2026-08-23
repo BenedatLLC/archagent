@@ -217,3 +217,47 @@ def test_vite_env_reads_are_found(tmp_path):
         'OpenAPI.BASE = import.meta.env.VITE_API_URL\n'
         'const m = import.meta.env["VITE_MODE"]\n')
     assert {"VITE_API_URL", "VITE_MODE"} <= read_config_keys(tmp_path, {"main.tsx"})
+
+
+# --- a key written for another process to read (issue #29) -------------------------------------------
+
+def test_an_env_assignment_counts_as_configuration(tmp_path):
+    """obstudio's TypeScript extension writes `env.WEAVER_PATH = weaver` to configure the Go binary it
+    spawns. The reader is invisible — archagent does not parse Go — but the writer is right there, and
+    the key was reported as declared-but-never-read. A write is arguably better evidence than a read:
+    whoever wrote it knew the name mattered."""
+    from archagent.configscan import read_config_keys
+    (tmp_path / "a.ts").write_text("const env = {...process.env};\nenv.WEAVER_PATH = weaver;\n")
+    assert "WEAVER_PATH" in read_config_keys(tmp_path, {"a.ts"})
+
+
+def test_an_env_object_handed_to_a_spawn_counts(tmp_path):
+    """Anchored on `env:` and brace-matched. obstudio's block is fourteen keys and the one that mattered
+    sat past any reasonable fixed window from the `spawn(`."""
+    from archagent.configscan import read_config_keys
+    (tmp_path / "a.ts").write_text(
+        "spawn(bin, args, {\n  env: {\n    OTLP_HOST: h,\n    PORT: String(p),\n"
+        "    ...(x ? { OBSTUDIO_WORKSPACE_ROOT: root } : {}),\n  },\n  stdio: 'pipe',\n});\n")
+    keys = read_config_keys(tmp_path, {"a.ts"})
+    assert {"OTLP_HOST", "PORT", "OBSTUDIO_WORKSPACE_ROOT"} <= keys
+
+
+def test_an_ordinary_object_is_not_read_as_configuration(tmp_path):
+    """`{ FOO: bar }` on its own is a dictionary. The `env:` label is what makes this specific rather
+    than a sweep for shouting keys."""
+    from archagent.configscan import read_config_keys
+    (tmp_path / "a.ts").write_text("const HTTP_CODES = { NOT_FOUND: 404, SERVER_ERROR: 500 };\n")
+    assert read_config_keys(tmp_path, {"a.ts"}) == set()
+
+
+def test_a_lowercase_or_short_name_is_not_an_env_key(tmp_path):
+    from archagent.configscan import read_config_keys
+    (tmp_path / "a.ts").write_text("env.path = p;\nenv.ID = i;\n")
+    assert read_config_keys(tmp_path, {"a.ts"}) == set()
+
+
+def test_python_environ_writes_count_too(tmp_path):
+    from archagent.configscan import read_config_keys
+    (tmp_path / "a.py").write_text(
+        "import os\nos.environ['CUDA_VISIBLE_DEVICES'] = '0'\nos.environ.setdefault('TOKENIZERS', '1')\n")
+    assert {"CUDA_VISIBLE_DEVICES", "TOKENIZERS"} <= read_config_keys(tmp_path, {"a.py"})

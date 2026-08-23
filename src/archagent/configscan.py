@@ -41,6 +41,33 @@ _ENV_READS = [
     re.compile(r"import\.meta\.env\." + _KEY),
     re.compile(r"import\.meta\.env\[\s*['\"]" + _KEY),
 ]
+#: Keys a process **writes** for another process to read (issue #29).
+#:
+#: A write into an environment object is evidence the key is part of the configuration surface — arguably
+#: better evidence than a read, because whoever wrote it knew the name mattered. obstudio is the worked
+#: example: `extension/src/backend.ts:114` does `env.WEAVER_PATH = weaver` and
+#: `extension.ts:619` builds `{ OBSTUDIO_WORKSPACE_ROOT: ... }`, both to configure the Go binary the
+#: extension spawns. The reader is invisible — archagent does not parse Go — but the writer is right there
+#: in TypeScript, and both keys were reported as declared-but-never-read.
+#:
+#: Deliberately narrow. `env.X = ` and a key inside an object literal passed to `spawn`/`exec`/`execFile`
+#: are the two shapes seen; a bare `X = ` anywhere would match every assignment in the codebase.
+_ENV_WRITES = [
+    re.compile(r"\benv\.([A-Z][A-Z0-9_]{2,})\s*="),
+    re.compile(r"\benv\[\s*['\"]([A-Z][A-Z0-9_]{2,})['\"]\s*\]\s*="),
+    re.compile(r"\bprocess\.env\.([A-Z][A-Z0-9_]{2,})\s*="),
+    re.compile(r"\bos\.environ\[\s*['\"]([A-Z][A-Z0-9_]{2,})['\"]\s*\]\s*="),
+    re.compile(r"\bos\.environ\.setdefault\(\s*['\"]([A-Z][A-Z0-9_]{2,})"),
+]
+#: The `env: { … }` object handed to a spawned process.
+#:
+#: Anchored on `env:` and brace-matched, not on the launcher call with a fixed window. obstudio's block is
+#: fourteen keys long and `OBSTUDIO_WORKSPACE_ROOT` sits past any reasonable fixed distance from the
+#: `spawn(`, while a window wide enough to reach it would sweep in whatever followed. The braces say where
+#: the object ends; guessing a distance does not.
+_ENV_OBJ = re.compile(r"\benv\s*:\s*\{")
+_OBJ_KEY = re.compile(r"['\"]?([A-Z][A-Z0-9_]{2,})['\"]?\s*:")
+
 _ENV_FILE = re.compile(r"^\s*(?:export\s+)?" + _KEY + r"\s*=", re.MULTILINE)
 # require the bold `**Config:**` form so prose / a Mermaid `Configured` node isn't read as a manifest (issue #1)
 #: `**Config:**` runs to the next blank line, not to the end of its first line.
@@ -215,6 +242,40 @@ def _env_wrappers(text: str) -> dict[str, int]:
     return found
 
 
+def _spawned_env_keys(text: str) -> set[str]:
+    """Keys in an `env: { … }` object literal — the environment handed to a spawned process.
+
+    Anchored on `env:` rather than on the launcher call, because the object can be long: obstudio's is
+    fourteen keys and the one that mattered sat past any reasonable fixed window. `{ FOO: bar }` alone is
+    just a dictionary, so the `env:` label is what makes this specific rather than a sweep for shouting
+    keys.
+    """
+    out: set[str] = set()
+    for m in _ENV_OBJ.finditer(text):
+        block = _braced(text, m.end() - 1)
+        if block is not None:
+            out.update(_OBJ_KEY.findall(block))
+    return out
+
+
+def _braced(text: str, open_at: int, limit: int = 4000) -> str | None:
+    """The text between `text[open_at]` (a `{`) and its matching `}`, or None if unbalanced.
+
+    Bounded so a stray brace cannot walk the whole file. Naive about braces inside strings, which is
+    acceptable: the worst case is a slightly wide or narrow block, and the keys taken from it still have
+    to look like environment names.
+    """
+    depth = 0
+    for i in range(open_at, min(len(text), open_at + limit)):
+        if text[i] == "{":
+            depth += 1
+        elif text[i] == "}":
+            depth -= 1
+            if depth == 0:
+                return text[open_at + 1:i]
+    return None
+
+
 def read_config_keys(root: Path, source_files: set[str], report_unresolved: bool = False):
     """The environment keys the code reads. With `report_unresolved`, also how many reads were opaque."""
     keys: set[str] = set()
@@ -237,6 +298,10 @@ def read_config_keys(root: Path, source_files: set[str], report_unresolved: bool
         keys |= _settings_keys(text)
         for pat in _ENV_READS:
             keys.update(pat.findall(text))
+        # A key written for another process is part of the configuration surface too (issue #29).
+        for pat in _ENV_WRITES:
+            keys.update(pat.findall(text))
+        keys |= _spawned_env_keys(text)
         for pat in _ENV_READ_ANY:
             unresolved += len(pat.findall(text))
         for fn, idx in wrappers.items():

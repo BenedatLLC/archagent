@@ -43,6 +43,10 @@ count (`All 10 checked invariant(s) hold`). This came from a reviewed artifact w
 of them false, where `check` printed an empty table and "All invariants hold." — ADR 0002's failure mode
 arriving through the report rather than through a scan.
 
+**A caveat about the whole report prints above the findings it qualifies.** `drift`'s *partly
+unreadable* note (issue #29) comes before the categories rather than after, because a reader who has
+already concluded the manifest is stale will not revise it on a footnote.
+
 **A caveat about a number must print with the number.** `evaluate`'s severity caveat — *it counts files
 and commits, never consequences* — used to live inside the triage block, so a run where nothing was marked
 for investigation printed its findings with HIGH and MED severities and explained neither. Calibration

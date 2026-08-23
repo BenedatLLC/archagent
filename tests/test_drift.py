@@ -546,3 +546,41 @@ def test_a_leading_dot_slash_is_still_stripped():
         (root / "src").mkdir()
         (root / "src" / "a.py").write_text("x = 1\n")
         assert _resolve_ref("./src/a.py", root, set()) is not None
+
+
+# --- saying how much of the repo could be read (issue #29) -------------------------------------------
+
+def test_a_go_majority_repository_is_reported_as_partly_unreadable(tmp_path):
+    """Every check in `drift` compares a declaration against something found in code, and code it cannot
+    parse is code it cannot find. On obstudio five correctly-declared config keys are reported as never
+    read because `os.Getenv` in Go is invisible — accurate about what was scanned, misleading about what
+    exists. Same shape as #25 in `evaluate`, and the same remedy: say so."""
+    from archagent.drift import _unparsed_languages
+    from archagent.config import Config, PythonConfig, TSConfig
+    (tmp_path / "internal").mkdir()
+    for i in range(6):
+        (tmp_path / "internal" / f"m{i}.go").write_text("package main\n")
+    cfg = Config(project_root=tmp_path, languages=["python"],
+                 python=PythonConfig(root_package="p", source_paths=["."]), ts=TSConfig())
+    assert _unparsed_languages(tmp_path, cfg) == [("Go", 6)]
+
+
+def test_a_stray_file_is_not_a_language_the_repo_is_written_in(tmp_path):
+    from archagent.drift import _unparsed_languages
+    from archagent.config import Config, PythonConfig, TSConfig
+    (tmp_path / "helper.go").write_text("package main\n")
+    cfg = Config(project_root=tmp_path, languages=["python"],
+                 python=PythonConfig(root_package="p", source_paths=["."]), ts=TSConfig())
+    assert _unparsed_languages(tmp_path, cfg) == []
+
+
+def test_vendored_trees_do_not_make_a_repo_look_polyglot(tmp_path):
+    from archagent.drift import _unparsed_languages
+    from archagent.config import Config, PythonConfig, TSConfig
+    v = tmp_path / "node_modules" / "dep"
+    v.mkdir(parents=True)
+    for i in range(20):
+        (v / f"m{i}.go").write_text("package main\n")
+    cfg = Config(project_root=tmp_path, languages=["python"],
+                 python=PythonConfig(root_package="p", source_paths=["."]), ts=TSConfig())
+    assert _unparsed_languages(tmp_path, cfg) == []
