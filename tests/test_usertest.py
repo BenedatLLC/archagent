@@ -114,3 +114,34 @@ def test_two_ticks_are_treated_as_no_answer():
              .replace("- [ ] `published`", "- [x] `published`")
              .replace("- [ ] `bundled`", "- [x] `bundled`"))
     assert usertest._ticked_docs_path(sheet) == ""
+
+
+# --- the version the docs name must be the version that ships ------------------------------
+
+def _declared() -> str:
+    import re
+    from pathlib import Path
+    t = (Path(__file__).resolve().parents[1] / "pyproject.toml").read_text()
+    return re.search(r'^version\s*=\s*"([^"]+)"', t, re.M).group(1)
+
+
+def test_the_readme_pins_the_version_that_is_actually_declared():
+    """Round 1's tester followed the Quickstart, got 0.3.0, and read documentation describing behaviour
+    it did not have — because PyPI does not treat a pre-release as "latest" and the README named no
+    version. Naming a *stale* version is the same failure with an extra step, and it is the one a
+    release bump introduces if the README is not part of the bump."""
+    from pathlib import Path
+    import re
+    readme = (Path(__file__).resolve().parents[1] / "README.md").read_text()
+    pinned = set(re.findall(r"archagent==([0-9][^\s`]*)", readme))
+    assert pinned, "the README must pin a version while the current release is a pre-release"
+    assert pinned == {_declared()}, (
+        f"README pins {sorted(pinned)} but pyproject declares {_declared()}. A tester told to install "
+        f"one version and handed another version's documentation measures the skew, not the tool.")
+
+
+def test_the_kit_reads_the_version_rather_than_restating_it():
+    """Two copies of the version is the same defect one level down: the kit would tell a tester to
+    install one version and bundle another version's docs, and nothing would say so."""
+    assert usertest.VERSION == _declared()
+    assert usertest.TAG == f"v{_declared()}"

@@ -56,6 +56,24 @@ restraint naming this. The caveat now prints with the findings and a test pins t
 **Findings carry their own next step.** A finding marked `investigate` prints the exact command that acts
 on it (`cli.py:538`). A reader who cannot act on a finding drops it.
 
+**A brief's questions belong to its sign, and there is no default.** `_BRIEF_QUESTIONS` and
+`_BRIEF_RATINGS` are keyed by sign. They used to be one global list written for the value-set checks, so
+a `change-prone-file` brief reported churn and complexity correctly and then asked the reader to find
+duplicated enum declarations and compare them member by member — which round 1's user tester named as the
+most useless thing the tool told them.
+
+The instructive part is not the wrong list but that **nothing could notice**: header, evidence and triage
+reason were all sign-specific, and only the questions fell through. So a sign with no questions written
+prints none and says so, rather than borrowing — another sign's read as authoritative and send a reader
+looking for what is not there. The test derives the set of triaged signs from `evaluate.py` rather than
+restating it, so a newly triaged sign cannot quietly inherit someone else's questionnaire.
+
+**A number is presented with the confidence its evidence supports.** `status` led with 100% coverage in a
+full-width green bar while its own depth table marked the same subsystem `thin` at 3.6 words per file. The
+number was right; the impression was not. The table now says it counts *files claimed by a glob*, the
+`Described` contrast sits directly beneath it rather than forty lines below, and green is withheld when
+depth or description disagree — while staying reachable, so it still carries information.
+
 **`init` prints what it configured, and it is the CLI that renders it.** `init.py` returns a list of
 `Setting` rows — value, provenance, and a problem string where one looks wrong — and this module decides
 how they look. The layering rule is what forces that split, and it pays here: the same rows are what a

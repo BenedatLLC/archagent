@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import re
 import shutil
 import subprocess
 import sys
@@ -38,10 +39,25 @@ TARGET = {
     "why": "no prior contact with archagent; package at the repository root; ~23 source files",
 }
 
+def _declared_version() -> str:
+    """The version in `pyproject.toml`, read rather than restated.
+
+    Round 1 shipped documentation describing behaviour the published wheel did not have, because PyPI
+    held 0.3.0 while the repo had moved on. Keeping a second copy of the version here would reintroduce
+    the same class of skew one level down: the kit would tell a tester to install one version and hand
+    them another version's documentation, and nothing would say so.
+    """
+    text = (HERE.parent / "pyproject.toml").read_text()
+    m = re.search(r'^version\s*=\s*"([^"]+)"', text, re.M)
+    if not m:
+        raise SystemExit("no version in pyproject.toml — the kit cannot say what it is testing")
+    return m.group(1)
+
+
 #: The archagent release under test. The docs the tester reads must be the tag that matches this wheel —
 #: a mismatch measures skew rather than the tool.
-VERSION = "1.0.0rc1"
-TAG = "v1.0.0rc1"
+VERSION = _declared_version()
+TAG = f"v{VERSION}"
 
 RUBRIC_VERSION = "usertest-v1"
 

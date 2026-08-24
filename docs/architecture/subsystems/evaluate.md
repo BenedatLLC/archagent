@@ -126,6 +126,20 @@ error for another, because a routable address in a test is a real signal about h
 reports the same measurement with the consequence that applies, at reduced severity. Addresses the IETF
 reserved for documentation or made unroutable are dropped everywhere, since they can be neither.
 
+**A documentation example is not infrastructure.** The endpoint scan skipped lines that *start* with a
+comment marker, which catches a commented-out URL and nothing else. On httpx that left 8 of 11 endpoint
+findings pointing at prose — `httpx.URL("https://[::ffff:192.168.0.1]")` inside a docstring demonstrating
+URL normalisation, reported `med` as a hard-coded deployment endpoint. `_docstring_lines` takes the
+ranges from an `ast` walk, including bare string *expressions* rather than only `__doc__` docstrings,
+because a code fence inside a doc block parses as one and a reader cannot tell them apart. A file that
+will not parse yields no ranges rather than raising: this is a heuristic improving a heuristic, and a
+syntax error should cost the filter, not the scan.
+
+**One finding per file, not per line.** Removing the docstring hits exposed the next layer: httpx's URL
+suite names addresses on 23 lines of a single file, and as 23 findings that is a census of one fact which
+buries everything else in the report. Endpoint findings collapse per file under `MAX_ORIGIN_SITES`, the
+same cap and the same reasoning as the origin sites.
+
 **The two exposure signals in group D are architectural findings, not a security scan.** Both ask a
 question about the shape of the system that no linter positioned inside one file can ask, and both refuse
 to state more than the evidence supports.

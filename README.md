@@ -27,7 +27,7 @@ Five minutes, in a repo you already have. You need [uv](https://docs.astral.sh/u
 **1. Install the tool and scaffold the repo.**
 
 ```bash
-uv tool install archagent==1.0.0rc1   # a release candidate: name the version, or you get 0.3.0
+uv tool install archagent==1.0.0rc2   # a release candidate: name the version, or you get 0.3.0
 cd your-repo
 archagent init .
 ```
@@ -115,9 +115,9 @@ archagent installs once (from outside your repos) and scaffolds into each projec
 Install it from PyPI:
 
 ```bash
-uv tool install archagent==1.0.0rc1     # gives you an `archagent` command
+uv tool install archagent==1.0.0rc2     # gives you an `archagent` command
 # or run without installing:
-uvx archagent==1.0.0rc1 init .
+uvx archagent==1.0.0rc2 init .
 ```
 
 **Name the version.** The current release is a **release candidate**, and installers skip pre-releases
