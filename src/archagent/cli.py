@@ -286,22 +286,38 @@ def check(
         table.add_row(r.invariant_id, r.checker, mark, detail)
     console.print(table)
 
-    # Rules nothing checked must not be invisible. An artifact whose invariants are all `prose` tier
-    # produced an empty table and "All invariants hold." — while two of its eight rules were false. That
-    # is the silent-failure shape ADR 0002 exists to forbid: "nothing was checked" rendering exactly like
-    # "everything passed". A prose row is a claim asserted by a person; the tool has verified nothing
-    # about it and must say so.
-    if gen_result.skipped:
-        console.print(f"\n[yellow]Not checked ({len(gen_result.skipped)})[/] — asserted in "
-                      f"invariants.md, verified by nobody:")
-        for inv_id, why in gen_result.skipped:
-            console.print(f"  [yellow]{inv_id}[/]  {why}")
-
     # A prose rule with a stated `Verification` is in a materially different state from one nobody has
     # ever checked, and without the column they look identical. Calibration round 4 had 52 of 56 rows at
     # tier `prose`, several backed by a real test the row did not mention, and no way to tell which.
     verified = [i for i in invariants if i.is_prose and i.verification]
     unverified = [i for i in invariants if i.unverified]
+
+    # Rules nothing checked must not be invisible. An artifact whose invariants are all `prose` tier
+    # produced an empty table and "All invariants hold." — while two of its eight rules were false. That
+    # is the silent-failure shape ADR 0002 exists to forbid: "nothing was checked" rendering exactly like
+    # "everything passed".
+    #
+    # But the heading used to read "verified by nobody", which the next block then disproved in the same
+    # output by listing the tests those rules name. The wording predates the `Verification` column (#16),
+    # whose entire purpose is to separate *archagent cannot compile a checker for this* from *nothing
+    # checks this at all* — so asserting the second for every skipped row threw away the distinction the
+    # column exists to draw. Round 2's user tester read it as the metadata having been ignored (#38).
+    #
+    # Say the narrow, true thing: archagent did not check these. Whether anyone else did is the count
+    # that follows.
+    if gen_result.skipped:
+        n = len(gen_result.skipped)
+        named = sum(1 for i in verified if any(i.id == sid for sid, _ in gen_result.skipped))
+        if named == n:
+            tail = "every one names how it is verified — see below"
+        elif named:
+            tail = f"{named} of {n} name how they are verified, {n - named} do not"
+        else:
+            tail = "and none of them says how it is verified"
+        console.print(f"\n[yellow]Not checked by archagent ({n})[/] — no checker could be compiled; "
+                      f"{tail}:")
+        for inv_id, why in gen_result.skipped:
+            console.print(f"  [yellow]{inv_id}[/]  {why}")
     if verified or unverified:
         console.print(f"\n[bold]Prose rules[/] — {len(verified)} state how they are verified, "
                       f"{len(unverified)} do not")
@@ -669,11 +685,22 @@ def scan_invariants_cmd(
         console.print("[green]No invariant statements found in docs or code.[/]")
         return
     markers = [c for c in candidates if c.kind == "marker"]
+    assertions = [c for c in candidates if c.kind == "assertion"]
     modal = [c for c in candidates if c.kind == "modal"]
     if markers:
-        console.print(f"[bold]Explicit markers ({len(markers)})[/] — high confidence:")
+        # "high confidence" used to head this list, and it was a claim about the wrong thing: the scanner
+        # is confident it found a *marker*, not that the marker states an architectural rule. Round 2's
+        # tester read the stronger claim and found test-assertion fragments under it (#40).
+        console.print(f"[bold]Labelled invariants ({len(markers)})[/] — someone wrote INVARIANT here; "
+                      f"whether it is architectural is still yours to judge:")
         for c in markers:
             console.print(f"  [cyan]{c.guess:10}[/] {c.source}\n       {c.text}")
+        console.print("")
+    if assertions:
+        console.print(f"[bold]Assertion messages ({len(assertions)})[/] — an assert explaining itself, "
+                      f"which sometimes states intent and often just names a value:")
+        for c in assertions:
+            console.print(f"  [dim]{c.guess:10}[/] {c.source}\n       {c.text}")
         console.print("")
     if modal:
         console.print(f"[bold]Modal language ({len(modal)})[/] — candidates, judge each:")

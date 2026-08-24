@@ -725,17 +725,33 @@ def _imports_of(root: Path, rel_file: str, self_mod: str | None, type_only: bool
                 if not self_mod:
                     continue
                 base = self_mod.split(".")
-                pkg = base[:-node.level] if len(base) >= node.level else []
+                # `level` counts from the *containing package*, and for `__init__.py` the file is that
+                # package rather than a module inside it. Treating the two alike stripped one component
+                # too many from every relative import in every package initialiser: on httpx,
+                # `from ._api import *` resolved to `_api` instead of `httpx._api` and matched nothing,
+                # so the package root appeared to import nothing at all (#41).
+                #
+                # The effect is not confined to star imports — that is only where it was noticed. A
+                # package initialiser is exactly where re-exports live, so this is the file whose edges
+                # matter most for a declared `**Connects:**` to be corroborated.
+                drop = node.level - 1 if _is_package_init(rel_file) else node.level
+                pkg = base[:len(base) - drop] if len(base) >= drop else []
+                names = [a.name for a in node.names if a.name != "*"]
                 if node.module:
                     stem = pkg + node.module.split(".")
                     mods.append(".".join(stem))
-                    mods += [".".join(stem + [a.name]) for a in node.names]
+                    mods += [".".join(stem + [n]) for n in names]
                 else:
-                    mods += [".".join(pkg + [a.name]) for a in node.names]
+                    mods += [".".join(pkg + [n]) for n in names]
             elif node.module:
                 mods.append(node.module)
                 mods += [f"{node.module}.{a.name}" for a in node.names]  # from pkg import submodule
     return mods
+
+
+def _is_package_init(rel_file: str) -> bool:
+    """Is this file a package initialiser? Its module name *is* the package, not a module inside it."""
+    return rel_file == "__init__.py" or rel_file.endswith("/__init__.py")
 
 
 def _is_type_checking(test) -> bool:

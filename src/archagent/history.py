@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import re
+from functools import lru_cache
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -190,9 +191,40 @@ def _guidelines(root: Path) -> list[dict]:
     return out
 
 
+@lru_cache(maxsize=1)
+def _scaffold_terms() -> frozenset[str]:
+    """Vocabulary that comes from archagent's own templates rather than from any project.
+
+    `_domain_terms` reads every `**Bold** —` line under the architecture directory, and archagent
+    scaffolds documents written in exactly that style. So on httpx the "project's own vocabulary"
+    included `Columns` and `Record every invariant as a row`, both lifted from the shipped
+    `invariants.md` template, and `--write` then cached them as learned facts about the target (#39).
+
+    That is a feedback loop rather than a noisy heuristic — the tool scaffolds the docs, learns from
+    them, and stores the result as evidence — and it strengthens as more scaffolding is present while
+    staying invisible, because the terms read as plausible.
+
+    Subtracting the terms rather than skipping the files is deliberate: a user who edits `invariants.md`
+    and leaves its preamble in place is the normal case, and a whole-file check would stop recognising it
+    the moment they touched it.
+    """
+    root = Path(__file__).resolve().parent / "templates"
+    terms: set[str] = set()
+    for doc in root.rglob("*.md"):
+        try:
+            terms.update(m.group(1).strip() for m in _GLOSSARY.finditer(doc.read_text(errors="replace")))
+        except OSError:
+            continue
+    return frozenset(terms)
+
+
 def _domain_terms(arch_dir: Path) -> list[str]:
     """The project's own vocabulary — subsystem names plus glossary entries in the architecture docs.
-    A light aid when a model later judges whether a duplicated value set names a real decision."""
+
+    A light aid when a model later judges whether a duplicated value set names a real decision. Terms
+    archagent's own templates supply are excluded (`_scaffold_terms`); the tool must not learn its own
+    scaffolding and report it as the project's.
+    """
     terms: set[str] = set()
     if not arch_dir.is_dir():
         return []
@@ -205,6 +237,7 @@ def _domain_terms(arch_dir: Path) -> list[str]:
         except OSError:
             continue
         terms.update(m.group(1).strip() for m in _GLOSSARY.finditer(text))
+    terms -= _scaffold_terms()
     return sorted(t for t in terms if 2 <= len(t) <= 40)
 
 

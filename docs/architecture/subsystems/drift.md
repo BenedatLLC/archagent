@@ -73,6 +73,20 @@ which round 2's tester disproved by opening the file, and which had been reporte
 correctly reads a backticked filename as a citation of *this* one. It caught the first draft of this
 paragraph, which is the third time that has happened while documenting this module.)
 
+**A package initialiser is its own package, and `level` counts from there.** Relative-import resolution
+stripped one component too many in every `__init__.py`, because it treated the file's module name as a
+module *inside* a package when for an initialiser the file **is** the package. On httpx the effect was
+total: a root package whose entire body is `from ._api import *` style re-exports produced **no edges at
+all**, so correctly declared connectors read as stale.
+
+That is the worst shape this command can take — it penalised the accurate artifact and would have gone
+green only if the author made the documentation wrong. Round 2's tester hit exactly that and declined,
+which is how it was found.
+
+The star import is where it was noticed, not the cause: `from . import x` and `from .m import Name`
+misresolved identically. A package initialiser is where re-exports live, so it is the file whose edges
+matter most for a declared connector to be corroborated.
+
 **The two drift directions treat those edges differently, on purpose.** A type-only import *suppresses*
 a `stale` finding, because the coupling is real at design time and telling an author their accurate
 declaration is stale punishes the accurate artifact. It never *creates* an `undeclared` finding, because

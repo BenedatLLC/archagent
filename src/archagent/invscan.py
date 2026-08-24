@@ -5,11 +5,19 @@ deterministic (process, not luck): it greps design/spec docs and source code for
 emits a candidate list — the agent then classifies each into the DSL, verifies it with `check`, and curates
 (exactly the `evaluate` shape: deterministic candidates → judgment).
 
-Two precision tiers:
-- **markers** (high confidence) — explicit `INVARIANT` / `@invariant` / `Invariant:` labels, assertion
-  messages, and contract decorators (`@require`/`@ensure`/`@deal`).
-- **modal** (low confidence, docs only) — normative language (MUST / NEVER / ALWAYS / "only X may") that is
-  often but not always an invariant; the agent must judge.
+Three precision tiers, and the split between the first two is the correction issue #40 forced:
+- **markers** — an explicit `INVARIANT` / `@invariant` / `Invariant:` label, or a contract decorator
+  (`@require`/`@ensure`/`@deal`). Someone wrote the word; whether the rule is *architectural* is still a
+  judgement.
+- **assertions** — the message on an `assert`, in non-test code only. It sometimes states intent
+  ("Cannot mix named and unnamed arguments") and often just names a value. In a test file the message is
+  the *test's* failure text rather than a stated rule, which is how `response`, `123, 456` and
+  `Transfer-Encoding` were once reported as high-confidence invariants on httpx.
+- **modal** (docs only) — normative language (MUST / NEVER / ALWAYS / "only X may") that is often but not
+  always an invariant; the agent must judge.
+
+Confidence here is about *detection*, never about the statement being an architectural rule. Reporting
+the first as though it were the second is what the old "high confidence" heading did.
 
 Purely static: it reads text, never executes. It classifies nothing on its own — the `guess` is a hint.
 """
@@ -21,6 +29,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .config import Config
+from .configscan import is_test_path
 from .drift import _source_files
 
 _SKIP_DIRS = {".git", ".archagent", "__pycache__", "node_modules", ".venv", ".mypy_cache", "architecture"}
@@ -62,13 +71,24 @@ def scan_invariants(config: Config) -> list[Candidate]:
             out.append(Candidate(f"{rel}:{lineno}", t, kind, conf, _guess(t)))
 
     # code: explicit markers + assertion messages only (modal words are too noisy in code)
+    #
+    # The two are not equal evidence, and treating them as one produced most of the noise round 2's user
+    # tester complained about (#40). An `INVARIANT:` marker is someone declaring a rule. An assertion
+    # message is whatever text explains a failure — in a test, that is the *test's* failure text, not a
+    # stated architectural rule, which is how `response`, `123, 456` and `Transfer-Encoding` came to be
+    # listed as high-confidence invariants on httpx.
+    #
+    # So the marker keeps its confidence everywhere, including in tests, where `# INVARIANT:` still means
+    # what it says. The assertion message is dropped in test files and demoted elsewhere.
     for rel in sorted(_source_files(config)):
+        in_test = is_test_path(rel)
         for lineno, line in _lines(root, rel):
             if _MARKER.search(line):
                 add(rel, lineno, line, "marker", "high")
+                continue
             m = _ASSERT_MSG.search(line)
-            if m:
-                add(rel, lineno, m.group(1), "marker", "high")
+            if m and not in_test:
+                add(rel, lineno, m.group(1), "assertion", "low")
 
     # docs: markers (high) + modal language (low)
     for rel in _doc_files(root, config.arch_dir):

@@ -84,12 +84,18 @@ The normalisation is the interesting part: parameter names are erased and surrou
 and `/orders/{id}` and `/orders/{order_id}` are the same endpoint. Only `method` and `path` take part in
 equality (`webapi.py:38-44`).
 
-**`invscan`** — given `assert user.is_authenticated, "only signed-in users may post"`, it returns a
-`Candidate` carrying that message, `path:line`, `kind="marker"`, `confidence="high"`, and a coarse guess
-at which DSL tier it belongs in. In code it matches only explicit `INVARIANT`/`@invariant` markers and
-assertion messages; the noisier `kind="modal"` pass — "must never", "only X may" — runs over documents
-only, because modal words in code are too common to be worth surfacing. Even so these are *candidates* a
-person classifies and verifies, never facts.
+**`invscan`** — given `assert user.is_authenticated, "only signed-in users may post"` in production
+code, it returns a `Candidate` carrying that message, `path:line`, `kind="assertion"`,
+`confidence="low"`, and a coarse guess at which DSL tier it belongs in. An explicit
+`INVARIANT`/`@invariant` marker returns `kind="marker"`, `confidence="high"` instead, and the noisier
+`kind="modal"` pass — "must never", "only X may" — runs over documents only, because modal words in code
+are too common to be worth surfacing.
+
+The marker/assertion split is not cosmetic. The same assert in a *test* file yields nothing at all: there
+the message is the test's own failure text, and conflating the two put `response`, `123, 456` and
+`Transfer-Encoding` at the top of httpx's report under a "high confidence" heading. Even the high tier is
+only confidence that a marker was *found* — never that what it states is architectural. These are
+candidates a person classifies and verifies, never facts.
 
 The pattern holds for all eight: a file set in, typed facts out, and the value is in what the fact can be
 compared against rather than in the fact itself.
@@ -156,6 +162,18 @@ of the divergence is legitimate and the interesting question is why `dupdecide` 
 
 **Conservative by design.** `connscan` drops a call whose target it cannot resolve rather than guessing;
 `datamap` requires a real table definition. A scanner that guesses produces findings nobody can act on.
+
+**Detection confidence is not truth confidence.** `invscan` separates a *labelled* invariant — someone
+wrote `INVARIANT` — from an *assertion message*, which is whatever text explains a failure. They were one
+tier called "high confidence", and on httpx that put `response`, `123, 456` and `Transfer-Encoding` at
+the top of the report, because in a test the message after the comma is the test's own failure text
+rather than a stated rule.
+
+So assertion messages are dropped in test paths and demoted elsewhere, while an explicit marker keeps its
+standing everywhere including tests — the same treatment `hardcoded-endpoint` gives a test file, and for
+the same reason: re-read rather than skip. The heading no longer claims high confidence at all, since
+what the scanner is confident about is having found a marker, never that the marker states an
+architectural rule.
 
 **`invscan` is the odd one out.** It extracts *candidates* for the invariants table rather than facts —
 `INVARIANT:` markers, asserts, and modal prose ("must never", "only X may") — which a person then

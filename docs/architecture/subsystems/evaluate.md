@@ -60,6 +60,18 @@ family, and assembles an `EvaluationResult`. The history-based checks live in th
 
 ## Key abstractions
 
+**Learning from the artifact means not learning archagent's own scaffolding.** `history.py`'s domain
+terms are read from every `**Bold** —` line under the architecture directory, and archagent scaffolds
+documents written in exactly that style — so httpx's "project vocabulary" included `Columns` and `Record
+every invariant as a row`, both from the shipped `invariants.md` template, and `--write` cached them.
+
+That is a feedback loop rather than a noisy heuristic: the tool scaffolds, learns from what it scaffolded,
+and stores the result as evidence about the target. It strengthens as more scaffolding appears and stays
+invisible because the terms read as plausible. `_scaffold_terms` subtracts the templates' own vocabulary
+— subtracting terms rather than skipping files, because a user who edits `invariants.md` and leaves its
+preamble is the normal case and a file-identity check would stop recognising it the moment they touched
+it. The cost is recorded: a project whose real glossary defines one of those words loses that term.
+
 **Learn the project's vocabulary, do not hardcode it.** A fixed `fix(...)` matcher finds **zero** of
 Django's ~16,000 fix commits. `history.py` learns each repository's wording from its own commits and
 guidelines.

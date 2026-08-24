@@ -39,7 +39,15 @@ def test_code_markers_and_assert_messages(tmp_path):
     texts = [c.text for c in cands]
     assert any("INVARIANT: the query set is always sorted" in t for t in texts)
     assert any("query set must be sorted" in t for t in texts)   # from the assert message
-    assert all(c.kind == "marker" and c.confidence == "high" for c in cands)
+
+    # The two are found, and are no longer the same kind of evidence (#40). A labelled invariant is a
+    # declaration; an assert message is whatever text explains a failure. This assertion used to require
+    # `marker`/`high` for both, which is the conflation that put `123, 456` on httpx's high-confidence
+    # list.
+    by_kind = {c.kind: c for c in cands}
+    assert set(by_kind) == {"marker", "assertion"}
+    assert by_kind["marker"].confidence == "high"
+    assert by_kind["assertion"].confidence == "low"
 
 
 def test_doc_markers_and_modal(tmp_path):
