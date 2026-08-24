@@ -278,6 +278,119 @@ Including things this worksheet failed to ask about.
 """
 
 
+# --- ingest -------------------------------------------------------------------------------
+
+def _score_after(text: str, heading: str) -> str:
+    """The `- score:` line belonging to one `### heading` section, or "" for a blank.
+
+    Anchored to the section rather than found by order, so reordering the worksheet cannot silently
+    reassign a rating to the wrong dimension — a transcription error that would be invisible in the CSV
+    and permanent, because the worksheet is not re-runnable.
+    """
+    i = text.find(f"### {heading}")
+    if i < 0:
+        return ""
+    section = text[i:]
+    nxt = section.find("\n### ", 1)
+    if nxt > 0:
+        section = section[:nxt]
+    for line in section.splitlines():
+        if line.strip().startswith("- score:"):
+            v = line.split(":", 1)[1].strip()
+            return "" if v in {"_", "__", "___", "?", ""} else v
+    return ""
+
+
+def _field_after(text: str, marker: str) -> str:
+    for line in text.splitlines():
+        if line.strip().startswith(marker):
+            return line.split(marker, 1)[1].strip()
+    return ""
+
+
+def _answer_to(text: str, question_marker: str) -> str:
+    """The `- answer:` belonging to one Part 3 question, anchored to the question rather than to order.
+
+    Same reason `_score_after` is anchored: a mis-assigned answer is invisible once it reaches the CSV,
+    and the worksheet cannot be re-run to catch it.
+    """
+    i = text.find(question_marker)
+    if i < 0:
+        return ""
+    block = text[i:]
+    nxt = block.find("\n**", 1)
+    if nxt > 0:
+        block = block[:nxt]
+    out = []
+    for line in block.splitlines():
+        if line.strip().startswith("- answer:"):
+            out.append(line.split(":", 1)[1].strip())
+        elif out and line.startswith("  ") and line.strip():
+            out.append(line.strip())          # continuation of a wrapped answer
+    v = " ".join(out).strip()
+    return "" if v in {"_", "__", "?"} else v
+
+
+def _count_blockers(text: str) -> int:
+    """Distinct stuck points in the Part 1 log, counted from its bullet markers."""
+    i = text.find("**Every point where you were stuck")
+    if i < 0:
+        return 0
+    block = text[i:]
+    end = block.find("**Anything you expected")
+    block = block[:end] if end > 0 else block
+    return sum(1 for line in block.splitlines() if line.strip().startswith(("* ", "- ")))
+
+
+def do_ingest(sheet: Path, out: Path, *, docs_path: str, archagent_commit: str,
+              tester: str = "", prior: str = "", agent: str = "", dry_run: bool = False) -> None:
+    """Parse a returned worksheet into the user-test ledger.
+
+    `docs_path` is not inferred. Whether the tester actually read the published documentation decides
+    what the round measured, and guessing it from prose is exactly the kind of quiet inference this
+    project keeps finding in its own code.
+    """
+    from usertest_ledger import UserTestRow, append, scores
+
+    text = sheet.read_text()
+    row = UserTestRow(
+        run_id=f"{datetime.date.today()}-{TARGET['name']}-usertest",
+        date=_field_after(text, "- date:") or str(datetime.date.today()),
+        archagent_version=VERSION,
+        archagent_commit=archagent_commit,
+        target_url=TARGET["url"],
+        target_commit=TARGET["rev"],
+        rubric_version=RUBRIC_VERSION,
+        docs_path=docs_path,
+        tester=tester or _field_after(text, "- your name:"),
+        prior_exposure=prior,
+        had_coding_agent=agent,
+        ease_of_use=_score_after(text, "Ease of use"),
+        correctness=_score_after(text, "Correctness"),
+        completeness=_score_after(text, "Completeness"),
+        impact=_score_after(text, "Impact"),
+        claims_verified=_field_after(text, "- how many claims did you actually verify?").split("(")[0].strip(),
+        minutes_to_installed=_field_after(text, "**Time you first had the tool installed:**"),
+        minutes_to_first_output=_field_after(text, "**Time you first had output you could read:**"),
+        minutes_total=_field_after(text, "**Time finished (or gave up):**"),
+        blockers=str(_count_blockers(text)),
+        dismissal_rate=_answer_to(text, "**c. Findings you dismissed.**"),
+    )
+    print(f"run_id:        {row.run_id}")
+    print(f"docs_path:     {row.docs_path}"
+          + ("   <- did NOT measure the published-docs question" if row.docs_path != "published" else ""))
+    print(f"blockers:      {row.blockers}")
+    print(f"claims verified: {row.claims_verified or '(not stated)'}")
+    print("scores (never averaged):")
+    for k, v in scores(row).items():
+        print(f"    {k:14} {v if v is not None else '- (could not judge)'}")
+    if dry_run:
+        print("\n(dry run — nothing written)")
+        return
+    append(out, row)
+    print(f"\nappended to {out}")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -286,9 +399,25 @@ def main() -> None:
                    default=Path(f"/tmp/archagent-usertest-{datetime.date.today()}"))
     k.add_argument("--force", action="store_true",
                    help="rebuild even over a filled-in worksheet (destroys it)")
+
+    g = sub.add_parser("ingest", help="parse a returned worksheet into the user-test ledger")
+    g.add_argument("sheet", type=Path)
+    g.add_argument("--out", type=Path, required=True, help="path to usertest.csv")
+    g.add_argument("--docs-path", required=True, choices=["published", "fallback", "mixed"],
+                   help="how the tester actually got instructions — decides what the round measured")
+    g.add_argument("--archagent-commit", required=True)
+    g.add_argument("--tester", default="")
+    g.add_argument("--prior", default="", help="prior exposure to archagent")
+    g.add_argument("--agent", default="", help="had a coding agent: yes / no / partial")
+    g.add_argument("--dry-run", action="store_true")
+
     args = ap.parse_args()
     if args.cmd == "kit":
         do_kit(args.out, force=args.force)
+    elif args.cmd == "ingest":
+        do_ingest(args.sheet, args.out, docs_path=args.docs_path,
+                  archagent_commit=args.archagent_commit, tester=args.tester,
+                  prior=args.prior, agent=args.agent, dry_run=args.dry_run)
 
 
 if __name__ == "__main__":
