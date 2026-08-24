@@ -160,12 +160,38 @@ both rounds point the same way, and #31 was supposed to move this. It did not mo
 keep the init source-path check; I would not use the current evaluator as an action list without
 substantial manual review."*
 
+## Fixed, 2026-08-23
+
+All three, measured on the same checkout: **httpx goes from 46 findings to 17**, with **zero**
+production-code endpoint false positives left.
+
+| issue | fix | effect on httpx |
+|---|---|---|
+| #33 | docstring line ranges from an `ast` walk; findings collapse per file; RFC 2606 subdomains | endpoint family 34 → 5, all `low`, none in production code |
+| #34 | brief questions and ratings are per sign, with **no default** | `change-prone-file` asks about churn, not enums |
+| #35 | table says "files claimed by a glob"; `Described` moved directly under it; green withheld when depth disagrees | 100% no longer reads as health |
+
+Two of the three grew a second finding while being fixed, which is the pattern this round shares with
+round 5. #33's docstring filter revealed that httpx's URL suite names addresses on 23 lines of one file —
+as 23 findings that is a census of a single fact — so findings now collapse per file. And #34's real
+defect was not the wrong questionnaire but that **nothing could notice**: header, evidence and triage
+reason were all sign-specific and only the questions fell through. The test now reads the triaged signs
+out of `evaluate.py` rather than restating them, so a new one cannot inherit someone else's questions.
+
+`_BRIEF_QUESTIONS` has no default, on the same reasoning as `METRIC_KEYS` in the ledger: printing another
+sign's questions is worse than printing none, because they read as authoritative and send the reader
+looking for something that is not there.
+
 ## What to change before round 2
 
-1. Fix #33, #34, #35 — all three were named as reasons for the ratings.
-2. **Make the instructions self-contained.** The kit must not depend on fetching a URL. Ship the pinned
-   `README.md`, `docs/COMMANDS.md` and `docs/CONFIGURATION.md` *inside* the kit, so `docs_path` can be
-   `published` rather than `fallback`.
+1. ~~Fix #33, #34, #35~~ — **done**, see above.
+2. ~~Make the instructions self-contained~~ — **done.** The kit now bundles the whole doc set at the tag
+   (61 files, `git archive`, structure preserved so relative links resolve on disk). The whole set, not a
+   selection: choosing the three pages a tester "needs" would replace *which page do I need?* with a
+   curated answer. `docs_path` gained a **`bundled`** value distinct from `published`, because rendering,
+   cross-link navigation and in-page search are part of whether documentation is usable and a kit reader
+   has none of them — collapsing them would let a bundled round stand as evidence about the GitHub
+   experience, which is what most users will actually have.
 3. Recruit a tester with **no prior exposure**. This one authored the tool, which is recorded in the
    ledger and is the strongest limit on what round 1 shows — the scores are harsh, but a stranger has
    friction an author cannot feel.
