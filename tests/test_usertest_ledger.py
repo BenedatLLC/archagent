@@ -83,3 +83,20 @@ def test_the_reordered_worksheet_does_not_reassign_ratings():
     swapped = text[:i] + text[j:] + text[i:j]
     assert usertest._score_after(swapped, "Correctness") == "1"
     assert usertest._score_after(swapped, "Ease of use") == "2"
+
+
+def test_bundled_and_published_are_not_the_same_round():
+    """Rendering, cross-link navigation and in-page search are part of whether documentation is usable,
+    and a kit reader has none of them. Collapsing the two would let a bundled round stand as evidence
+    about the GitHub experience, which is the one most actual users will have."""
+    ok, why = comparable(_row(docs_path="bundled"), _row(docs_path="published"))
+    assert not ok and "docs_path differs" in why
+
+
+def test_every_docs_path_the_worksheet_offers_is_a_legal_value():
+    """The worksheet's tick-boxes and the ledger's accepted values must not drift apart: a tester could
+    otherwise tick an option that `ingest` then refuses."""
+    from usertest_ledger import DOCS_PATHS
+    text = usertest._worksheet("b5addb6ff")
+    for p in DOCS_PATHS:
+        assert f"`{p}`" in text, f"{p} is accepted by the ledger but not offered in the worksheet"

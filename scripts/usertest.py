@@ -45,6 +45,13 @@ TAG = "v1.0.0rc1"
 
 RUBRIC_VERSION = "usertest-v1"
 
+#: The documentation bundled into the kit, taken from `TAG` rather than the working tree so it matches
+#: the wheel under test. The whole set ships, not a selection: choosing three pages a tester "needs"
+#: would replace the question *which page do I need?* — a real part of onboarding — with a curated
+#: answer. Round 1 depended on fetching a URL, the fetch failed, and the tester reverse-engineered the
+#: tool from `--help` with no documentation at all.
+BUNDLE = ("README.md", "docs")
+
 #: Scaffolding that must not ship: its presence would answer the question being asked.
 WITHHOLD = ("archagent.toml", "architecture", ".archagent",
             ".claude/skills", ".cursor/skills", ".openhands", ".agents/skills")
@@ -96,15 +103,67 @@ def do_kit(out: Path, force: bool = False) -> None:
     if leaked:
         raise SystemExit(f"refusing to ship: the clone already contains {leaked}")
 
+    docs = out / f"docs-{VERSION}"
+    if docs.exists():
+        shutil.rmtree(docs)
+    docs.mkdir(parents=True)
+    _bundle_docs(docs)
+
     (out / "README.md").write_text(_instructions(rev_full, subject))
     sheet = out / f"worksheet-{TARGET['name']}-{TARGET['rev']}.md"
     sheet.write_text(_worksheet(rev_full))
 
+    n_docs = sum(1 for _ in docs.rglob("*.md"))
     print(f"\nkit ready: {out}")
     print(f"  repo/                       {TARGET['name']} @ {rev_full[:9]} — no archagent scaffolding")
+    print(f"  docs-{VERSION}/          {n_docs} markdown files at {TAG} — no network needed")
     print(f"  README.md                   instructions")
     print(f"  {sheet.name}   the worksheet to fill in and return")
     print(f"\nUnder test: archagent {VERSION} (tag {TAG}).")
+
+
+def _bundle_docs(dest: Path) -> None:
+    """Copy the documentation set at `TAG` into the kit, structure preserved.
+
+    `git archive` rather than a working-tree copy: the tester must read the docs that shipped with the
+    wheel, and the working tree moves on. Structure is preserved because the README's relative links
+    (`docs/CONFIGURATION.md`, `docs/architecture/README.md`) then resolve on disk — a flattened copy
+    would give the tester a README full of dead links, which is worse than no README.
+    """
+    repo = HERE.parent
+    try:
+        _run("git", "-C", str(repo), "rev-parse", TAG)
+    except subprocess.CalledProcessError:
+        raise SystemExit(f"tag {TAG} not found in {repo} — the kit must ship the docs that match the "
+                         f"wheel under test, so a missing tag is fatal rather than a warning.")
+    tar = subprocess.run(["git", "-C", str(repo), "archive", TAG, *BUNDLE],
+                         check=True, capture_output=True).stdout
+    subprocess.run(["tar", "-x", "-C", str(dest)], input=tar, check=True)
+
+    # Catch links broken *by the bundling*, not links that were already illustrative. The README's
+    # invariants table cites `decisions/0007-hexagonal.md` as an example of what a *user's* ADR link
+    # looks like; it resolves nowhere in this repo either, and warning about it would train the reader
+    # to ignore the warning. So the test is differential: a link that resolves in the source tree and
+    # not in the bundle is a bundling bug, and nothing else is.
+    import re
+    repo_root = repo
+    broken = []
+    for md in dest.rglob("*.md"):
+        rel = md.relative_to(dest)
+        src = repo_root / rel
+        if not src.is_file():
+            continue
+        for link in re.findall(r"\]\((?!http|mailto)([^)#\s]+\.md)", md.read_text()):
+            in_bundle = (md.parent / link).resolve().is_file()
+            in_repo = (src.parent / link).resolve().is_file()
+            if in_repo and not in_bundle:
+                broken.append(f"{rel}: {link}")
+    if broken:
+        raise SystemExit(
+            f"refusing to ship: bundling broke {len(broken)} link(s) that resolve in the repo:\n  "
+            + "\n  ".join(broken[:8])
+            + "\nA README full of dead links is worse than no README — the tester follows one, gets "
+              "nothing, and concludes the docs are broken rather than the kit.")
 
 
 def _instructions(rev: str, subject: str) -> str:
@@ -121,14 +180,21 @@ thing you can give me. Getting stuck is a successful outcome for this test, not 
 
 - `repo/` — a clone of [httpx]({TARGET['url']}) pinned at `{rev[:9]}` (*{subject}*).
   A real repository with real history, and **no archagent set up in it**.
+- `docs-{VERSION}/` — the project's complete documentation at the version under test. Start at its
+  `README.md`. No network needed.
 - `{'worksheet-' + TARGET['name'] + '-' + TARGET['rev'] + '.md'}` — fill this in as you go, not at the end.
 
 ## What to do
 
 1. **Start the clock** and note the time in the worksheet.
-2. Go to <https://github.com/BenedatLLC/archagent/tree/{TAG}> and follow the documentation to install
-   archagent **{VERSION}** and set it up inside `repo/`.
-   - That link is pinned to the version under test. The docs on the default branch may have moved on.
+2. Open **`docs-{VERSION}/README.md`** and follow the documentation to install archagent **{VERSION}**
+   and set it up inside `repo/`.
+   - **Everything you need is in this directory — you should not need the network except to install the
+     package.** That folder is the project's complete documentation set at the version under test, and
+     its internal links work on disk. Round 1 of this test told the tester to fetch a GitHub URL, the
+     fetch failed, and they had no documentation at all; hence the change.
+   - The same pages are online at <https://github.com/BenedatLLC/archagent/tree/{TAG}> if you would
+     rather read them rendered. Say which you used in the worksheet — it changes what the round measures.
    - Install from PyPI: the version you want is `{VERSION}`. It is a pre-release, which some installers
      skip unless you name the version exactly.
 3. Run it through whatever the documentation presents as the normal workflow, end to end.
@@ -187,6 +253,15 @@ tried, what happened, how you got out of it.
 
 ```
 ```
+
+**Which documentation did you actually read?** Tick one — this decides what the round measures, so it
+is not a formality. (Round 1's tester could not reach the docs at all and reverse-engineered the tool
+from `--help`; that round cannot be compared with one where the docs were read.)
+
+- [ ] `bundled` — the `docs-{VERSION}/` folder in this kit
+- [ ] `published` — the GitHub pages at `{TAG}`, rendered in a browser
+- [ ] `mixed` — some of each
+- [ ] `fallback` — I could not reach either, and worked from `--help` / the installed skill files
 
 **Did you have to look at anything outside the documentation** — the source, the issue tracker, me?
 
@@ -342,6 +417,17 @@ def _count_blockers(text: str) -> int:
     return sum(1 for line in block.splitlines() if line.strip().startswith(("* ", "- ")))
 
 
+def _ticked_docs_path(text: str) -> str:
+    """The `docs_path` the tester ticked, or "" if they ticked none or more than one.
+
+    Never overrides `--docs-path`: it is offered as a cross-check, because the answer that matters most
+    for comparability is the one a busy tester is likeliest to skip.
+    """
+    import re
+    hits = [m for m in re.findall(r"- \[[xX]\]\s*`(\w+)`", text)]
+    return hits[0] if len(hits) == 1 else ""
+
+
 def do_ingest(sheet: Path, out: Path, *, docs_path: str, archagent_commit: str,
               tester: str = "", prior: str = "", agent: str = "", dry_run: bool = False) -> None:
     """Parse a returned worksheet into the user-test ledger.
@@ -376,6 +462,10 @@ def do_ingest(sheet: Path, out: Path, *, docs_path: str, archagent_commit: str,
         blockers=str(_count_blockers(text)),
         dismissal_rate=_answer_to(text, "**c. Findings you dismissed.**"),
     )
+    ticked = _ticked_docs_path(text)
+    if ticked and ticked != docs_path:
+        print(f"  !! the worksheet ticks docs_path={ticked!r} but you passed {docs_path!r}.")
+        print(f"     Resolve this before recording: it decides what the round measured.")
     print(f"run_id:        {row.run_id}")
     print(f"docs_path:     {row.docs_path}"
           + ("   <- did NOT measure the published-docs question" if row.docs_path != "published" else ""))

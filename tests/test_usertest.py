@@ -73,3 +73,44 @@ def test_the_worksheet_separates_verified_claims_from_impressions():
     impression, and must not later be pooled with blind precision."""
     text = usertest._worksheet("b5addb6ff")
     assert "how many claims did you actually verify?" in text
+
+
+# --- the bundled documentation (round 1's failure) -----------------------------------------
+
+def test_the_kit_bundles_the_whole_doc_set_not_a_selection():
+    """Choosing three pages a tester "needs" would replace the question *which page do I need?* — a real
+    part of onboarding — with a curated answer. Round 1 failed the other way: it shipped no docs at all
+    and told the tester to fetch a URL, the fetch failed, and they reverse-engineered the tool from
+    `--help`."""
+    assert usertest.BUNDLE == ("README.md", "docs")
+
+
+def test_the_instructions_no_longer_depend_on_fetching_a_url():
+    """The URL may remain as an alternative; it may not be the only way in."""
+    text = usertest._instructions("b5addb6ff", "a commit")
+    assert f"docs-{usertest.VERSION}/README.md" in text
+    assert "should not need the network" in text
+    i_local = text.index(f"docs-{usertest.VERSION}/README.md")
+    i_url = text.index("https://github.com/BenedatLLC/archagent/tree/")
+    assert i_local < i_url, "the offline path must be given before the URL, not as a fallback to it"
+
+
+def test_the_worksheet_asks_which_documentation_was_read():
+    """`docs_path` is a comparability key, and the answer that matters most for comparability is the one
+    a busy tester is likeliest to skip — so it is a tick-box in the log, not a question at the end."""
+    text = usertest._worksheet("b5addb6ff")
+    for option in ("`bundled`", "`published`", "`mixed`", "`fallback`"):
+        assert option in text, option
+
+
+def test_a_ticked_docs_path_is_read_back_for_cross_checking():
+    sheet = usertest._worksheet("b5addb6ff").replace("- [ ] `published`", "- [x] `published`")
+    assert usertest._ticked_docs_path(sheet) == "published"
+
+
+def test_two_ticks_are_treated_as_no_answer():
+    """An ambiguous answer must not silently become the first one."""
+    sheet = (usertest._worksheet("b5addb6ff")
+             .replace("- [ ] `published`", "- [x] `published`")
+             .replace("- [ ] `bundled`", "- [x] `bundled`"))
+    assert usertest._ticked_docs_path(sheet) == ""

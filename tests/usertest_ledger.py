@@ -34,7 +34,8 @@ DIMENSIONS = ("ease_of_use", "correctness", "completeness", "impact")
 
 #: What must match for two user-test rounds to be comparable.
 #:
-#: `docs_path` is here because it decides what the round measured, not merely how well it went.
+#: `docs_path` is here because it decides what the round measured, not merely how well it went — and
+#: `bundled` differs from `published` in navigation, which is part of what "are the docs clear" asks.
 #: `archagent_version` because the tool under test is the subject. `rubric_version` because the
 #: questions changed. Deliberately absent: the target repository — a different repository is a different
 #: round, and pretending otherwise is how "the tool got easier" would come to mean "httpx is smaller".
@@ -42,10 +43,20 @@ COMPARABILITY_KEYS = ("rubric_version", "archagent_version", "docs_path")
 
 #: How the tester actually obtained instructions.
 #:
-#: `published` is the design: they read the pinned documentation. `fallback` means they could not, and
-#: worked from the CLI's own help and the installed prompts. `mixed` is some of each. Only `published`
-#: rounds answer the question the kit was built to ask.
-DOCS_PATHS = ("published", "fallback", "mixed")
+#: - `published` — they read the documentation the way a real user would: on GitHub at the pinned tag,
+#:   rendered, with a file tree and search to navigate it.
+#: - `bundled` — they read the same documentation, unmodified and complete, but as markdown files on
+#:   disk shipped inside the kit. Round 1 failed because it depended on fetching a URL, so the kit now
+#:   bundles the doc set; this is the path a kit-based round takes by default.
+#: - `fallback` — they could not reach the documentation at all and worked from the CLI's own help and
+#:   the installed prompts. Round 1. Answers a harder question than the one the kit asks.
+#: - `mixed` — some of each.
+#:
+#: `published` and `bundled` are kept apart rather than collapsed because the difference is real:
+#: rendering, cross-link navigation and in-page search are part of whether documentation is usable, and
+#: a kit reader has none of them. Collapsing them would let a bundled round be read as evidence about
+#: the GitHub experience, which is the one most actual users will have.
+DOCS_PATHS = ("published", "bundled", "fallback", "mixed")
 
 
 @dataclass
