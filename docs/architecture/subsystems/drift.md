@@ -59,6 +59,27 @@ Issue #26 is why: four of seven labelled `layer-inversion` findings came from pa
 the bottom rank — so everything the tests imported read as upward. Correcting the two tiers on wardrowbe
 takes that signal from seven findings to two, dropping exactly the five a reviewer dismissed.
 
+**A type-only import is not a runtime dependency, and not nothing either.** `_imports_of` partitions
+rather than filters: imports inside `if TYPE_CHECKING:` are excluded from the runtime graph and returned
+by the same function under `type_only=True`. Everything structural reads the runtime graph, because a
+dependency that exists only for a type checker is not a cycle, not a layer violation and not fan-in.
+
+The idiom is why this was systematic rather than incidental. A type-only back-edge is *how* a Python
+project breaks a real import cycle, so the graph was most wrong exactly where the code was most careful.
+On httpx, the exceptions module's only internal import of a sibling sits inside
+`if typing.TYPE_CHECKING:`, and the graph reported a two-node cycle between it and the models module —
+which round 2's tester disproved by opening the file, and which had been reported at high confidence
+(#37). (Named in prose rather than backticks: those are another repository's paths, and this check
+correctly reads a backticked filename as a citation of *this* one. It caught the first draft of this
+paragraph, which is the third time that has happened while documenting this module.)
+
+**The two drift directions treat those edges differently, on purpose.** A type-only import *suppresses*
+a `stale` finding, because the coupling is real at design time and telling an author their accurate
+declaration is stale punishes the accurate artifact. It never *creates* an `undeclared` finding, because
+requiring documentation for an edge the running system does not have would push authors to describe
+couplings that do not exist. `else:` branches stay runtime, and `if not TYPE_CHECKING:` is deliberately
+not matched — the safe direction is the one that keeps a real edge.
+
 The predicate behind "is this test code" is `configscan.is_test_path`, imported rather than reimplemented.
 That is deliberate and load-bearing: `evaluate` asks the same question of the same files when it decides
 which reading of a hard-coded endpoint applies, and two definitions would let the two commands disagree

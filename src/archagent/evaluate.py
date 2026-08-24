@@ -108,10 +108,29 @@ class Finding:
 
 
 def finding_id(sign: str, subjects: list[str], values: list[str] | None = None) -> str:
-    """Keyed on what the finding is *about* — kind, owning file, value set — not on counts that move
-    between runs. Shared with the spot-check label store so a label survives a re-run."""
+    """Keyed on what the finding is *about* — kind, subjects, value set — not on counts that move
+    between runs. Shared with the spot-check label store so a label survives a re-run.
+
+    **Every subject participates, not just the first.** Only group F passes `values`, so for every other
+    sign the digest used to hash the empty string and the id collapsed to `sign:subjects[0]`. Two
+    `layer-inversion` findings out of the same subsystem — `transports -> a` and `transports -> b` — were
+    then the same id, which round 2's user tester spotted as `...:da39a3ee` repeated across distinct
+    candidates (#36). That id keys the label store and `investigations/`, so a recorded verdict could
+    answer a finding nobody investigated.
+
+    Subject *order* is preserved because direction is part of the finding: `a -> b` and `b -> a` are
+    different claims. Values stay sorted because they are a set.
+
+    The encoding deliberately leaves single-subject ids byte-identical to the old scheme. 151 of the 176
+    ids recorded across the evaluation data are single-subject, none of them ambiguous, and invalidating
+    a correct label to fix an unrelated bug would cost real review work. So exactly the ids that were
+    broken move, and no others.
+    """
     owner = subjects[0] if subjects else ""
-    digest = hashlib.sha1("\x1f".join(sorted(values or [])).encode()).hexdigest()[:8]
+    extra = "\x1f".join(subjects[1:])
+    vals = "\x1f".join(sorted(values or []))
+    payload = vals if not extra else f"{extra}\x1e{vals}"
+    digest = hashlib.sha1(payload.encode()).hexdigest()[:8]
     return f"{sign}:{owner}:{digest}"
 
 

@@ -67,6 +67,18 @@ guidelines.
 **Findings are candidates with a stable identity.** Each carries an id (`sign:owner:hash`) that survives
 re-runs, so a label or an investigation attaches to the finding rather than to a run.
 
+That identity has to distinguish findings that differ, and for two years it did not. Only group F passes
+a value set, so every other sign hashed the empty string — `da39a3ee` — and the id collapsed to
+`sign:subjects[0]`. Two `layer-inversion` findings out of one subsystem were the same id, which round 2's
+user tester spotted in the output (#36). Since the id keys the label store and `investigations/`, the
+consequence was not cosmetic: a recorded verdict could answer a finding nobody investigated.
+
+Every subject now participates, in order — `a -> b` and `b -> a` are different claims — while values stay
+sorted because they are a set. The encoding leaves single-subject ids byte-identical, so of the 176 ids
+recorded across the evaluation data the 151 unambiguous ones keep their labels and only the 25 broken
+ones move; a migration re-keyed the 12 that had human verdicts attached, each proved against its own
+recorded subjects before being rewritten.
+
 **The dependency graph is parsed *and* declared.** `model.edges` starts from the import graph and then
 takes in every `**Connects:** … via import` edge the artifact declares. DD-4 is the reason: the intended
 model is ground truth and inference corroborates it, so a dependency the author declared is a dependency

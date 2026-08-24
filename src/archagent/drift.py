@@ -160,7 +160,8 @@ def find_drift(config: Config, until: str | None = None) -> DriftResult:
     # dependency-edge + entry-point + interface-surface drift (Python + JS/TS)
     doc_text = "\n".join(all_text)
     import_graph = _import_graph(root, config, source_files)
-    result.undeclared_deps, result.stale_deps = _dependency_drift(subs, import_graph)
+    type_only_graph = _import_graph(root, config, source_files, type_only=True)
+    result.undeclared_deps, result.stale_deps = _dependency_drift(subs, import_graph, type_only_graph)
     result.undocumented_entrypoints = _entrypoint_drift(root, doc_text)
     result.undocumented_routes, result.dangling_routes, result.openapi_spec = \
         _interface_drift(root, source_files, doc_text)
@@ -545,12 +546,22 @@ def _connector_mismatch(root, subs, sub_service):
     return out
 
 
-def _dependency_drift(subs, import_graph):
+def _dependency_drift(subs, import_graph, type_only_graph=None):
     """Declared connectors vs the actual cross-subsystem import graph (only for docs that declare).
 
     Only `import`-kind connectors are checked against the import graph: a `sync-call`/`async-event`/
     `shared-data` edge is a *runtime* connector, not an import, so it must not be reported as stale for
-    lacking one. An actual import is "undeclared" only if the target isn't acknowledged under any kind."""
+    lacking one. An actual import is "undeclared" only if the target isn't acknowledged under any kind.
+
+    **The two directions treat type-only imports differently, on purpose.** A `if TYPE_CHECKING:` import
+    is real design-time coupling, so a subsystem that declares the edge has not drifted and must not be
+    told its declaration is stale — that would punish an accurate artifact, which is the failure #41
+    describes from the other side. But a type-only import is not enough to *demand* a declaration: it
+    creates no runtime dependency, and reporting it as undeclared would push authors to document
+    couplings the running system does not have.
+
+    So: type-only edges suppress `stale`, and never produce `undeclared`.
+    """
     file_subs: dict[str, set[str]] = {}
     for name, files, _ in subs:
         for f in files:
@@ -565,22 +576,34 @@ def _dependency_drift(subs, import_graph):
         for f in files:
             for target_file in import_graph.get(f, ()):
                 actual |= {t for t in file_subs.get(target_file, ()) if t != name}
+        corroborated = set(actual)
+        for f in files:
+            for target_file in (type_only_graph or {}).get(f, ()):
+                corroborated |= {t for t in file_subs.get(target_file, ()) if t != name}
         declared_any = set(declared)                                     # acknowledged under any kind
         declared_import = {t for t, k in declared.items() if k == "import"}
         undeclared += [(name, t) for t in sorted(actual - declared_any)]
-        stale += [(name, t) for t in sorted(declared_import - actual)]   # only import-kind can be import-stale
+        stale += [(name, t) for t in sorted(declared_import - corroborated)]  # only import-kind can be stale
     return undeclared, stale
 
 
-def _import_graph(root: Path, config: Config, source_files: set[str]) -> dict[str, set[str]]:
-    """file -> set of internal files it imports. Python via `ast`, JS/TS via regex (no node)."""
+def _import_graph(root: Path, config: Config, source_files: set[str],
+                  type_only: bool = False) -> dict[str, set[str]]:
+    """file -> set of internal files it imports. Python via `ast`, JS/TS via regex (no node).
+
+    Runtime imports only, unless `type_only=True` asks for the `if TYPE_CHECKING:` complement. Everything
+    structural reads the runtime graph: a dependency that exists only for a type checker is not a cycle,
+    not a layer violation, and not fan-in (#37).
+    """
     py_index = _module_index(source_files, config.python.source_paths)
     graph: dict[str, set[str]] = {}
     for f in source_files:
         if f.endswith(".py"):
-            graph[f] = _internal_targets(root, f, config.python.source_paths, py_index)
+            graph[f] = _internal_targets(root, f, config.python.source_paths, py_index, type_only)
         elif f.endswith(_JS_EXTS):
-            graph[f] = _js_targets(root, f, source_files)
+            # No equivalent in the regex scan: TS `import type` exists but the JS/TS path does not parse
+            # well enough to tell, so its edges stay in the runtime graph and out of the type-only one.
+            graph[f] = set() if type_only else _js_targets(root, f, source_files)
     return graph
 
 
@@ -668,13 +691,33 @@ def module_map(config: Config) -> dict[str, list[str]]:
     return out
 
 
-def _imports_of(root: Path, rel_file: str, self_mod: str | None) -> list[str]:
+def _imports_of(root: Path, rel_file: str, self_mod: str | None, type_only: bool = False) -> list[str]:
+    """Modules this file imports — at **runtime** by default.
+
+    An import inside `if TYPE_CHECKING:` does not exist when the program runs, and counting one as a
+    dependency fabricates structure. On httpx, `_exceptions.py`'s only internal import is
+    `if typing.TYPE_CHECKING: from ._models import Request, Response`, which produced an
+    `_exceptions ↔ _models` cycle reported at high confidence (#37).
+
+    The idiom matters more than the count: a type-only back-edge is how a Python project *breaks* a real
+    import cycle, so counting it puts the graph most wrong exactly where the code is most careful.
+
+    `type_only=True` returns the complement — those imports are real design-time coupling and are kept
+    rather than discarded, so `drift` can still treat a declared edge as corroborated by one.
+    """
     try:
         tree = ast.parse((root / rel_file).read_text())
     except (SyntaxError, OSError, ValueError):
         return []
+    guarded = _type_only_ranges(tree)
+
+    def is_guarded(node) -> bool:
+        return any(lo <= node.lineno <= hi for lo, hi in guarded)
+
     mods: list[str] = []
     for node in ast.walk(tree):
+        if isinstance(node, (ast.Import, ast.ImportFrom)) and is_guarded(node) != type_only:
+            continue
         if isinstance(node, ast.Import):
             mods += [a.name for a in node.names]
         elif isinstance(node, ast.ImportFrom):
@@ -695,9 +738,38 @@ def _imports_of(root: Path, rel_file: str, self_mod: str | None) -> list[str]:
     return mods
 
 
-def _internal_targets(root: Path, rel_file: str, source_paths: list[str], module_index: dict[str, str]) -> set[str]:
+def _is_type_checking(test) -> bool:
+    """`TYPE_CHECKING` or `typing.TYPE_CHECKING` as an `if` test.
+
+    Only the bare guard. `if not TYPE_CHECKING:` and `if TYPE_CHECKING and X:` are deliberately not
+    matched — the first makes its body *runtime* code and the second is rare enough that guessing wrong
+    is worse than treating it as runtime, which is the direction that keeps a real edge.
+    """
+    import ast
+    if isinstance(test, ast.Name):
+        return test.id == "TYPE_CHECKING"
+    return isinstance(test, ast.Attribute) and test.attr == "TYPE_CHECKING"
+
+
+def _type_only_ranges(tree) -> list[tuple[int, int]]:
+    """Line spans of `if TYPE_CHECKING:` bodies — imports there do not exist at runtime.
+
+    `else:` branches are excluded on purpose: `if TYPE_CHECKING: ... else: ...` puts the runtime import
+    in the `orelse`, and treating it as type-only would drop a real edge to fix a false one.
+    """
+    import ast
+    out: list[tuple[int, int]] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.If) and _is_type_checking(node.test):
+            for stmt in node.body:
+                out.append((stmt.lineno, getattr(stmt, "end_lineno", stmt.lineno) or stmt.lineno))
+    return out
+
+
+def _internal_targets(root: Path, rel_file: str, source_paths: list[str], module_index: dict[str, str],
+                      type_only: bool = False) -> set[str]:
     self_mod = _module_of(rel_file, source_paths)
-    targets = {module_index.get(cand) for cand in _imports_of(root, rel_file, self_mod)}
+    targets = {module_index.get(cand) for cand in _imports_of(root, rel_file, self_mod, type_only)}
     targets.discard(None)
     targets.discard(rel_file)
     return targets  # type: ignore[return-value]
