@@ -430,7 +430,14 @@ def _count_blockers(text: str) -> int:
     block = text[i:]
     end = block.find("**Anything you expected")
     block = block[:end] if end > 0 else block
-    return sum(1 for line in block.splitlines() if line.strip().startswith(("* ", "- ")))
+    # Bullets *or* timestamped entries. Round 2's log was written as "18:00 — ..." paragraphs and
+    # counted zero blockers, which read as a frictionless run in the ledger while the prose described
+    # several distinct problems. A count that silently reports zero is worse than no count.
+    import re
+    n = sum(1 for line in block.splitlines() if line.strip().startswith(("* ", "- ")))
+    if n:
+        return n
+    return len(re.findall(r"^\s*\d{1,2}:\d{2}\s*[—-]", block, re.M))
 
 
 def _ticked_docs_path(text: str) -> str:
@@ -456,7 +463,10 @@ def do_ingest(sheet: Path, out: Path, *, docs_path: str, archagent_commit: str,
 
     text = sheet.read_text()
     row = UserTestRow(
-        run_id=f"{datetime.date.today()}-{TARGET['name']}-usertest",
+        # The version and docs path are part of the identity: two rounds on the same day against
+        # different releases are different experiments, and a colliding run_id silently makes them look
+        # like one row overwritten.
+        run_id=f"{datetime.date.today()}-{TARGET['name']}-{VERSION}-{docs_path}",
         date=_field_after(text, "- date:") or str(datetime.date.today()),
         archagent_version=VERSION,
         archagent_commit=archagent_commit,
@@ -483,8 +493,12 @@ def do_ingest(sheet: Path, out: Path, *, docs_path: str, archagent_commit: str,
         print(f"  !! the worksheet ticks docs_path={ticked!r} but you passed {docs_path!r}.")
         print(f"     Resolve this before recording: it decides what the round measured.")
     print(f"run_id:        {row.run_id}")
-    print(f"docs_path:     {row.docs_path}"
-          + ("   <- did NOT measure the published-docs question" if row.docs_path != "published" else ""))
+    _NOTE = {
+        "fallback": "   <- the docs were NOT read; this measures a harder question than the kit asks",
+        "mixed": "   <- partly read; weaker than a clean bundled or published round",
+        "bundled": "   <- read from the kit, not rendered on GitHub; not comparable with `published`",
+    }
+    print(f"docs_path:     {row.docs_path}{_NOTE.get(row.docs_path, '')}")
     print(f"blockers:      {row.blockers}")
     print(f"claims verified: {row.claims_verified or '(not stated)'}")
     print("scores (never averaged):")
@@ -509,7 +523,11 @@ def main() -> None:
     g = sub.add_parser("ingest", help="parse a returned worksheet into the user-test ledger")
     g.add_argument("sheet", type=Path)
     g.add_argument("--out", type=Path, required=True, help="path to usertest.csv")
-    g.add_argument("--docs-path", required=True, choices=["published", "fallback", "mixed"],
+    # Derived, not restated. A hardcoded copy went stale the moment `bundled` was added: the ledger
+    # accepted it, the worksheet offered it, and `ingest` refused it — which is the scattered-source-of-
+    # truth shape this tool's own group F looks for, in its own harness.
+    from usertest_ledger import DOCS_PATHS
+    g.add_argument("--docs-path", required=True, choices=list(DOCS_PATHS),
                    help="how the tester actually got instructions — decides what the round measured")
     g.add_argument("--archagent-commit", required=True)
     g.add_argument("--tester", default="")

@@ -100,3 +100,27 @@ def test_every_docs_path_the_worksheet_offers_is_a_legal_value():
     text = usertest._worksheet("b5addb6ff")
     for p in DOCS_PATHS:
         assert f"`{p}`" in text, f"{p} is accepted by the ledger but not offered in the worksheet"
+
+
+def test_the_ingest_cli_offers_exactly_the_legal_docs_paths():
+    """`bundled` was added to the ledger and the worksheet and not to argparse's `choices`, so the
+    ledger accepted it, the worksheet offered it, and `ingest` refused it — found while ingesting round
+    2. One vocabulary declared in three places is the shape group F exists to find."""
+    import argparse
+    from unittest.mock import patch
+    from usertest_ledger import DOCS_PATHS
+    captured = {}
+    real = argparse.ArgumentParser.add_argument
+
+    def spy(self, *a, **kw):
+        if a and a[0] == "--docs-path":
+            captured["choices"] = list(kw.get("choices", []))
+        return real(self, *a, **kw)
+
+    with patch.object(argparse.ArgumentParser, "add_argument", spy), \
+         patch("sys.argv", ["usertest.py", "kit"]):
+        try:
+            usertest.main()
+        except SystemExit:
+            pass
+    assert captured.get("choices") == list(DOCS_PATHS)
