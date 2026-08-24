@@ -63,7 +63,12 @@ _EPS = 1e-9
 _IPV4 = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}(?::\d{2,5})?\b")
 _URL_WITH_PORT = re.compile(r"https?://([A-Za-z0-9._-]+):\d{2,5}", re.IGNORECASE)  # explicit :port only
 _BARE_V4 = re.compile(r"(?:\d{1,3}\.){3}\d{1,3}")
-_LOCAL_HOSTS = {"localhost", "127.0.0.1", "0.0.0.0", "example.com", "example.org", "::1"}
+_LOCAL_HOSTS = {"localhost", "127.0.0.1", "0.0.0.0", "example.com", "example.org", "example.net", "::1"}
+#: Domains RFC 2606 and RFC 6761 reserve for documentation and examples. Reserved *including their
+#: subdomains*, which exact matching against `_LOCAL_HOSTS` misses: httpx names `www.example.org:8000`
+#: and got a finding because only the bare `example.org` was listed.
+_EXAMPLE_DOMAINS = (".example.com", ".example.org", ".example.net", ".example", ".invalid", ".test",
+                    ".localhost")
 # Addresses reserved by the IETF for documentation and examples, or unroutable by design. None of these
 # can be real infrastructure, so a literal one is never "pinned to an environment" — it is chosen
 # *because* it goes nowhere. dspy's four `hardcoded-endpoint` findings in round 5 were all in tests and
@@ -1349,6 +1354,36 @@ def _server_side_fetch(config: Config) -> list[Finding]:
     return out
 
 
+def _docstring_lines(text: str, rel: str) -> set[int]:
+    """Line numbers covered by a docstring or any bare string expression, for a Python source.
+
+    A documentation example is the same category of thing as a reserved address: it is not
+    infrastructure, and was never going to be. `_endpoint_in` skips a line that *starts* with a comment
+    marker, which catches `# see http://10.0.0.1:8080` and nothing else — on httpx that left 8 of 11
+    endpoint findings pointing at prose, including `httpx.URL("https://[::ffff:192.168.0.1]")` inside a
+    docstring demonstrating URL normalisation, reported at `med` as a hard-coded deployment endpoint.
+
+    Bare string *expressions* are included, not only `__doc__` docstrings, because the two are
+    indistinguishable to a reader and the second is how a code fence inside a doc block parses. A file
+    that will not parse yields no lines rather than an exception: this is a heuristic improving a
+    heuristic, and a syntax error should cost the false-positive filter, not the scan.
+    """
+    if not rel.endswith(".py"):
+        return set()
+    import ast
+    try:
+        tree = ast.parse(text)
+    except (SyntaxError, ValueError):
+        return set()
+    out: set[int] = set()
+    for node in ast.walk(tree):
+        if (isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant)
+                and isinstance(node.value.value, str)):
+            end = node.value.end_lineno or node.value.lineno
+            out.update(range(node.value.lineno, end + 1))
+    return out
+
+
 def _hardcoded_endpoints(config: Config) -> list[Finding]:
     """A literal service address in the source.
 
@@ -1359,7 +1394,8 @@ def _hardcoded_endpoints(config: Config) -> list[Finding]:
     consequence, so it stays a finding with the recommendation that actually follows from it, at `low`.
 
     Reserved and documentation ranges are dropped outright by `_endpoint_in` — those are unreachable by
-    design and cannot be either kind of problem.
+    design and cannot be either kind of problem — and so are lines inside a docstring, for the same
+    reason (`_docstring_lines`).
     """
     root = config.project_root
     out: list[Finding] = []
@@ -1369,38 +1405,55 @@ def _hardcoded_endpoints(config: Config) -> list[Finding]:
         except OSError:
             continue
         in_test = _is_test_path(rel)
+        docs = _docstring_lines(text, rel)
+        hits: list[tuple[int, str]] = []
         for lineno, line in enumerate(text.splitlines(), 1):
+            if lineno in docs:
+                continue          # a documentation example is not infrastructure (#33)
             hit = _endpoint_in(line)
-            if not hit:
-                continue
-            if in_test:
-                out.append(Finding(
-                    sign="hardcoded-endpoint", group="D", severity="low",
-                    title="A test names a routable address",
-                    subjects=[f"{rel}:{lineno}"],
-                    detail=f"{hit} — in a test file",
-                    recommendation=(
-                        f"`{hit}` is routable, so this test may depend on infrastructure the suite does "
-                        "not control: it will fail off-network and can hang when the host is merely "
-                        "unreachable. If the address is meant to be dead, an address from a reserved "
-                        "range (`192.0.2.0/24`, `169.254.0.0/16`) says so and is never mistaken for "
-                        "real. If it is meant to be live, that is an integration test and worth marking "
-                        "as one. This is not the pinning problem — a test has no environment to be "
-                        "pinned to."),
-                    confidence="med",
-                ))
-            else:
-                out.append(Finding(
-                    sign="hardcoded-endpoint", group="D", severity="med",
-                    title="Hard-coded endpoint",
-                    subjects=[f"{rel}:{lineno}"],
-                    detail=hit,
-                    recommendation=(
-                        f"`{hit}` travels with the code, so every environment that is not this one needs "
-                        "a patch to run. Move it to config or service discovery and name the setting in "
-                        "`deployment.md`."),
-                    confidence="high",
-                ))
+            if hit:
+                hits.append((lineno, hit))
+        if not hits:
+            continue
+
+        # One finding per file, not per line. httpx's URL-parsing suite names addresses on 23 lines of
+        # one file; as 23 findings that is a census of a single fact, and it buries everything else in
+        # the report. The cap follows `MAX_ORIGIN_SITES`, which exists for the same reason.
+        shown = hits[:MAX_ORIGIN_SITES]
+        where = [f"{rel}:{n}" for n, _ in shown]
+        addrs = sorted({h for _, h in hits})
+        listed = ", ".join(f"`{a}`" for a in addrs[:4]) + (f" and {len(addrs) - 4} more" if len(addrs) > 4 else "")
+        more = f" (+{len(hits) - len(shown)} more line(s) in this file)" if len(hits) > len(shown) else ""
+
+        if in_test:
+            out.append(Finding(
+                sign="hardcoded-endpoint", group="D", severity="low",
+                title="A test names routable addresses",
+                subjects=where,
+                detail=f"{len(hits)} line(s) in {rel}: {listed}{more}",
+                recommendation=(
+                    f"{listed} are routable, so this file may depend on infrastructure the suite does not "
+                    f"control: it would fail off-network and can hang when a host is merely unreachable. "
+                    f"Check whether anything actually connects — a URL-parsing or formatting test names "
+                    f"addresses as *data* and never opens a socket, and that is not a finding. If "
+                    f"something does connect, an address from a reserved range (`192.0.2.0/24`) says "
+                    f"'deliberately dead', and a test that is meant to reach the network is an "
+                    f"integration test worth marking as one. This is not the pinning problem — a test "
+                    f"has no environment to be pinned to."),
+                confidence="low",
+            ))
+        else:
+            out.append(Finding(
+                sign="hardcoded-endpoint", group="D", severity="med",
+                title="Hard-coded endpoint",
+                subjects=where,
+                detail=f"{len(hits)} line(s) in {rel}: {listed}{more}",
+                recommendation=(
+                    f"{listed} travel(s) with the code, so every environment that is not this one needs "
+                    f"a patch to run. Move them to config or service discovery and name the settings in "
+                    f"`deployment.md`."),
+                confidence="high",
+            ))
     return out
 
 
@@ -1418,7 +1471,7 @@ def _endpoint_in(line: str) -> str | None:
         return m.group(0)
     for m in _URL_WITH_PORT.finditer(line):
         host = m.group(1).lower()
-        if host in _LOCAL_HOSTS:
+        if host in _LOCAL_HOSTS or host.endswith(_EXAMPLE_DOMAINS):
             continue
         # A bare IPv4 host was already judged by the loop above, which knows about reserved ranges; this
         # branch exists for *named* hosts. Without the guard `http://192.0.2.10:8080` is excluded as an

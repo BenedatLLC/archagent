@@ -750,12 +750,19 @@ def investigate(
     if len(match.subjects) > 12:
         console.print(f"  … and {len(match.subjects) - 12} more")
     console.print("")
-    for n, q in enumerate(_BRIEF_QUESTIONS, 1):
+    questions = _BRIEF_QUESTIONS.get(match.sign)
+    if questions is None:
+        console.print(f"[yellow]No investigation questions are written for `{match.sign}` yet.[/]\n"
+                      f"[dim]The evidence above is the finding. Printing another sign's questions would "
+                      f"read as authoritative and send you looking for something that is not there — see "
+                      f"_BRIEF_QUESTIONS in cli.py.[/]\n")
+        return
+    for n, q in enumerate(questions, 1):
         console.print(f"[bold]{n}. {q[0]}[/]")
         console.print(f"   [dim]{q[1]}[/]")
     console.print("\n[bold]Then rate it[/] — and the rating must follow from what you found, not from the "
                   "counts above:")
-    for level, meaning in _RATINGS:
+    for level, meaning in _BRIEF_RATINGS[match.sign]:
         console.print(f"   [bold]{level:9}[/] {meaning}")
     console.print("\n[dim]Write the answer as prose with file:line citations. A finding whose "
                   "investigation cannot point at a consequence is minor by definition.[/]\n")
@@ -765,7 +772,19 @@ def _record_investigation(arch_dir: Path, match, rating: str, body: str, by: str
     return _record_inv(arch_dir, match.id, rating, body, by, match.subjects, match.values)
 
 
-_BRIEF_QUESTIONS = [
+#: The questions a brief asks, per sign.
+#:
+#: These used to be one global list, written for the value-set signs, and every brief got it. A
+#: `change-prone-file` brief therefore reported churn and complexity correctly and then asked the reader
+#: to find duplicated enum declarations and compare them member by member — questions with no bearing on
+#: the finding, which a round 1 user tester named as the most useless thing the tool told them. Header,
+#: evidence and triage reason were all sign-specific; only the questions fell through.
+#:
+#: There is deliberately **no default**. A sign that can be flagged for investigation and has no
+#: questions here is one nobody has written questions for, and printing somebody else's is worse than
+#: printing none: it reads as authoritative and sends the reader looking for something that is not there.
+#: Same reasoning as `METRIC_KEYS` in the ledger.
+_VALUE_SET_QUESTIONS = [
     ("What is this, in the system's own terms?",
      "Name the concept a reader would recognise — a call type, a provider, a deploy mode — not the value "
      "set. If you cannot say what decision it drives, that is itself the answer."),
@@ -792,11 +811,52 @@ _BRIEF_QUESTIONS = [
      "a finding that is two-thirds real should be reported as such."),
 ]
 
-_RATINGS = [
+_CHANGE_PRONE_QUESTIONS = [
+    ("What keeps changing in this file?",
+     "Read the last dozen commits that touched it, not the file. Churn is the measurement; *what* churns "
+     "is the finding. If they are unrelated edits to unrelated parts, the file is merely large."),
+    ("Is it one responsibility or several?",
+     "Name the distinct jobs the file does. A file that is change-prone because one volatile concern "
+     "lives in it is a different problem from one that is change-prone because six do."),
+    ("Do the fix-labeled commits cluster?",
+     "The evidence separates total churn from bug-fix churn. If the fixes concentrate in one region — "
+     "one class, one function, one parsing branch — that region is the finding and the rest is noise."),
+    ("Would splitting it reduce the churn, or move it?",
+     "This is the question that decides the rating. If the volatile part would still change at the same "
+     "rate in its own file, and every change would still require touching the caller, splitting buys "
+     "nothing. Say which of the two it is and why."),
+    ("Is the complexity essential or accumulated?",
+     "The complexity axis is measured by indentation, which cannot tell a genuinely branchy problem — a "
+     "protocol state machine, a parser — from accumulated special cases. Read enough to say which."),
+    ("What has already been tried?",
+     "A file at the top of both axes in a healthy project is often one somebody has already refactored "
+     "twice. Look for the earlier attempts in the history; if the shape keeps coming back, the "
+     "constraint that reimposes it is the real finding."),
+]
+
+_BRIEF_QUESTIONS: dict[str, list[tuple[str, str]]] = {
+    "scattered-source-of-truth": _VALUE_SET_QUESTIONS,
+    "enum-value-escape": _VALUE_SET_QUESTIONS,
+    "change-prone-file": _CHANGE_PRONE_QUESTIONS,
+}
+
+_VALUE_SET_RATINGS = [
     ("minor", "untidy; no behaviour depends on the duplication, or a typo fails loudly"),
     ("moderate", "a real maintenance hazard — the vocabularies can drift and nothing would catch it"),
     ("critical", "it already misbehaves, or a plausible edit makes it misbehave silently"),
 ]
+
+_CHANGE_PRONE_RATINGS = [
+    ("minor", "large and busy, but the changes are unrelated and cost nothing to make"),
+    ("moderate", "a real drag — related edits keep landing here and each one risks the others"),
+    ("critical", "the fixes cluster and keep recurring; the shape is causing the bugs, not just hosting them"),
+]
+
+_BRIEF_RATINGS: dict[str, list[tuple[str, str]]] = {
+    "scattered-source-of-truth": _VALUE_SET_RATINGS,
+    "enum-value-escape": _VALUE_SET_RATINGS,
+    "change-prone-file": _CHANGE_PRONE_RATINGS,
+}
 
 
 @app.command(name="history-profile")
@@ -851,22 +911,44 @@ def status(project: Path = typer.Option(Path("."), help="Target repo root")) -> 
         console.print("[yellow]No source files found[/] — check `source_paths` in archagent.toml.")
         return
 
-    table = Table(title="archagent status — coverage by package")
+    # `Described` is computed before the coverage table is drawn, because it is the number that decides
+    # how the coverage number may be presented. A round 1 user tester read "100%" in a full-width green
+    # bar, found the depth table below it marking the same subsystem `thin` at 3.6 words per file, and
+    # rated completeness 2 of 5: "materially broader than the actual subsystem descriptions, giving an
+    # overstated impression of architectural coverage". The correction existed; it was forty lines away.
+    from .described import described as run_described
+    from .drift import _source_files
+    desc = run_described(config, _source_files(config))
+
+    table = Table(title="archagent status — files claimed by a `**Covers:**` glob")
     table.add_column("Package")
     table.add_column("Files", justify="right")
-    table.add_column("Documented", justify="right")
-    table.add_column("Coverage", justify="right")
+    table.add_column("Claimed", justify="right")
+    table.add_column("", justify="right")
+    # A glob claiming a file is not a document describing it, so the bar never reads as health on its
+    # own. Green is withheld whenever the artifact's own depth or description figures disagree — the
+    # number is the same, the confidence it projects is not.
+    overstated = bool(report.thin) or (desc.considered and desc.pct < 80)
     for p in report.packages:
-        style = "green" if p.pct >= 80 else "yellow" if p.pct >= 40 else "red"
+        style = ("yellow" if p.pct >= 40 else "red") if overstated else (
+            "green" if p.pct >= 80 else "yellow" if p.pct >= 40 else "red")
         bar = "█" * (p.pct // 10) + "░" * (10 - p.pct // 10)
         table.add_row(p.name, str(p.total), f"{p.covered}/{p.total}", f"[{style}]{bar} {p.pct:3}%[/]")
     console.print(table)
+    console.print("  [dim]Claimed counts files a glob matches. Whether a document says anything about "
+                  "them is the `Described` figure below.[/]")
+    if desc.considered:
+        gap = desc.considered - desc.mentioned
+        if gap:
+            console.print(f"  [yellow]{gap} of {desc.considered}[/] claimed module(s) are named in no "
+                          f"document — see [bold]Described[/] below before reading the percentages above "
+                          f"as coverage.")
 
     thin = report.thin
     undiagrammed = [d for d in report.depth if d.wants_a_diagram]
     if thin or undiagrammed:
-        console.print("\n[bold]Subsystem depth[/] — coverage says a file is described; this says whether "
-                      "the description is usable")
+        console.print("\n[bold]Subsystem depth[/] — a claim says a file is covered; this says whether the "
+                      "document about it is usable")
         t2 = Table(show_header=True, header_style="bold")
         t2.add_column("Subsystem", no_wrap=True)
         for col in ("Files", "Words", "Per file", "Diag", "Types"):
@@ -893,9 +975,6 @@ def status(project: Path = typer.Option(Path("."), help="Target repo root")) -> 
     # whether the claiming document mentions it. Calibration round 4 scored 727/727 assigned and 1.00 on
     # the deterministic rubric with a whole cross-cutting mechanism — a 17-line module wiring an
     # optional ORM read cache — never named anywhere in the artifact.
-    from .described import described as run_described
-    from .drift import _source_files
-    desc = run_described(config, _source_files(config))
     if desc.considered:
         groups = desc.by_package()
         console.print(f"\n[bold]Described[/] — of {desc.considered} modules assigned to a subsystem, "

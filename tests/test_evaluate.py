@@ -648,3 +648,70 @@ def test_god_component_advice_survives_an_empty_import_graph(tmp_path):
     m = _Model(subs=["a"], files={"a": {"x.go"}}, tier={}, edges={"a": set()}, rev={"a": set()},
                weight={}, service={}, import_graph={}, file_subs={"x.go": {"a"}}, connectors={})
     assert _seam_advice(m, "a") == ""
+
+
+def test_endpoints_inside_docstrings_are_not_findings(tmp_path):
+    """#33, from the round 1 user test. A documentation example is the same category as a reserved
+    address: not infrastructure, and never going to be. `_endpoint_in` skipped lines that *start* with a
+    comment marker, which catches `# see http://10.0.0.1:8080` and nothing else — on httpx that left 8
+    of 11 endpoint findings pointing at prose, each reported `med`, and the tester named it as the
+    moment they stopped trusting the output."""
+    cfg = _cfg(tmp_path)
+    _src(cfg, "pkg/net.py",
+         'def parse(u):\n'
+         '    """Normalise a URL.\n'
+         '\n'
+         '    Example:\n'
+         '        >>> parse("https://[::ffff:192.168.0.1]")\n'
+         '        ```python\n'
+         '        transport = Transport(client=("1.2.3.4", 123))\n'
+         '        ```\n'
+         '    """\n'
+         '    return u\n'
+         '\n'
+         'PROD = "http://10.2.3.4:8080/api"\n')
+    _sub(cfg, "net", "# Net\n\n**Covers:** `src/pkg/net.py`\n")
+    found = _of(evaluate(cfg), "hardcoded-endpoint")
+    blob = " ".join(f.detail for f in found)
+    assert "192.168.0.1" not in blob, "inside a docstring"
+    assert "1.2.3.4" not in blob, "inside a code fence inside a docstring"
+    assert "10.2.3.4" in blob, "real module-level constant must survive"
+
+
+def test_a_file_with_many_addresses_is_one_finding_not_many(tmp_path):
+    """httpx's URL-parsing suite names addresses on 23 lines of one file. As 23 findings that is a
+    census of a single fact, and it buries everything else in the report."""
+    cfg = _cfg(tmp_path)
+    body = "".join(f'    assert parse("http://10.0.0.{i}:800{i%10}/")\n' for i in range(1, 15))
+    _src(cfg, "pkg/tests/test_url.py", "def test_urls():\n" + body)
+    _sub(cfg, "net", "# Net\n\n**Covers:** `src/pkg/**`\n")
+    found = _of(evaluate(cfg), "hardcoded-endpoint")
+    assert len(found) == 1, f"expected one finding per file, got {len(found)}"
+    assert "14 line(s)" in found[0].detail
+    assert "more line(s) in this file" in found[0].detail, "the cap must say what it withheld"
+
+
+def test_reserved_example_domains_include_their_subdomains(tmp_path):
+    """RFC 2606 reserves example.org entirely. Exact matching against `_LOCAL_HOSTS` missed
+    `www.example.org:8000`, which httpx names in a test."""
+    cfg = _cfg(tmp_path)
+    _src(cfg, "pkg/net.py",
+         'A = "http://www.example.org:8000/"\n'
+         'B = "http://api.example.com:9000/"\n'
+         'C = "http://cache.svc:6379"\n')
+    _sub(cfg, "net", "# Net\n\n**Covers:** `src/pkg/net.py`\n")
+    blob = " ".join(f.detail for f in _of(evaluate(cfg), "hardcoded-endpoint"))
+    assert "example.org" not in blob and "example.com" not in blob
+    assert "cache.svc" in blob
+
+
+def test_an_unparsable_python_file_still_gets_scanned(tmp_path):
+    """The docstring filter is a heuristic improving a heuristic. A syntax error should cost the
+    false-positive filter, not the scan — going quiet on a file it cannot parse would be the
+    clean-looking failure this project keeps finding in itself."""
+    from archagent.evaluate import _docstring_lines
+    assert _docstring_lines("def broken(:\n", "x.py") == set()
+    cfg = _cfg(tmp_path)
+    _src(cfg, "pkg/bad.py", 'def broken(:\nPROD = "http://10.2.3.4:8080"\n')
+    _sub(cfg, "bad", "# Bad\n\n**Covers:** `src/pkg/bad.py`\n")
+    assert any("10.2.3.4" in f.detail for f in _of(evaluate(cfg), "hardcoded-endpoint"))
