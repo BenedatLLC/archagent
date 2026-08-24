@@ -27,7 +27,7 @@ Five minutes, in a repo you already have. You need [uv](https://docs.astral.sh/u
 **1. Install the tool and scaffold the repo.**
 
 ```bash
-uv tool install archagent==1.0.0rc2   # a release candidate: name the version, or you get 0.3.0
+uv tool install archagent
 cd your-repo
 archagent init .
 ```
@@ -115,15 +115,10 @@ archagent installs once (from outside your repos) and scaffolds into each projec
 Install it from PyPI:
 
 ```bash
-uv tool install archagent==1.0.0rc2     # gives you an `archagent` command
+uv tool install archagent          # gives you an `archagent` command
 # or run without installing:
-uvx archagent==1.0.0rc2 init .
+uvx archagent init .
 ```
-
-**Name the version.** The current release is a **release candidate**, and installers skip pre-releases
-unless asked for one exactly — a plain `uv tool install archagent` silently gives you 0.3.0, which is old
-enough to disagree with this page about what the artifact's index file is called. Once 1.0.0 is out the
-bare name will be correct and this note goes away.
 
 Prefer the latest unreleased code? Install from the repo instead:
 

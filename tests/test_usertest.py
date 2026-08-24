@@ -125,19 +125,30 @@ def _declared() -> str:
     return re.search(r'^version\s*=\s*"([^"]+)"', t, re.M).group(1)
 
 
-def test_the_readme_pins_the_version_that_is_actually_declared():
+def test_the_readme_install_line_matches_the_declared_version():
     """Round 1's tester followed the Quickstart, got 0.3.0, and read documentation describing behaviour
     it did not have — because PyPI does not treat a pre-release as "latest" and the README named no
     version. Naming a *stale* version is the same failure with an extra step, and it is the one a
-    release bump introduces if the README is not part of the bump."""
+    release bump introduces if the README is not part of the bump.
+
+    The requirement flips at 1.0.0. A pre-release **must** be pinned, because a bare install silently
+    resolves to the last final release. A final release must **not** be pinned, because a pin is a second
+    copy of the version that goes stale on the next bump — and the note explaining the pin promised to
+    remove itself once 1.0 shipped. Either way a pin that disagrees with `pyproject.toml` is the defect.
+    """
     from pathlib import Path
     import re
+    declared = _declared()
+    is_prerelease = any(c.isalpha() for c in declared)
     readme = (Path(__file__).resolve().parents[1] / "README.md").read_text()
     pinned = set(re.findall(r"archagent==([0-9][^\s`]*)", readme))
-    assert pinned, "the README must pin a version while the current release is a pre-release"
-    assert pinned == {_declared()}, (
-        f"README pins {sorted(pinned)} but pyproject declares {_declared()}. A tester told to install "
-        f"one version and handed another version's documentation measures the skew, not the tool.")
+
+    if is_prerelease:
+        assert pinned, f"{declared} is a pre-release; a bare install would resolve to an older version"
+    if pinned:
+        assert pinned == {declared}, (
+            f"README pins {sorted(pinned)} but pyproject declares {declared}. A user told to install "
+            f"one version and handed another version's documentation reads the skew, not the tool.")
 
 
 def test_the_kit_reads_the_version_rather_than_restating_it():

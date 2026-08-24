@@ -68,6 +68,29 @@ prints none and says so, rather than borrowing — another sign's read as author
 looking for what is not there. The test derives the set of triaged signs from `evaluate.py` rather than
 restating it, so a newly triaged sign cannot quietly inherit someone else's questionnaire.
 
+**A heading may not be disproved by the block beneath it.** `check` printed "asserted in invariants.md,
+verified by nobody" and then, six lines down, "9 state how they are verified" with the test names. The
+wording predated the `Verification` column, whose whole purpose is to separate *archagent cannot compile
+a checker* from *nobody checks this*, so the heading discarded the distinction the column exists to draw.
+It now says the narrow true thing — not checked **by archagent** — and counts how many name their own
+verification.
+
+The blunt case stays blunt. When no skipped rule names a verification it still says so, because that is
+the silence the block was written for: an artifact whose invariants are all `prose` once produced an
+empty table and "All invariants hold" while two of its eight rules were false.
+
+**Confidence is reported about the thing that was measured.** `scan-invariants` headed its first list
+"high confidence", which was a claim about having found a *marker* read as a claim that the marker states
+an architectural rule. Those are different, and on a real repository the gap is wide: httpx's list held
+`response`, `123, 456` and `Transfer-Encoding`, all assertion messages from its test suite. The list is
+now "Labelled invariants — someone wrote INVARIANT here; whether it is architectural is still yours to
+judge", with assertion messages in a separate, lower tier.
+
+Round 2's tester named this, the `check` heading above, and a high-confidence cycle built from type-only
+imports as one theme: the terminal language overstating what the extractors established. All three were
+wording or tiering in this module and its callers, not extraction defects — which is the same conclusion
+calibration round 5 reached from the other direction.
+
 **A number is presented with the confidence its evidence supports.** `status` led with 100% coverage in a
 full-width green bar while its own depth table marked the same subsystem `thin` at 3.6 words per file. The
 number was right; the impression was not. The table now says it counts *files claimed by a glob*, the
