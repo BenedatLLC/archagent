@@ -394,5 +394,9 @@ Not literature, but cited throughout and kept to the same standard:
 
 - [`docs/designs/evaluating-archagent.md`](designs/evaluating-archagent.md) — the evaluation methodology,
   including what each instrument can and cannot measure.
+- [`docs/designs/extraction-confidence.md`](designs/extraction-confidence.md) — the retrospective held
+  after 1.0.0, and the three changes it proposes: a shape matrix for extraction, coverage counters so an
+  extractor can say what it could not see, and moving severity out of the deterministic layer. States what
+  would falsify its own diagnosis.
 - [`docs/evaluations/`](evaluations/README.md) — every round's write-up, including the ones that came back
   badly. The data lives in a separate private repository; the reasoning is here.
