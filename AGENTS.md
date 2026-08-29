@@ -41,6 +41,24 @@ rather than typed because the hand-kept version already failed: of the first twe
 only in commit messages, and those three were the ones found by the author rather than a reviewer — the
 category most likely to go unrecorded. See `docs/designs/evaluating-archagent.md` §17.3.
 
+## Issues, designs and commits
+
+A change of any size is traceable in three directions, and the chain is only useful if every link is
+written at the time:
+
+- **An issue states the problem and the plan.** Implementation steps live here, not in the design
+  document — the design holds the reasoning and outlives any particular plan.
+- **If a design document covers it, the issue links to it** and carries a label naming the design
+  (`design:extraction-confidence`), so the set of issues implementing one design is a query rather than a
+  memory.
+- **The commit message explains the change; the issue is closed naming the commit.** `Fixed in <sha>`,
+  with what was measured. A closing comment that says only "done" throws away the part a future reader
+  needs — several issues in this repository were closed with the before/after numbers, and those are the
+  ones still worth reading.
+
+The same applies to defects found on a fresh target (above), where the discipline is stricter: file the
+issue even when the fix lands in the same hour, because the label is what makes the count derivable.
+
 ## What the evaluation record will not tolerate
 
 These are enforced by tests and by refusals in code, and they exist because each was once violated:

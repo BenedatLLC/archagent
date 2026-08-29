@@ -83,6 +83,8 @@ answerable rather than a matter of impression.
 
 # Change 1 — A shape matrix, not a repo list
 
+**Tracked by [#45](https://github.com/BenedatLLC/archagent/issues/45).**
+
 **Short form.** Synthetic fixtures per Python idiom — root package, `src/`, namespace packages, star
 re-exports, `TYPE_CHECKING`, conditional imports, `__init__` re-exports. Minutes to write, and would have
 caught 5 of the 12 defects before any human saw them.
@@ -165,6 +167,8 @@ conflated, and extraction defects are being found by the expensive instrument.
 ---
 
 # Change 2 — Extractors verify their own preconditions
+
+**Tracked by [#46](https://github.com/BenedatLLC/archagent/issues/46).**
 
 **Short form.** Every silent-clean failure this period had a check available for free: did `source_paths`
 match files? did the glob resolve? did the graph get edges? "I extracted nothing" should be a reported
@@ -282,6 +286,8 @@ for a shared reporting type rather than a check each extractor remembers to writ
 
 # Change 3 — Severity and confidence leave the deterministic layer
 
+**Tracked by [#47](https://github.com/BenedatLLC/archagent/issues/47).**
+
 **Short form.** Hand the agent evidence and uncertainty; let it produce the judgement. Three of round 2's
 six defects were one sentence from the tester: *"the terminal language still overstates what the
 extractors established."*
@@ -361,7 +367,11 @@ pre-registered threshold agreed before the numbers are looked at again, per `eva
 
 # Sequencing
 
-1. **Change 2 for the import graph, plus Change 1's harness** — they share a first target and one
+Each change is tracked by an issue carrying its implementation steps, labelled
+`design:extraction-confidence`. The issues hold the plan; this document holds the reasoning, and neither
+is complete without the other.
+
+1. **Change 2 for the import graph, plus Change 1's harness** ([#46](https://github.com/BenedatLLC/archagent/issues/46), [#45](https://github.com/BenedatLLC/archagent/issues/45)) — they share a first target and one
    validates the other. The aliased-`TYPE_CHECKING` cell is a two-line fix folded in here.
 2. **Change 2 for `generate.py`** — the highest-severity silent failure still live, since a scoped rule
    matching nothing currently reports PASS.
