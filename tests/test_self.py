@@ -97,3 +97,23 @@ def test_archagents_own_diagrams_and_invariant_citations_are_sound(config):
     invisible until a human renders it — or, for an invariant ID, until a reader chases a citation that
     resolves nowhere."""
     assert lint_docs(config) == []
+
+
+def test_the_contributor_conventions_do_not_ship_to_users():
+    """`AGENTS.md` at the repository root is archagent's *own* contributor process — the gates, the
+    `found-by:` labelling requirement, the evaluation-record rules. None of it belongs in a user's
+    repository.
+
+    The confusion is live, not hypothetical: archagent installs a file called `architecture/AGENTS.md`
+    into every project it scaffolds, and `upgrade` overwrites that one. Two files, same name, opposite
+    audiences. If the contributor conventions ever reached `templates/`, every user would be told to
+    label issues in a tracker they do not have."""
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1]
+    assert (root / "AGENTS.md").is_file(), "contributor conventions are missing"
+
+    shipped = root / "src" / "archagent" / "templates"
+    for f in shipped.rglob("*.md"):
+        text = f.read_text()
+        assert "found-by:" not in text, f"{f.relative_to(root)} leaks the defect-labelling protocol"
+        assert "archagent-evaluations" not in text, f"{f.relative_to(root)} leaks the private data repo"
