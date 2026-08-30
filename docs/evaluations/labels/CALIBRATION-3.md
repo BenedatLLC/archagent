@@ -4,6 +4,56 @@ Six findings from `wardrowbe` at `wardrowbe-v1.7.0`, labelled blind to severity,
 recommendation. Three `unstable-interface`, three `layer-inversion`. Run to break the round-2 tie on
 `unstable-interface`, where both confirmations were archagent and both dismissals were fastapi-template.
 
+
+## Re-examined 2026-08-30 after #48 — the labels stand, the coverage claim does not
+
+`tsconfig` path aliases resolved to nothing until #48, so at the time of this round wardrowbe's frontend
+import graph held **3 edges across 119 TypeScript files** where it should hold 356. That was found while
+building the JS/TS shape matrix and raised the question of whether this round's numbers survive it.
+
+**They do, and the reason is specific rather than reassuring.** All six labelled findings are backend:
+
+| verdict | sign | subjects |
+|---|---|---|
+| dismiss | `layer-inversion` | `backend-migrations` → `backend-domain` |
+| confirm | `layer-inversion` | `backend-platform` → `backend-domain` |
+| dismiss | `layer-inversion` | `backend-tests` → `backend-api` |
+| dismiss | `unstable-interface` | `backend-domain` |
+| dismiss | `unstable-interface` | `backend-platform` |
+| dismiss | `unstable-interface` | `backend-services` |
+
+The Python graph was never affected, so every verdict above was made about evidence that was actually
+there. The precision figures in the standing totals are unchanged.
+
+**What does not survive is any statement about coverage.** Precision is conditional on what the tool
+reported, and on the frontend it reported almost nothing — so this round says nothing about wardrowbe's
+frontend, in either direction. A signal that stayed silent there was not finding health; it had no graph
+to look at.
+
+**Two findings existed and could not be seen.** Re-running at the same revision with the current build
+produces two frontend `layer-inversion` findings that no build at the time could have produced:
+
+- `frontend-proxy` → `frontend-web`
+- `frontend-tests` → `frontend-web`
+
+Both are unlabelled, and they matter to the totals rather than to the past verdicts: they are a fresh
+sample from a population this round could only see part of. **The second one is a prediction worth
+recording before anyone labels it.** This round's own conclusion was that every `layer-inversion`
+dismissal is a test or migration package tiered below the code it imports — and `frontend-tests` is
+tiered `infra`, the bottom rank, which is the #26 pattern exactly. If that prediction holds, labelling it
+moves `layer-inversion` down rather than up.
+
+`drift`'s `_mistiered` check exists to catch that mistiering and does not fire here: 8 of the 17 files
+`frontend-tests` covers are build configuration — `next.config.js`, `vitest.config.ts`, the i18n scripts —
+which `is_test_path` does not recognise, so the subsystem is not *entirely* test code by its measure.
+Filed as its own issue rather than folded in here.
+
+**The general fix is in place.** `evaluate` now reports a configured language that contains a substantial
+number of files and produces no import edges from any of them (`_language_coverage`). That catches this
+class whole, without anyone having to anticipate the idiom, and it reports during the run rather than
+leaving it to be noticed a year later — which was the alternative on the table, an edge count in the
+ledger.
+
 ## Standing totals
 
 | signal | n | confirm | partial | dismiss | strict | 95% CI |

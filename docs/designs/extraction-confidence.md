@@ -66,6 +66,14 @@ labelled round:
 | `unstable-interface` | 2 | 5 | **29%** |
 | `layer-skip` | 0 | 3 | **0%** |
 
+**Caveat added 2026-08-30.** Two wardrowbe `layer-inversion` findings existed at round 3 and could not
+be seen, because `tsconfig` aliases left that repository's frontend graph with 3 edges instead of 356
+(#48, #49). The labelled findings were all backend and are unaffected, so these figures stand as
+precision over what the tool reported — but the population they were drawn from was truncated on one
+repository, and one of the two unseen findings is predicted to be a dismissal. The table is a floor for
+`layer-inversion`, not a settled number, and #47's proposal to demote signals should not be decided from
+it until those two are labelled.
+
 The split is not heuristic-versus-agent. It is **code scanning versus graph inference over a model**: the
 two signals that work scan source for value sets, and the three that do not infer architectural meaning
 from a dependency graph. Those same three generated most of this period's defects.

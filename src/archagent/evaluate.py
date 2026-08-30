@@ -59,7 +59,9 @@ IMPACT_MIN = 3          # an interface depended on by >= this many subsystems ha
 UNSTABLE_DEPENDENTS_MIN = 2  # ... and co-changing with >= this many of them => unstable interface
 DECISION_MIN_CHURN = 2  # mean commits per involved file; below this the duplication isn't costing anything
 MAX_DECISIONS = 10      # candidates are for a person to triage, not an inventory to work through
-MAX_ORIGIN_SITES = 6    # one finding lists a few sites; the point is the policy, not the census
+MAX_ORIGIN_SITES = 6
+#: Below this many files of a language, 'no edges at all' is not evidence of anything.
+_LANG_MIN_FILES = 10    # one finding lists a few sites; the point is the policy, not the census
 _EPS = 1e-9
 
 _IPV4 = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}(?::\d{2,5})?\b")
@@ -398,6 +400,42 @@ def evaluate(config: Config, history: bool = True, since: str | None = None,
     return result
 
 
+def _language_coverage(config: Config, source_files: set[str]) -> list[Coverage]:
+    """Languages that are configured, present, and produced no import edges at all.
+
+    The failure this names is the one that cost the most and showed the least: `tsconfig` path aliases
+    resolved to nothing, so wardrowbe's frontend graph held **3 edges across 119 TypeScript files** where
+    it should hold 356. Every structural signal over those subsystems then had almost no evidence to work
+    from, and the report said nothing — because "no findings" and "nothing to find" are the same output.
+
+    A per-language check catches that class whole, without anyone having to anticipate the idiom. A
+    repository that declares a language, contains a substantial number of files in it, and yields no edge
+    from any of them is either trivially decoupled or unparsed, and only one of those is common.
+
+    Chosen over recording an edge count in the evaluation ledger, which was the other option on the
+    table: a ledger column lets someone notice this a year later, and this makes the tool say it during
+    the run that produced the findings.
+    """
+    graph = _import_graph(config.project_root, config, source_files)
+    exts = {"python": (".py",), "ts": (".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs")}
+    out: list[Coverage] = []
+    for lang in config.languages:
+        suffixes = exts.get("ts" if lang in {"ts", "typescript", "js"} else lang)
+        if not suffixes:
+            continue
+        files = sorted(f for f in source_files if f.endswith(suffixes))
+        if len(files) < _LANG_MIN_FILES:
+            continue          # too few to tell "unparsed" from "genuinely standalone"
+        linked = [f for f in files if graph.get(f)]
+        if linked:
+            continue          # the analyser is working; individual import-free files are ordinary
+        out.append(Coverage(
+            what=f"{lang} files whose imports resolved to anything",
+            unit="file", seen=len(files), resolved=0, examples=tuple(files[:5]),
+        ))
+    return out
+
+
 def _extraction_coverage(config: Config) -> list[Coverage]:
     """What each extractor could not see, keeping only the entries that admit a gap.
 
@@ -419,7 +457,7 @@ def _extraction_coverage(config: Config) -> list[Coverage]:
         route_coverage(config.project_root, src),
         table_coverage(config.project_root, src),
     ]
-    return [c for c in out if not c.sound]
+    return _language_coverage(config, src) + [c for c in out if not c.sound]
 
 
 #: Confidence, one notch down. A finding standing on a declaration nobody has corroborated is weaker

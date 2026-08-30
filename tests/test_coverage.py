@@ -241,3 +241,47 @@ def test_incomplete_extraction_is_not_confusable_with_an_inactive_family(tmp_pat
     src = inspect.getsource(cli.evaluate_cmd if hasattr(cli, "evaluate_cmd") else cli.evaluate)
     assert "Incomplete extraction" in src and "Inactive signals" in src
     assert "a floor rather than a census" in src
+
+
+def test_a_configured_language_that_yields_no_edges_at_all_is_reported(tmp_path):
+    """The wardrowbe failure, generalised (#49). `tsconfig` path aliases resolved to nothing, so the
+    frontend graph held 3 edges across 119 TypeScript files where it should hold 356 — and the report
+    said nothing, because "no findings" and "nothing to find" are the same output.
+
+    A per-language check catches that class whole, without anyone having to anticipate the idiom that
+    caused it. Here the imports are unresolvable because the target files do not exist."""
+    from archagent.evaluate import _language_coverage
+    from archagent.drift import _source_files
+    files = {f"src/m{i}.ts": f"import {{ x }} from '@/nowhere/{i}';\n" for i in range(12)}
+    cfg = _repo(tmp_path, files, source_paths=("src",))
+    cfg = Config(project_root=tmp_path, languages=["ts"],
+                 python=PythonConfig(root_package="pkg", source_paths=["src"]),
+                 ts=TSConfig(source_paths=["src"]))
+    got = _language_coverage(cfg, _source_files(cfg))
+    assert len(got) == 1 and not got[0].sound
+    assert "ts files" in got[0].describe() and "12" in got[0].describe()
+
+
+def test_a_language_that_parses_is_silent(tmp_path):
+    """The check must not fire on every repository, or it stops meaning anything."""
+    from archagent.evaluate import _language_coverage
+    from archagent.drift import _source_files
+    files = {f"src/m{i}.ts": "import { x } from './shared';\n" for i in range(12)}
+    files["src/shared.ts"] = "export const x = 1;\n"
+    _repo(tmp_path, files, source_paths=("src",))
+    cfg = Config(project_root=tmp_path, languages=["ts"],
+                 python=PythonConfig(root_package="pkg", source_paths=["src"]),
+                 ts=TSConfig(source_paths=["src"]))
+    assert _language_coverage(cfg, _source_files(cfg)) == []
+
+
+def test_a_handful_of_files_is_not_enough_to_conclude_anything(tmp_path):
+    """A three-file package with no internal imports is ordinary, not a parser failure."""
+    from archagent.evaluate import _language_coverage
+    from archagent.drift import _source_files
+    files = {f"src/m{i}.ts": "export const x = 1;\n" for i in range(3)}
+    _repo(tmp_path, files, source_paths=("src",))
+    cfg = Config(project_root=tmp_path, languages=["ts"],
+                 python=PythonConfig(root_package="pkg", source_paths=["src"]),
+                 ts=TSConfig(source_paths=["src"]))
+    assert _language_coverage(cfg, _source_files(cfg)) == []

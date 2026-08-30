@@ -127,6 +127,18 @@ counting declarations would report the family active over a comparison that neve
 minor, moderate or critical depends on what it *causes*, which only reading the code establishes — so
 findings that might have consequences are marked for investigation rather than rated.
 
+**A language that parses to nothing is reported before its silence is read as health.**
+`_language_coverage` names any configured language that contains a substantial number of files and
+yields no import edge from any of them. That is the whole class the wardrowbe defect belonged to: its
+frontend graph held 3 edges across 119 TypeScript files, every structural signal over those subsystems
+had almost nothing to work from, and the report said nothing — because "no findings" and "nothing to
+find" are the same output.
+
+The threshold exists so the check means something: below ten files, "no internal imports" is ordinary
+rather than evidence. And it reports during the run that produced the findings, which was the argument
+for it over the alternative of recording an edge count in the evaluation ledger — that would have let
+someone notice a year later.
+
 **A partial scan is reported beside the findings, not instead of them.** `_extraction_coverage` asks each
 scanner what it could not resolve and keeps only the answers that admit a gap. That is a different
 statement from `Inactive`, and the more misleading one to omit: an inactive family produced nothing, while
