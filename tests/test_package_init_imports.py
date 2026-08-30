@@ -12,6 +12,11 @@ inaccurate one.
 The star import is where it was noticed, not the cause. `level` counts from the *containing package*,
 and for `__init__.py` the file **is** that package rather than a module inside it — so one component too
 many was stripped from every relative import in every package initialiser, star or not.
+
+The **graph shapes** these once asserted now live in the shape matrix (`tests/shapes.py`, issue
+#45), which is where a new idiom gets added. What stays here is what the matrix deliberately does
+not cover: the *consequences* of the graph being right — that a declared edge through a re-export
+is not reported stale, and that the fix did not simply move the off-by-one onto regular modules.
 """
 
 from archagent.config import Config, PythonConfig, TSConfig
@@ -33,31 +38,6 @@ def _src(cfg, rel, text):
 
 def _sub(cfg, name, text):
     (cfg.project_root / "architecture" / "subsystems" / f"{name}.md").write_text(text)
-
-
-def test_a_star_reexport_is_an_edge(tmp_path):
-    """The reported case."""
-    cfg = _cfg(tmp_path)
-    _src(cfg, "pkg/__init__.py", "from ._api import *\n")
-    _src(cfg, "pkg/_api.py", "x = 1\n")
-    g = _import_graph(tmp_path, cfg, _source_files(cfg))
-    assert g["src/pkg/__init__.py"] == {"src/pkg/_api.py"}
-
-
-def test_every_relative_form_in_an_initialiser_resolves(tmp_path):
-    """Not just the star. `from . import x`, `from .m import Name` and `from .m import *` were all
-    misresolved by the same off-by-one, which is why the fix is about `__init__.py` rather than about
-    wildcard imports."""
-    cfg = _cfg(tmp_path)
-    _src(cfg, "pkg/__init__.py",
-         "from ._api import *\n"
-         "from . import _auth\n"
-         "from ._client import Client\n")
-    for m in ("_api", "_auth", "_client"):
-        _src(cfg, f"pkg/{m}.py", "x = 1\n")
-    g = _import_graph(tmp_path, cfg, _source_files(cfg))
-    assert g["src/pkg/__init__.py"] == {
-        "src/pkg/_api.py", "src/pkg/_auth.py", "src/pkg/_client.py"}
 
 
 def test_a_regular_module_is_unaffected(tmp_path):

@@ -73,6 +73,17 @@ which round 2's tester disproved by opening the file, and which had been reporte
 correctly reads a backticked filename as a citation of *this* one. It caught the first draft of this
 paragraph, which is the third time that has happened while documenting this module.)
 
+**Import extraction is tested by an enumerated matrix, not by whichever repositories we cloned.**
+`tests/shapes.py` holds one small fixture per idiom — layouts, package initialisers, type-only guards,
+import forms — and asserts the extracted graph completely, so a spurious edge fails a cell as surely as a
+missing one. Sixteen cells run in about a second; litellm alone is 132 MiB and a ninety-second git walk.
+
+The reason is that a matrix is *enumerable*. Every idiom-shaped defect in this module went unnoticed
+because the corpus happened not to contain that idiom, and no amount of reading six repositories reveals
+which one is absent. Building the table immediately turned up an aliased `TYPE_CHECKING` guard the
+narrower fix had missed. A test ties the table to the matrix in `docs/designs/extraction-confidence.md`,
+so a shape can be proposed in the design and cannot then be forgotten in the code.
+
 **A package initialiser is its own package, and `level` counts from there.** Relative-import resolution
 stripped one component too many in every `__init__.py`, because it treated the file's module name as a
 module *inside* a package when for an initialiser the file **is** the package. On httpx the effect was

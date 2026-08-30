@@ -754,8 +754,29 @@ def _is_package_init(rel_file: str) -> bool:
     return rel_file == "__init__.py" or rel_file.endswith("/__init__.py")
 
 
-def _is_type_checking(test) -> bool:
-    """`TYPE_CHECKING` or `typing.TYPE_CHECKING` as an `if` test.
+def _type_checking_names(tree) -> set[str]:
+    """Local names bound to `typing.TYPE_CHECKING` in this module.
+
+    Always includes the bare spelling. `from typing import TYPE_CHECKING as TC` adds `TC`, which the
+    original check missed — so `if TC:` read as an ordinary condition and its imports were counted as
+    runtime edges. That is issue #37 surviving in a different spelling, found by enumerating spellings
+    for the shape matrix rather than by waiting for a repository to use one.
+    """
+    import ast
+    names = {"TYPE_CHECKING"}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module == "typing":
+            for a in node.names:
+                if a.name == "TYPE_CHECKING" and a.asname:
+                    names.add(a.asname)
+    return names
+
+
+def _is_type_checking(test, names: set[str] | None = None) -> bool:
+    """A bare `TYPE_CHECKING` guard, under any of its local spellings.
+
+    `typing.TYPE_CHECKING` and `t.TYPE_CHECKING` match on the attribute, so an aliased *module* needs no
+    special handling; an aliased *name* does, which is what `names` carries.
 
     Only the bare guard. `if not TYPE_CHECKING:` and `if TYPE_CHECKING and X:` are deliberately not
     matched — the first makes its body *runtime* code and the second is rare enough that guessing wrong
@@ -763,7 +784,7 @@ def _is_type_checking(test) -> bool:
     """
     import ast
     if isinstance(test, ast.Name):
-        return test.id == "TYPE_CHECKING"
+        return test.id in (names or {"TYPE_CHECKING"})
     return isinstance(test, ast.Attribute) and test.attr == "TYPE_CHECKING"
 
 
@@ -774,9 +795,10 @@ def _type_only_ranges(tree) -> list[tuple[int, int]]:
     in the `orelse`, and treating it as type-only would drop a real edge to fix a false one.
     """
     import ast
+    names = _type_checking_names(tree)
     out: list[tuple[int, int]] = []
     for node in ast.walk(tree):
-        if isinstance(node, ast.If) and _is_type_checking(node.test):
+        if isinstance(node, ast.If) and _is_type_checking(node.test, names):
             for stmt in node.body:
                 out.append((stmt.lineno, getattr(stmt, "end_lineno", stmt.lineno) or stmt.lineno))
     return out

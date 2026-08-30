@@ -121,7 +121,8 @@ Filled in during the review. The "verified" rows were unknown before it.
 | `__init__.py` `from . import x` / `from .m import N` | fixed — #41 |
 | `if TYPE_CHECKING:` bare and dotted | fixed — #37 |
 | `if TYPE_CHECKING: … else:` | covered |
-| **`TYPE_CHECKING` bound under an alias** | **gap — found during this review, unfixed** |
+| `if not TYPE_CHECKING:` stays runtime | covered |
+| `TYPE_CHECKING` bound under an alias | fixed — #45, found while building the matrix |
 | namespace package (PEP 420) | verified |
 | conditional `try/except ImportError` import | verified |
 | import inside a function body | verified |
@@ -129,13 +130,17 @@ Filled in during the review. The "verified" rows were unknown before it.
 | relative import at level ≥ 3 | verified |
 | two source roots (monorepo) | verified |
 | dot-directories in paths | fixed — `lstrip("./")` |
-| non-Python majority → declared-only graph | covered |
 
-The gap found: `from typing import TYPE_CHECKING as TC` followed by `if TC:` is not recognised as a guard,
-so its imports are counted as runtime edges. That is #37 surviving in an aliased spelling, found in ninety
-seconds by enumerating spellings rather than waiting for a repository to use one. The failure direction is
-the safe one (a real edge is kept, a false cycle is possible), which is why it has not shown up in a
-finding yet.
+The gap found: `from typing import TYPE_CHECKING as TC` followed by `if TC:` was not recognised as a
+guard, so its imports were counted as runtime edges — #37 surviving in an aliased spelling, found in
+ninety seconds by enumerating spellings rather than waiting for a repository to use one. **Fixed when the
+matrix was built**, along with two rows in the table below: `if not TYPE_CHECKING:` and the aliased guard
+are now cells rather than assumptions.
+
+The matrix is scoped to **import extraction**. The declared-only graph — a Go or Rust majority where
+`**Connects:**` declarations are the only edges — is model construction rather than extraction and is
+covered by its own tests in `tests/test_evaluate.py`. Putting it here would have meant a `Shape` that
+asserts something no other row asserts, which is how a table stops being readable.
 
 ## What this does not replace
 

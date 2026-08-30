@@ -7,6 +7,11 @@ type-only; on httpx, `_exceptions.py`'s only internal import is
 
 The idiom is what makes this systematic rather than incidental: a type-only back-edge is *how* a Python
 project breaks a real import cycle, so the graph was most wrong exactly where the code was most careful.
+
+The **graph shapes** — bare, dotted, aliased, `else:`, negated — are cells in the shape matrix
+(`tests/shapes.py`, issue #45). What stays here is what the matrix does not express: that a
+type-only edge produces no cycle in `evaluate`, that it suppresses a `stale` finding without
+demanding a declaration, and that `_imports_of` partitions rather than filters.
 """
 
 from archagent.config import Config, PythonConfig, TSConfig
@@ -52,46 +57,6 @@ def test_a_type_only_back_edge_does_not_create_a_cycle(tmp_path):
     assert runtime["src/pkg/a.py"] == set(), "the type-only import is not a runtime edge"
     assert type_only["src/pkg/a.py"] == {"src/pkg/b.py"}, "but it is kept, not discarded"
     assert "cycle-subsystem" not in {f.sign for f in evaluate(cfg).findings}
-
-
-def test_the_bare_name_form_is_recognised_too(tmp_path):
-    """`from typing import TYPE_CHECKING` then `if TYPE_CHECKING:` — as common as the dotted form."""
-    cfg = _cfg(tmp_path)
-    _src(cfg, "pkg/a.py", "from typing import TYPE_CHECKING\n"
-                          "if TYPE_CHECKING:\n"
-                          "    from pkg import b\n")
-    _src(cfg, "pkg/b.py", "y = 1\n")
-    runtime, type_only = _graphs(cfg)
-    assert runtime["src/pkg/a.py"] == set()
-    assert type_only["src/pkg/a.py"] == {"src/pkg/b.py"}
-
-
-def test_an_else_branch_stays_a_runtime_import(tmp_path):
-    """`if TYPE_CHECKING: ... else: ...` puts the *runtime* import in the else. Treating the whole
-    statement as type-only would drop a real edge to fix a false one."""
-    cfg = _cfg(tmp_path)
-    _src(cfg, "pkg/a.py", "from typing import TYPE_CHECKING\n"
-                          "if TYPE_CHECKING:\n"
-                          "    from pkg import c\n"
-                          "else:\n"
-                          "    from pkg import b\n")
-    _src(cfg, "pkg/b.py", "y = 1\n")
-    _src(cfg, "pkg/c.py", "z = 1\n")
-    runtime, type_only = _graphs(cfg)
-    assert runtime["src/pkg/a.py"] == {"src/pkg/b.py"}
-    assert type_only["src/pkg/a.py"] == {"src/pkg/c.py"}
-
-
-def test_a_negated_guard_is_treated_as_runtime(tmp_path):
-    """`if not TYPE_CHECKING:` makes its body runtime code. Not matching it keeps the real edge, which
-    is the safe direction: a missed exclusion costs a false positive, a wrong one drops a dependency."""
-    cfg = _cfg(tmp_path)
-    _src(cfg, "pkg/a.py", "from typing import TYPE_CHECKING\n"
-                          "if not TYPE_CHECKING:\n"
-                          "    from pkg import b\n")
-    _src(cfg, "pkg/b.py", "y = 1\n")
-    runtime, _ = _graphs(cfg)
-    assert runtime["src/pkg/a.py"] == {"src/pkg/b.py"}
 
 
 def test_a_declared_edge_backed_only_by_a_type_only_import_is_not_stale(tmp_path):
