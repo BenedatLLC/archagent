@@ -59,6 +59,23 @@ Issue #26 is why: four of seven labelled `layer-inversion` findings came from pa
 the bottom rank — so everything the tests imported read as upward. Correcting the two tiers on wardrowbe
 takes that signal from seven findings to two, dropping exactly the five a reviewer dismissed.
 
+**The JS/TS scanner reads `tsconfig` aliases, because a bare specifier is not always a package.**
+`_resolve_spec` tries relative resolution first and then the `compilerOptions.paths` prefixes collected
+from every `tsconfig*.json` in the tree — resolved against each file's own directory and `baseUrl`,
+since `"@/*": ["./*"]` in a frontend package means that package, not the repository root.
+
+The gap this closed is the largest of the period. An aliased import looks exactly like an npm package, so
+it resolved to nothing: on wardrowbe **383 of 386 frontend imports were aliased**, and the graph held 3
+edges where it should hold 356. That repository had already been used as a calibration target, so a
+round's frontend findings rested on a graph that was 99% absent — with nothing in the report to say so,
+which is the shape of every defect this module keeps producing.
+
+**`import type` is TypeScript's `TYPE_CHECKING`, and gets the same treatment.** A type-only *statement*
+is erased by the compiler and carries no runtime dependency, so it belongs in the type-only graph. The
+inline form `import { type X, val }` is deliberately not matched: it still binds `val` at runtime, so the
+edge is real, and drawing the line at the statement rather than at the word `type` is what keeps that
+correct.
+
 **`import_coverage` is how this module says what it could not resolve.** A relative import cannot
 legitimately point outside its own package — unlike `import numpy`, which resolves to nothing internal
 for good reason — so an unresolved one is a resolution defect or a file outside `source_paths`. That

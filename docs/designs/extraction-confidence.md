@@ -127,6 +127,13 @@ Filled in during the review. The "verified" rows were unknown before it.
 | conditional `try/except ImportError` import | verified |
 | import inside a function body | verified |
 | module shadowing a stdlib name | verified |
+| TS: `import type` is not a runtime edge | fixed — #48 |
+| TS: inline `import { type X, val }` keeps its edge | covered |
+| TS: tsconfig path alias | fixed — #48 |
+| TS: re-export barrel | verified — predicted broken, was not |
+| TS: `index.ts` directory resolution | verified |
+| TS: `.js` specifier resolving to a `.ts` source | verified |
+| TS: dynamic `import()` and `require()` | verified |
 | `from . import <name-defined-in-init>` | fixed — #46, found by the coverage counter |
 | relative import at level ≥ 3 | verified |
 | two source roots (monorepo) | verified |
@@ -137,6 +144,19 @@ guard, so its imports were counted as runtime edges — #37 surviving in an alia
 ninety seconds by enumerating spellings rather than waiting for a repository to use one. **Fixed when the
 matrix was built**, along with two rows in the table below: `if not TYPE_CHECKING:` and the aliased guard
 are now cells rather than assumptions.
+
+**The JS/TS half was added in #48, and it corrected a prediction.** The issue predicted that re-export
+barrels would be the defect, by analogy with #41 — the file where re-exports live, and therefore the file
+whose edges matter most. That was wrong: the regex handles `export * from` because `export` is in the
+alternation. The two real defects were `import type` counted as a runtime dependency (the TypeScript
+spelling of #37, present in 34 obstudio files and 17 wardrowbe files) and `tsconfig` path aliases
+resolving to nothing at all.
+
+The second is the largest extraction defect found in this whole period. An aliased specifier is bare and
+looked like an npm package, and on wardrowbe **383 of 386 frontend imports were aliased** — so the graph
+held **3 edges where it should hold 356**. wardrowbe had already been used as a calibration target, which
+means round 3's frontend findings rested on a graph that was 99% absent, silently, with nothing in the
+report to say so. Reasoning by analogy predicted the wrong cell; enumerating the idioms found both.
 
 The matrix is scoped to **import extraction**. The declared-only graph — a Go or Rust majority where
 `**Connects:**` declarations are the only edges — is model construction rather than extraction and is

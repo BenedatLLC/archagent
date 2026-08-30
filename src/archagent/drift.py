@@ -597,14 +597,13 @@ def _import_graph(root: Path, config: Config, source_files: set[str],
     not a layer violation, and not fan-in (#37).
     """
     py_index = _module_index(source_files, config.python.source_paths)
+    aliases = _tsconfig_aliases(root) if any(f.endswith(_JS_EXTS) for f in source_files) else {}
     graph: dict[str, set[str]] = {}
     for f in source_files:
         if f.endswith(".py"):
             graph[f] = _internal_targets(root, f, config.python.source_paths, py_index, type_only)
         elif f.endswith(_JS_EXTS):
-            # No equivalent in the regex scan: TS `import type` exists but the JS/TS path does not parse
-            # well enough to tell, so its edges stay in the runtime graph and out of the type-only one.
-            graph[f] = set() if type_only else _js_targets(root, f, source_files)
+            graph[f] = _js_targets(root, f, source_files, type_only, aliases)
     return graph
 
 
@@ -618,7 +617,15 @@ _JS_IMPORT = re.compile(
 )
 
 
-def _js_targets(root: Path, rel_file: str, source_files: set[str]) -> set[str]:
+#: A statement that imports *only* types. `import type { X } from './y'` is erased by the compiler and
+#: does not exist at runtime — the TypeScript spelling of `if TYPE_CHECKING:`, and the same defect as #37
+#: if counted as a dependency. Deliberately not matching the inline form `import { type X, val }`, which
+#: keeps a runtime binding and so keeps a real edge.
+_JS_TYPE_ONLY = re.compile(r"""(?:import|export)\s+type\s""")
+
+
+def _js_targets(root: Path, rel_file: str, source_files: set[str],
+                type_only: bool = False, aliases: dict[str, list[str]] | None = None) -> set[str]:
     try:
         text = (root / rel_file).read_text()
     except OSError:
@@ -626,11 +633,82 @@ def _js_targets(root: Path, rel_file: str, source_files: set[str]) -> set[str]:
     targets: set[str] = set()
     for m in _JS_IMPORT.finditer(text):
         spec = m.group(1) or m.group(2) or m.group(3)
-        if spec and spec.startswith("."):  # relative -> internal; bare specifiers are npm packages
-            resolved = _resolve_js(rel_file, spec, source_files)
-            if resolved and resolved != rel_file:
-                targets.add(resolved)
+        if not spec:
+            continue
+        is_type = bool(_JS_TYPE_ONLY.match(m.group(0)))
+        if is_type != type_only:
+            continue
+        resolved = _resolve_spec(root, rel_file, spec, source_files, aliases or {})
+        if resolved and resolved != rel_file:
+            targets.add(resolved)
     return targets
+
+
+def _resolve_spec(root: Path, rel_file: str, spec: str, source_files: set[str],
+                  aliases: dict[str, list[str]]) -> str | None:
+    """A module specifier to a file in the source set, relative or aliased.
+
+    A bare specifier is normally an npm package and correctly resolves to nothing — but a `tsconfig`
+    path alias is *also* bare, and on wardrowbe **383 of 386 imports were aliased**. Treating those as
+    third-party made archagent blind to essentially the whole frontend import graph of a repository it
+    had already used as a calibration target, silently and without a single finding to show for it.
+    """
+    if spec.startswith("."):
+        return _resolve_js(rel_file, spec, source_files)
+    for prefix, targets in aliases.items():
+        if not spec.startswith(prefix):
+            continue
+        rest = spec[len(prefix):]
+        for base in targets:
+            cand = posixpath.normpath(posixpath.join(base, rest)) if rest else base
+            hit = _resolve_js_abs(cand, source_files)
+            if hit:
+                return hit
+    return None
+
+
+def _resolve_js_abs(target: str, source_files: set[str]) -> str | None:
+    """The same candidate expansion as `_resolve_js`, for a path already rooted at the repository."""
+    cands = [target] + [target + e for e in _JS_EXTS] + [posixpath.join(target, "index" + e) for e in _JS_EXTS]
+    if target.endswith(".js"):
+        cands += [target[:-3] + ".ts", target[:-3] + ".tsx"]
+    return next((c for c in cands if c in source_files), None)
+
+
+def _tsconfig_aliases(root: Path) -> dict[str, list[str]]:
+    """`compilerOptions.paths`, flattened to prefix -> repo-relative directories.
+
+    Resolved against the tsconfig's own directory and its `baseUrl`, because `"@/*": ["./*"]` in
+    `frontend/tsconfig.json` means `frontend/`, not the repository root. Every tsconfig in the tree is
+    read: a monorepo has one per package and they do not agree.
+    """
+    out: dict[str, list[str]] = {}
+    for cfg in sorted(root.glob("**/tsconfig*.json")):
+        if any(part in {"node_modules", ".git", "dist", "build"} for part in cfg.parts):
+            continue
+        try:
+            # tsconfig is JSON-with-comments in practice; strip line comments and trailing commas.
+            raw = re.sub(r"//[^\n]*", "", cfg.read_text())
+            raw = re.sub(r",(\s*[}\]])", r"\1", raw)
+            data = json.loads(raw)
+        except (OSError, ValueError):
+            continue
+        opts = data.get("compilerOptions") or {}
+        paths = opts.get("paths") or {}
+        if not paths:
+            continue
+        here = cfg.parent.relative_to(root).as_posix()
+        base = opts.get("baseUrl", ".")
+        for pattern, targets in paths.items():
+            prefix = pattern[:-1] if pattern.endswith("*") else pattern
+            dests = []
+            for tgt in targets if isinstance(targets, list) else [targets]:
+                tgt = tgt[:-1] if tgt.endswith("*") else tgt
+                joined = posixpath.normpath(posixpath.join(here, base, tgt)) if here not in ("", ".") \
+                    else posixpath.normpath(posixpath.join(base, tgt))
+                dests.append("" if joined == "." else joined)
+            out.setdefault(prefix, []).extend(dests)
+    return out
 
 
 def _resolve_js(rel_file: str, spec: str, source_files: set[str]) -> str | None:

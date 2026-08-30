@@ -38,6 +38,9 @@ class Shape:
     type_only: dict[str, set[str]] = field(default_factory=dict)
     #: What `init` should guess for `python.root_package`, where that is the point of the shape.
     guessed_root_package: str | None = None
+    #: Which analyser this cell exercises. The JS/TS scanner is a regex rather than an `ast` walk, so it
+    #: has more ways to be quietly wrong, not fewer — and had no fixtures at all until #48.
+    languages: tuple[str, ...] = ("python",)
     #: Why this cell exists — the defect it pins, or that it was verified and found already sound.
     note: str = ""
 
@@ -216,5 +219,77 @@ SHAPES: list[Shape] = [
         runtime={"src/pkg/a.py": {"src/pkg/json.py", "src/pkg/__init__.py"}},
         note="The relative import resolves internally; the absolute one is the standard library and must "
              "not. Verified; already sound.",
+    ),
+
+# --- JS/TS (#48) ------------------------------------------------------------------------
+#
+# Predicted before probing: re-export barrels would be the defect, by analogy with #41. **Wrong** — the
+# regex handles `export * from` because `export` is in the alternation. The two real defects were
+# `import type` counted as a runtime dependency, and `tsconfig` path aliases resolving to nothing.
+#
+# That is the argument for a matrix stated as plainly as it can be: enumerating the idioms found what
+# reasoning by analogy did not.
+
+    Shape(
+        name="TS: `import type` is not a runtime edge",
+        files={"src/a.ts": "import type { Thing } from './b';\nexport const x = 1;\n",
+               "src/b.ts": "export type Thing = number;\n"},
+        languages=("ts",),
+        type_only={"src/a.ts": {"src/b.ts"}},
+        note="The TypeScript spelling of `if TYPE_CHECKING:` — erased by the compiler, absent at "
+             "runtime, and counted as a dependency until #48. Present in 34 obstudio files and 17 "
+             "wardrowbe files, so this was inventing edges across the whole corpus.",
+    ),
+    Shape(
+        name="TS: inline `import { type X, val }` keeps its edge",
+        files={"src/a.ts": "import { type Thing, val } from './b';\n",
+               "src/b.ts": "export const val = 1;\n"},
+        languages=("ts",),
+        runtime={"src/a.ts": {"src/b.ts"}},
+        note="The inline type modifier still leaves a runtime binding, so the edge is real. Drawing the "
+             "line at the statement form rather than the word `type` is what keeps this correct.",
+    ),
+    Shape(
+        name="TS: tsconfig path alias",
+        files={"src/a.ts": "import { x } from '@/lib/util';\n",
+               "src/lib/util.ts": "export const x = 1;\n",
+               "tsconfig.json": '{"compilerOptions":{"paths":{"@/*":["src/*"]}}}\n'},
+        languages=("ts",),
+        runtime={"src/a.ts": {"src/lib/util.ts"}},
+        note="An aliased specifier is bare and looked like an npm package. On wardrowbe **383 of 386 "
+             "imports were aliased**, so the frontend graph held 3 edges where it should hold 356 — a "
+             "repository already used as a calibration target, blind and silent.",
+    ),
+    Shape(
+        name="TS: re-export barrel",
+        files={"src/index.ts": "export * from './a';\nexport { B } from './b';\n",
+               "src/a.ts": "export const a = 1;\n", "src/b.ts": "export const B = 2;\n"},
+        languages=("ts",),
+        runtime={"src/index.ts": {"src/a.ts", "src/b.ts"}},
+        note="Predicted to be broken by analogy with #41 and found already sound. Recorded because a "
+             "verified cell is the answer to 'did anyone check?' and a wrong prediction is worth "
+             "keeping visible.",
+    ),
+    Shape(
+        name="TS: `index.ts` directory resolution",
+        files={"src/app.ts": "import { x } from './lib';\n", "src/lib/index.ts": "export const x = 1;\n"},
+        languages=("ts",),
+        runtime={"src/app.ts": {"src/lib/index.ts"}},
+        note="Verified; already sound.",
+    ),
+    Shape(
+        name="TS: `.js` specifier resolving to a `.ts` source",
+        files={"src/a.ts": "import { x } from './b.js';\n", "src/b.ts": "export const x = 1;\n"},
+        languages=("ts",),
+        runtime={"src/a.ts": {"src/b.ts"}},
+        note="NodeNext writes the emitted extension. Handled in `_resolve_js` and untested until now.",
+    ),
+    Shape(
+        name="TS: dynamic `import()` and `require()`",
+        files={"src/a.ts": "const m = await import('./b');\n", "src/b.ts": "export const x = 1;\n",
+               "src/c.js": "const b = require('./d');\n", "src/d.js": "module.exports = 1;\n"},
+        languages=("ts",),
+        runtime={"src/a.ts": {"src/b.ts"}, "src/c.js": {"src/d.js"}},
+        note="Both are real dependencies and both were matched; asserted rather than assumed.",
     ),
 ]

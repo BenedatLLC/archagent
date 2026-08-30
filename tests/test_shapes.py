@@ -25,7 +25,7 @@ def _build(tmp_path: Path, shape: Shape) -> Config:
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(text)
     return Config(
-        project_root=tmp_path, languages=["python"],
+        project_root=tmp_path, languages=list(shape.languages),
         python=PythonConfig(root_package=shape.root_package, source_paths=list(shape.source_paths)),
         ts=TSConfig(source_paths=list(shape.source_paths)),
     )
@@ -68,6 +68,15 @@ def test_shape_root_package_guess(tmp_path, shape: Shape):
     _build(tmp_path, shape)
     got = {s.key: s.value for s in describe_settings(tmp_path, ["python"], "architecture")}
     assert got["python.root_package"] == shape.guessed_root_package, shape.name
+
+
+def test_both_analysers_are_covered():
+    """The JS/TS scanner is a regex rather than an `ast` walk, so it has more ways to be quietly wrong,
+    not fewer — and it had no fixtures at all until #48. A matrix covering only Python would be a table
+    whose empty half is invisible, which is the failure it exists to prevent."""
+    langs = {l for s in SHAPES for l in s.languages}
+    assert langs == {"python", "ts"}
+    assert sum(1 for s in SHAPES if s.languages == ("ts",)) >= 5
 
 
 def test_every_shape_explains_why_it_is_here():
