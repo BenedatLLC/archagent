@@ -59,6 +59,20 @@ Issue #26 is why: four of seven labelled `layer-inversion` findings came from pa
 the bottom rank — so everything the tests imported read as upward. Correcting the two tiers on wardrowbe
 takes that signal from seven findings to two, dropping exactly the five a reviewer dismissed.
 
+**`import_coverage` is how this module says what it could not resolve.** A relative import cannot
+legitimately point outside its own package — unlike `import numpy`, which resolves to nothing internal
+for good reason — so an unresolved one is a resolution defect or a file outside `source_paths`. That
+exactness is what makes the number safe to print rather than qualify.
+
+Counted per *statement*, because one statement emits several module candidates and only some are modules:
+`from .config import Config` yields both `pkg.config` and `pkg.config.Config`. It shares
+`_relative_targets` with the extractor for the same reason the tier vocabulary is shared — a counter
+measuring a different rule than the extractor uses would report a gap nobody could act on, or hide one.
+
+Measured on httpx with only the resolution rule varied: 18 of 88 unresolved before the initialiser fix,
+0 of 88 after. That number would have named the defect on the first run instead of waiting for a user
+test to notice a wrong `drift` result.
+
 **A type-only import is not a runtime dependency, and not nothing either.** `_imports_of` partitions
 rather than filters: imports inside `if TYPE_CHECKING:` are excluded from the runtime graph and returned
 by the same function under `type_only=True`. Everything structural reads the runtime graph, because a

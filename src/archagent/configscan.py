@@ -27,6 +27,7 @@ from __future__ import annotations
 import re
 from pathlib import Path, PurePosixPath
 
+from .coverage import Coverage
 from .mdutil import is_empty_value
 
 _KEY = r"([A-Za-z_][A-Za-z0-9_]*)"
@@ -85,10 +86,14 @@ _CODE_EXTS = (".py", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs")
 
 #: A call to `os.getenv` / `os.environ.get` / `os.environ[...]` whose key is *not* a literal. Counted so
 #: the scan can say what it could not resolve rather than quietly returning a short list.
+#: An env read whose key is *not* a literal. The lookahead sits before the whitespace, not after it:
+#: `\(\s*(?!['"])` matches `os.getenv( "LITERAL" )` anyway, because the engine backtracks `\s*` to zero
+#: characters, looks ahead at the space and succeeds. That over-counted whitespace-padded literal reads
+#: as opaque — harmless while the number was internal, and wrong once #46 put it in the report.
 _ENV_READ_ANY = [
-    re.compile(r"os\.getenv\(\s*(?!['\"])"),
-    re.compile(r"os\.environ\.get\(\s*(?!['\"])"),
-    re.compile(r"os\.environ\[\s*(?!['\"])"),
+    re.compile(r"os\.getenv\((?!\s*['\"])"),
+    re.compile(r"os\.environ\.get\((?!\s*['\"])"),
+    re.compile(r"os\.environ\[(?!\s*['\"])"),
 ]
 
 
@@ -282,8 +287,14 @@ def _braced(text: str, open_at: int, limit: int = 4000) -> str | None:
     return None
 
 
-def read_config_keys(root: Path, source_files: set[str], report_unresolved: bool = False):
-    """The environment keys the code reads. With `report_unresolved`, also how many reads were opaque."""
+def read_config_keys(root: Path, source_files: set[str], with_coverage: bool = False):
+    """The environment keys the code reads. With `with_coverage`, also what it could not resolve.
+
+    The unresolvable site is an env read whose key is not a literal — `os.getenv(name)`, where the name
+    is computed. The key is real and this scanner cannot name it, so the configuration surface it reports
+    is *incomplete by a known amount*, and saying so is the difference between a short list and a short
+    list that admits it (#46).
+    """
     keys: set[str] = set()
     texts: dict[str, str] = {}
     for rel in source_files:
@@ -299,11 +310,13 @@ def read_config_keys(root: Path, source_files: set[str], report_unresolved: bool
         if rel.endswith(".py"):
             wrappers.update(_env_wrappers(text))
 
-    unresolved = 0
+    literal_sites = unresolved = 0
     for text in texts.values():
         keys |= _settings_keys(text)
         for pat in _ENV_READS:
-            keys.update(pat.findall(text))
+            found = pat.findall(text)
+            literal_sites += len(found)
+            keys.update(found)
         # A key written for another process is part of the configuration surface too (issue #29).
         for pat in _ENV_WRITES:
             keys.update(pat.findall(text))
@@ -316,7 +329,15 @@ def read_config_keys(root: Path, source_files: set[str], report_unresolved: bool
             for m in re.finditer(rf"\b{re.escape(fn)}\({arg}['\"]" + _KEY, text):
                 keys.add(m.group(1))
 
-    return (keys, unresolved) if report_unresolved else keys
+    if not with_coverage:
+        return keys
+    cov = Coverage(
+        what="environment reads", unit="read",
+        seen=literal_sites + unresolved, resolved=literal_sites,
+        # A repository that reads no environment at all is ordinary — a library, a CLI with only flags.
+        empty_is_normal=True,
+    )
+    return keys, cov
 
 
 def declared_config_keys(root: Path, doc_text: str) -> set[str]:

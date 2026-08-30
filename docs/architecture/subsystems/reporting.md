@@ -19,6 +19,12 @@ the docs are internally consistent.
 
 ## Key abstractions
 
+**`graph` reads the version from a leaf, not from the package root.** `from . import __version__` made
+this subsystem (domain) import `__init__.py`, which the model groups with `cli` (ui) — an inversion whose
+substance was false, since a provenance stamp needs the version and not the command line. `version.py`
+exists for that. Found by the import coverage counter, which reported those imports unresolved and so
+revealed a missing edge, which in turn revealed the modelling problem behind it.
+
 **Coverage and depth are different questions, and only the first was measured.** `status` reports the
 share of files some subsystem claims. An artifact can score 100% on that while a reader finds its
 documents too thin to trace a change through — which is exactly what happened on a reviewed artifact, and

@@ -16,10 +16,24 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from .coverage import Counter, Coverage
+
 # --- ORM ownership: the file that declares the table/mapping owns that data ---------------
 _TABLENAME = re.compile(r"""__tablename__\s*=\s*["']([A-Za-z_]\w*)["']""")          # SQLAlchemy ORM
 _DB_TABLE = re.compile(r"""db_table\s*=\s*["']([A-Za-z_]\w*)["']""")                # Django Meta.db_table
 _TABLE_CTOR = re.compile(r"""\bTable\(\s*["']([A-Za-z_]\w*)["']""")                 # SQLAlchemy Core Table("x")
+
+#: The same declarations with a *computed* name — `__tablename__ = _prefix + "orders"`. The shape is
+#: recognised and the name cannot be read, which is a table this scanner knows exists and cannot report.
+#: Counting them is the difference between a short list of tables and a short list that admits it (#46).
+#: The lookahead must sit *before* the whitespace, not after it. `=\s*(?!["'])` matches
+#: `__tablename__ = "orders"` anyway: the engine backtracks `\s*` to zero characters, looks ahead at the
+#: space, and succeeds. Written the wrong way round first, and caught by its own test.
+_TABLE_ANY = [
+    re.compile(r"""__tablename__\s*=(?!\s*["'])"""),
+    re.compile(r"""db_table\s*=(?!\s*["'])"""),
+    re.compile(r"""\bTable\((?!\s*["'])"""),
+]
 
 # --- uses: raw SQL + document-collection access -------------------------------------------
 # Capture the SQL keyword (group 1) alongside the table (group 2) so we can require the *companion* verb of
@@ -75,6 +89,27 @@ def _sql_context_ok(text: str, m: "re.Match[str]") -> bool:
     if kw == "UPDATE":
         return bool(_SET_KW.search(after))
     return False
+
+
+def table_coverage(root: Path, source_files: set[str]) -> Coverage:
+    """Table declarations seen, against those whose name could be read.
+
+    Exact rather than heuristic: a `__tablename__ =` whose right-hand side is not a string literal is
+    unambiguously a table declaration whose name this scanner cannot name. It is not a guess about
+    whether the code is a table.
+    """
+    counter = Counter("table declarations", unit="declaration", empty_is_normal=True)
+    for rel in sorted(source_files):
+        text = _read(root, rel)
+        if text is None:
+            continue
+        for rx in (_TABLENAME, _DB_TABLE, _TABLE_CTOR):
+            for _ in rx.finditer(text):
+                counter.site(True)
+        for rx in _TABLE_ANY:
+            for m in rx.finditer(text):
+                counter.site(False, f"{rel}:{text[:m.start()].count(chr(10)) + 1}")
+    return counter.finish()
 
 
 def table_defs(root: Path, rel: str) -> set[str]:

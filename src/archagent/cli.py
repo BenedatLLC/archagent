@@ -621,6 +621,16 @@ def evaluate(
             console.print(f"  [dim]{fam}[/] — {why}")
         console.print("")
 
+    # An inactive family never ran. This is the other case, and the more misleading one: a family that
+    # *did* run, over a view it could not fully read. Those runs produce findings and therefore look
+    # like working results (#46).
+    if getattr(result, "extraction", None):
+        console.print("[bold]Incomplete extraction[/] — these scanners ran over a partial view, so their "
+                      "findings are a floor rather than a census:")
+        for cov in result.extraction:
+            console.print(f"  [yellow]{cov.describe()}[/]")
+        console.print("")
+
     if not findings:
         console.print("[green]No system-level smells found in the active signals.[/]")
         return

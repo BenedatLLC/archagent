@@ -22,7 +22,8 @@ from pathlib import Path
 
 from .cochange import mine_cochange, tree_newer_than
 from .config import Config
-from .configscan import is_test_path as _is_test_path
+from .configscan import is_test_path as _is_test_path, read_config_keys as _read_config_keys
+from .coverage import Coverage
 from .connscan import sync_call_targets
 from .datamap import store_touches, table_defs
 from .deployscan import extract_service_edges
@@ -38,6 +39,7 @@ from .originscan import mutating_routes as _mutating_routes, scan as _origin_sca
 from .webapi import extract_routes
 from .drift import (
     _SYNC_KINDS,
+    import_coverage,
     _connectors,
     _covers_globs,
     _git_available,
@@ -180,6 +182,10 @@ class EvaluationResult:
     # Coverage of the evaluation itself: which signal families were INACTIVE and why (a group that emits
     # zero findings for lack of metadata is indistinguishable, from the count alone, from a clean one).
     inactive: list["Inactive"] = field(default_factory=list)
+    #: What each extractor could not see (#46). An inactive family says a signal never ran; this says a
+    #: signal ran over an *incomplete* view, which is the case that otherwise looks like a clean result.
+    #: Only unsound entries are carried — a scanner that resolved everything has nothing to report.
+    extraction: list["Coverage"] = field(default_factory=list)
     # History hygiene (regime B): so a reader knows whether to trust the co-change signals.
     history_ran: bool = False
     commits_seen: int = 0          # non-merge commits in the window
@@ -388,7 +394,32 @@ def evaluate(config: Config, history: bool = True, since: str | None = None,
     _mark_unverified(model, result)
     _attach_investigations(config.architecture_dir, result)
     result.inactive = _coverage(model, result, history_requested=history)
+    result.extraction = _extraction_coverage(config)
     return result
+
+
+def _extraction_coverage(config: Config) -> list[Coverage]:
+    """What each extractor could not see, keeping only the entries that admit a gap.
+
+    An `Inactive` entry says a signal family never ran. This says a family ran over an **incomplete
+    view** — the case that produces findings and therefore looks like a working result. A run reporting
+    three findings from a scanner that could read two thirds of its sites is not the same as a run
+    reporting three findings from a complete scan, and until now the report could not tell them apart.
+
+    Sound extractors are dropped rather than listed. The report already has to earn its length, and
+    `finding_coverage_honesty` scored 5 of 5 in calibration round 5 by naming what was missing rather
+    than everything that was fine.
+    """
+    from .datamap import table_coverage
+    from .webapi import route_coverage
+    src = _source_files(config)
+    out = [
+        import_coverage(config.project_root, config, src),
+        _read_config_keys(config.project_root, src, with_coverage=True)[1],
+        route_coverage(config.project_root, src),
+        table_coverage(config.project_root, src),
+    ]
+    return [c for c in out if not c.sound]
 
 
 #: Confidence, one notch down. A finding standing on a declaration nobody has corroborated is weaker

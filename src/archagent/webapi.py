@@ -18,6 +18,8 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .coverage import Counter, Coverage
+
 try:
     import yaml
 except ModuleNotFoundError:  # pragma: no cover
@@ -96,6 +98,42 @@ def _methods_kwarg(call: ast.Call) -> list[str] | None:
         if kw.arg == "methods" and isinstance(kw.value, (ast.List, ast.Tuple)):
             return [e.value for e in kw.value.elts if isinstance(e, ast.Constant) and isinstance(e.value, str)]
     return None
+
+
+def route_coverage(root: Path, source_files: set[str]) -> Coverage:
+    """Route decorators recognised, against those whose path could be read.
+
+    The unresolvable site is narrow on purpose: a decorator whose attribute is an HTTP verb **and** whose
+    first argument is not a string literal — `@app.get(PREFIX + "/x")`. That is a route the scanner knows
+    is there and cannot name.
+
+    Deliberately not counted: a verb-named decorator whose first argument *is* a literal that does not
+    start with `/`. `@cache.get("key")` is not a route, and counting it would make this a guess about
+    whether code is a route rather than a fact about what could be read — which is the line between a
+    counter worth reporting loudly and one worth ignoring.
+    """
+    counter = Counter("route decorators", unit="decorator", empty_is_normal=True)
+    for rel in sorted(f for f in source_files if f.endswith(".py")):
+        try:
+            tree = ast.parse((root / rel).read_text())
+        except (SyntaxError, OSError, ValueError):
+            continue
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            for dec in node.decorator_list:
+                if not (isinstance(dec, ast.Call) and isinstance(dec.func, ast.Attribute)):
+                    continue
+                if dec.func.attr not in _VERBS and dec.func.attr != "route":
+                    continue
+                path = _first_str(dec)
+                if path is not None:
+                    if path.startswith("/"):
+                        counter.site(True)
+                    continue          # a literal that is not a path: not a route, not a gap
+                if dec.args or dec.keywords:
+                    counter.site(False, f"{rel}:{dec.lineno}")
+    return counter.finish()
 
 
 def _decorator_routes(tree: ast.AST, rel: str) -> list[Route]:

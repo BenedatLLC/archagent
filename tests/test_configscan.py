@@ -89,9 +89,11 @@ def test_unresolved_reads_are_reported_rather_than_dropped(tmp_path):
         "val = os.getenv(KEY)\n"
         "other = os.environ[compute()]\n"
         "fine = os.getenv('LITERAL_KEY')\n")
-    keys, unresolved = read_config_keys(tmp_path, {"a.py"}, report_unresolved=True)
+    keys, cov = read_config_keys(tmp_path, {"a.py"}, with_coverage=True)
     assert keys == {"LITERAL_KEY"}
-    assert unresolved == 2, "a non-literal read must be counted, not silently dropped"
+    assert cov.seen == 3 and cov.resolved == 1, "two non-literal reads, counted rather than dropped"
+    assert not cov.sound, "the surface it reports is incomplete by a known amount"
+    assert "2 of 3" in cov.describe()
 
 
 def test_config_read_only_in_a_test_is_not_part_of_the_surface(tmp_path):
@@ -261,3 +263,19 @@ def test_python_environ_writes_count_too(tmp_path):
     (tmp_path / "a.py").write_text(
         "import os\nos.environ['CUDA_VISIBLE_DEVICES'] = '0'\nos.environ.setdefault('TOKENIZERS', '1')\n")
     assert {"CUDA_VISIBLE_DEVICES", "TOKENIZERS"} <= read_config_keys(tmp_path, {"a.py"})
+
+
+def test_a_whitespace_padded_literal_read_is_not_counted_as_opaque(tmp_path):
+    """`os.getenv( "KEY" )` is a literal read, however it is spaced.
+
+    The pattern was `\\(\\s*(?!['"])`, which matches it anyway: the engine backtracks `\\s*` to zero
+    characters, looks ahead at the space and succeeds. Harmless while the count was internal, and wrong
+    once #46 put it in front of a reader as "this scan was incomplete"."""
+    (tmp_path / "a.py").write_text(
+        "import os\n"
+        "a = os.getenv( 'PADDED' )\n"
+        "b = os.environ[ 'ALSO_PADDED' ]\n"
+        "c = os.getenv(computed)\n")
+    keys, cov = read_config_keys(tmp_path, {"a.py"}, with_coverage=True)
+    assert {"PADDED", "ALSO_PADDED"} <= keys
+    assert cov.seen - cov.resolved == 1, "only the computed read is opaque"

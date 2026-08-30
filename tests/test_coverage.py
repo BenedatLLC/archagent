@@ -153,3 +153,91 @@ def test_an_unscoped_rule_is_unaffected(tmp_path):
     cfg = _repo(tmp_path, {"pkg/a.py": "print('x')\n"}, source_paths=(".",))
     res = generate([_inv("STR-1", "forbid-pattern print($$$)")], cfg)
     assert res.astgrep_ids == ["STR-1"]
+
+
+# --- the remaining extractors (step 6) ------------------------------------------------------
+
+def test_a_route_whose_path_is_computed_is_counted(tmp_path):
+    """`@app.get(PREFIX + "/x")` is a route the scanner knows is there and cannot name."""
+    from archagent.webapi import route_coverage
+    (tmp_path / "api.py").write_text(
+        'PREFIX = "/v1"\n'
+        '@app.get("/health")\n'
+        'def health(): ...\n'
+        '@app.get(PREFIX + "/users")\n'
+        'def users(): ...\n')
+    cov = route_coverage(tmp_path, {"api.py"})
+    assert cov.seen == 2 and cov.resolved == 1
+    assert cov.examples == ("api.py:4",)
+
+
+def test_a_verb_named_decorator_that_is_not_a_route_is_not_counted(tmp_path):
+    """The line between a counter worth reporting loudly and one worth ignoring. `@cache.get("key")`
+    has a verb-shaped name and a literal that is not a path — counting it would make this a guess about
+    whether code is a route rather than a fact about what could be read."""
+    from archagent.webapi import route_coverage
+    (tmp_path / "svc.py").write_text('@cache.get("session-key")\ndef f(): ...\n')
+    cov = route_coverage(tmp_path, {"svc.py"})
+    assert cov.seen == 0 and cov.sound
+
+
+def test_a_table_name_that_is_computed_is_counted(tmp_path):
+    """`__tablename__ = _prefix + "orders"` is unambiguously a table declaration whose name cannot be
+    read. Exact, not a guess about whether the code defines a table."""
+    from archagent.datamap import table_coverage
+    (tmp_path / "m.py").write_text(
+        'class A:\n    __tablename__ = "orders"\n'
+        'class B:\n    __tablename__ = PREFIX + "items"\n')
+    cov = table_coverage(tmp_path, {"m.py"})
+    assert cov.seen == 2 and cov.resolved == 1
+    assert not cov.sound
+
+
+def test_a_repository_with_no_tables_or_routes_is_sound(tmp_path):
+    """`empty_is_normal` where it genuinely is: most files declare no tables and serve no routes, and a
+    library serves none at all. The counter must not cry wolf on every ordinary repository."""
+    from archagent.datamap import table_coverage
+    from archagent.webapi import route_coverage
+    (tmp_path / "a.py").write_text("x = 1\n")
+    assert table_coverage(tmp_path, {"a.py"}).sound
+    assert route_coverage(tmp_path, {"a.py"}).sound
+
+
+# --- the evaluate report (step 7) -----------------------------------------------------------
+
+def _evaluable(tmp, extra=""):
+    (tmp / "architecture" / "subsystems").mkdir(parents=True)
+    (tmp / "src" / "pkg").mkdir(parents=True)
+    (tmp / "src" / "pkg" / "__init__.py").write_text("")
+    (tmp / "src" / "pkg" / "a.py").write_text("x = 1\n" + extra)
+    (tmp / "architecture" / "subsystems" / "a.md").write_text("# A\n\n**Covers:** `src/pkg/**`\n")
+    return Config(project_root=tmp, languages=["python"],
+                  python=PythonConfig(root_package="pkg", source_paths=["src"]),
+                  ts=TSConfig(source_paths=["src"]))
+
+
+def test_a_partial_scan_is_reported_next_to_the_findings(tmp_path):
+    """The case an `Inactive` entry cannot express. An inactive family never ran; this family *did* run,
+    over a view it could not fully read — so it produces findings and looks like a working result."""
+    from archagent.evaluate import evaluate
+    cfg = _evaluable(tmp_path, "import os\nv = os.getenv(NAME)\n")
+    got = evaluate(cfg, history=False).extraction
+    assert any("environment reads" in c.describe() for c in got)
+
+
+def test_a_complete_scan_is_not_listed(tmp_path):
+    """Sound extractors are dropped. The report has to earn its length, and listing everything that went
+    right is how the part that went wrong gets skipped."""
+    from archagent.evaluate import evaluate
+    cfg = _evaluable(tmp_path, "import os\nv = os.getenv('REAL')\n")
+    assert evaluate(cfg, history=False).extraction == []
+
+
+def test_incomplete_extraction_is_not_confusable_with_an_inactive_family(tmp_path):
+    """Two different statements about the same run: 'this never ran' and 'this ran over a partial view'.
+    Rendering them alike would collapse the distinction the whole coverage report exists to draw."""
+    import inspect
+    from archagent import cli
+    src = inspect.getsource(cli.evaluate_cmd if hasattr(cli, "evaluate_cmd") else cli.evaluate)
+    assert "Incomplete extraction" in src and "Inactive signals" in src
+    assert "a floor rather than a census" in src

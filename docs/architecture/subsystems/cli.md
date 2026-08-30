@@ -91,6 +91,15 @@ imports as one theme: the terminal language overstating what the extractors esta
 wording or tiering in this module and its callers, not extraction defects — which is the same conclusion
 calibration round 5 reached from the other direction.
 
+**"This never ran" and "this ran over a partial view" are different sentences.** `evaluate`'s report has
+carried the first for a while as `Inactive signals`. The second is newer and more misleading, because a
+scanner reading two thirds of its sites still *produces findings* — so the run looks like it worked.
+`Incomplete extraction` names those, and says what the findings then are: a floor, not a census.
+
+Only unsound extractors are listed. Reporting everything that went right is how the part that went wrong
+gets skipped, and the coverage report already scored full marks in calibration round 5 by naming what was
+missing rather than everything that was fine.
+
 **A number is presented with the confidence its evidence supports.** `status` led with 100% coverage in a
 full-width green bar while its own depth table marked the same subsystem `thin` at 3.6 words per file. The
 number was right; the impression was not. The table now says it counts *files claimed by a glob*, the
