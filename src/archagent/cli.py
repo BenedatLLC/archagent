@@ -41,7 +41,7 @@ console = Console()
 
 def _version_callback(value: bool) -> None:
     if value:
-        from . import __version__
+        from .version import __version__
         # Plain `print`, not `console.print`: rich highlights a bare version as a number and emits colour
         # codes, and the first consumer of this is a script pinning what produced a scorecard.
         print(__version__)
@@ -1109,6 +1109,20 @@ def modules(project: Path = typer.Option(Path("."), help="Target repo root")) ->
             table.add_row(m + mark, f)
     console.print(table)
     console.print(f"\n[bold]{len(mapping)}[/] module(s) from {sum(len(f) for f in mapping.values())} file(s).")
+
+    # What the resolver could *not* do. A relative import cannot legitimately point outside its own
+    # package — unlike `import numpy`, which resolves to nothing internal for good reason — so an
+    # unresolved one is a resolution defect or a file outside `source_paths`, and both are worth saying.
+    # This command exists for exactly this class of diagnosis, and until #46 it could only report the
+    # total failure (no modules at all) and not the partial one.
+    from .drift import _source_files, import_coverage
+    cov = import_coverage(config.project_root, config, _source_files(config))
+    if cov.sound or cov.examined_nothing:
+        console.print(f"[dim]{cov.describe()}.[/]")
+    else:
+        console.print(f"\n[yellow]{cov.describe()}[/]")
+        console.print("  [dim]A relative import names something inside its own package, so this is a "
+                      "resolution failure or a file outside `source_paths` — not a normal result.[/]")
 
 
 def main() -> None:

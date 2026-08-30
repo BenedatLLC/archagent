@@ -1,5 +1,7 @@
 """Generating checker configs from invariants (single source -> generate)."""
 
+from pathlib import Path
+
 from archagent.config import Config, PythonConfig, TSConfig
 from archagent.generate import generate
 from archagent.invariants import Invariant
@@ -42,8 +44,21 @@ def test_tier_prose_is_not_generated(tmp_path):
     assert any(inv_id == "STR-P" for inv_id, _ in res.skipped)
 
 
+def _scoped_files(tmp: Path) -> None:
+    """The files a scoped rule's globs must actually select.
+
+    Before #46 these fixtures generated a rule against paths that did not exist, which is precisely the
+    condition that made a rule pass over nothing on dspy — so the fixture was modelling the bug.
+    """
+    for rel in ("src/app/__init__.py", "src/app/workflow.py", "src/app/config.py"):
+        p = tmp / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text("x = 1\n")
+
+
 def test_structural_astgrep_scoped_in(tmp_path):
     cfg = _cfg(tmp_path)
+    _scoped_files(tmp_path)   # a scope must match something, or the rule is skipped (#46)
     res = generate([_inv(id="STR-2", type="STRUCTURAL",
                          rule="forbid-pattern print($$$) in app.workflow")], cfg)
     assert res.astgrep_ids == ["STR-2"]
@@ -54,6 +69,7 @@ def test_structural_astgrep_scoped_in(tmp_path):
 
 def test_structural_astgrep_scoped_outside(tmp_path):
     cfg = _cfg(tmp_path)
+    _scoped_files(tmp_path)
     generate([_inv(id="D", type="STRUCTURAL", rule="forbid-pattern foo() outside app.config")], cfg)
     y = (cfg.generated_dir / "sgrules" / "D.yml").read_text()
     assert "ignores:" in y and "src/app/config.py" in y

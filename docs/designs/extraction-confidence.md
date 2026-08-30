@@ -127,6 +127,7 @@ Filled in during the review. The "verified" rows were unknown before it.
 | conditional `try/except ImportError` import | verified |
 | import inside a function body | verified |
 | module shadowing a stdlib name | verified |
+| `from . import <name-defined-in-init>` | fixed — #46, found by the coverage counter |
 | relative import at level ≥ 3 | verified |
 | two source roots (monorepo) | verified |
 | dot-directories in paths | fixed — `lstrip("./")` |

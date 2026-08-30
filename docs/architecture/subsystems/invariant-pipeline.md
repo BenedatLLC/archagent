@@ -2,7 +2,7 @@
 
 **Covers:** `src/archagent/invariants.py`, `src/archagent/rules.py`, `src/archagent/generate.py`, `src/archagent/check.py`
 **Tier:** domain
-**Connects:** config via import
+**Connects:** config via import, drift via import
 
 ## Purpose
 
@@ -85,6 +85,16 @@ and `check` reported PASS.
 A scoped structural rule that enforces nothing while reporting a pass is the exact failure this tool
 exists to prevent, arriving through its own code generator. The generated globs are now normalised, and
 two tests pin both layouts.
+
+**A scope that matches nothing is refused before it can pass.** `_empty_scope` compiles a scoped rule's
+globs and checks that they select at least one file, reporting the rule as *skipped* when they do not.
+That check is the reason this subsystem imports `drift` — `_glob_files` is the same matcher the coverage
+report uses, and duplicating it would let the generator and the reporter disagree about what a glob
+selects.
+
+It has to happen at generation time. Once ast-grep has returned no violations there is nothing left to
+tell "no violations" from "nothing examined", which is exactly how a rule on dspy matched 0 of 154 call
+sites and reported PASS (#44).
 
 **Everything that could not run is reported as skipped, never as passing.** The failure this guards
 against is not a wrong answer but a clean one: when the ast-grep JSON failed to parse, the branch handling

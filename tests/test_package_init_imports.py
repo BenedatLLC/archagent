@@ -49,7 +49,7 @@ def test_a_regular_module_is_unaffected(tmp_path):
     _src(cfg, "pkg/b.py", "x = 1\n")
     _src(cfg, "pkg/c.py", "thing = 1\n")
     g = _import_graph(tmp_path, cfg, _source_files(cfg))
-    assert g["src/pkg/a.py"] == {"src/pkg/b.py", "src/pkg/c.py"}
+    assert g["src/pkg/a.py"] == {"src/pkg/b.py", "src/pkg/c.py", "src/pkg/__init__.py"}
 
 
 def test_a_nested_initialiser_resolves_its_parent_too(tmp_path):

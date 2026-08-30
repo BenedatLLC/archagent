@@ -1,6 +1,6 @@
 # extraction — the static scanners
 
-**Covers:** `src/archagent/fetchscan.py`, `src/archagent/originscan.py`, `src/archagent/configscan.py`, `src/archagent/deployscan.py`, `src/archagent/webapi.py`, `src/archagent/datamap.py`, `src/archagent/connscan.py`, `src/archagent/obsscan.py`, `src/archagent/invscan.py`, `src/archagent/mdutil.py`, `src/archagent/tiers.py`
+**Covers:** `src/archagent/fetchscan.py`, `src/archagent/originscan.py`, `src/archagent/configscan.py`, `src/archagent/deployscan.py`, `src/archagent/webapi.py`, `src/archagent/datamap.py`, `src/archagent/connscan.py`, `src/archagent/obsscan.py`, `src/archagent/invscan.py`, `src/archagent/mdutil.py`, `src/archagent/tiers.py`, `src/archagent/coverage.py`, `src/archagent/version.py`
 **Tier:** infra
 **Connects:** config via import, drift via import
 
@@ -22,6 +22,8 @@ returns data; none of them judges.
 | `fetchscan.py` | a route that fetches a URL the caller supplied, and what guarded it |
 | `invscan.py` | invariants already *stated* in prose or asserts, as candidates |
 | `mdutil.py` | markdown helpers (fence stripping, empty-value detection) |
+| `coverage.py` | what an extractor could not see — sites seen vs sites resolved |
+| `version.py` | the running build's version, as a leaf anything may read |
 
 ## What a scanner actually returns
 
@@ -101,6 +103,21 @@ The pattern holds for all eight: a file set in, typed facts out, and the value i
 compared against rather than in the fact itself.
 
 ## Key abstractions
+
+**`coverage.py` exists so an extractor can say it saw nothing.** Every scanner here returns *facts*, and
+the failure mode of a scanner is not a wrong fact but a short list — a wrong source path, an ignored
+glob, a timed-out walk, each producing a smaller true-looking answer. `Coverage` counts candidate sites
+alongside resolved ones, and **refuses to call `seen == 0` sound** unless the caller has declared that an
+empty repository is a legitimate answer for that scanner. The refusal is the point: the first prototype
+of the import counter reported `0 of 0` over an empty file set on its first run, committing the exact
+error it was written to detect, and a shared type is the only reason the next one will not.
+
+**`version.py` is a leaf because reading a version should not be an upward dependency.** `graph.py`
+stamps the tool version into a generated map; `from . import __version__` made `reporting` (domain)
+import the package root, which the model groups with `cli` (ui). The inversion was real and its substance
+was false — what `graph` needs is the version, not the command line. Surfaced by the import coverage
+counter, which found those two imports unresolved and so revealed a missing edge, which in turn revealed
+the modelling problem behind it.
 
 **`tiers.py` is a leaf, and that is the whole reason it exists.** `evaluate` needs the layer ranks to find
 inversions and `drift` needs them to notice a subsystem claiming a layer it has no business on — and

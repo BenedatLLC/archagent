@@ -65,8 +65,19 @@ def generate(invariants: list[Invariant], config: Config) -> GenResult:
                 else:
                     result.skipped.append((inv.id, f"BOUNDARY: no generator for '{inv.applies_to}'"))
             elif inv.type == "STRUCTURAL" and inv.rule.startswith("forbid-pattern"):
-                result.written.append(_write_astgrep_rule(inv, out / "sgrules", config))
-                result.astgrep_ids.append(inv.id)
+                # A scoped rule whose globs match no file enforces nothing, and until #46 it reported a
+                # PASS for doing so. That is the worst outcome this tool can produce — measured on dspy,
+                # where a scope generated `./dspy/**`, ast-grep silently ignored it, the rule matched 0 of
+                # 154 `print(` sites, and `check` said the invariant held (#44).
+                #
+                # Reported as skipped rather than failed: the rule is not violated, it is unenforceable,
+                # and `check` already renders those differently. What must never happen is passing.
+                empty = _empty_scope(inv, config)
+                if empty:
+                    result.skipped.append((inv.id, empty))
+                else:
+                    result.written.append(_write_astgrep_rule(inv, out / "sgrules", config))
+                    result.astgrep_ids.append(inv.id)
             elif inv.rule.startswith("property"):
                 scaffolded = _scaffold_property(inv, config)
                 if scaffolded is not None:
@@ -162,6 +173,26 @@ def _write_astgrep_rule(inv: Invariant, sgrules_dir: Path, config: Config) -> Pa
     path = sgrules_dir / f"{inv.id}.yml"
     path.write_text(content)
     return path
+
+
+def _empty_scope(inv: Invariant, config: Config) -> str:
+    """Why this rule's scope matches nothing, or "" when it matches something.
+
+    The precondition for a scoped structural rule: the globs it compiles to must select at least one file.
+    Checked here rather than after the run, because once ast-grep returns no violations there is nothing
+    left to distinguish "no violations" from "nothing examined" — which is exactly how #44 reported a
+    passing check over 154 unexamined call sites.
+    """
+    from .drift import _glob_files
+    rule = parse_pattern(inv.rule)
+    if getattr(rule, "scope_mode", "all") == "all" or not getattr(rule, "scope", ""):
+        return ""
+    globs = _scope_to_globs(rule.scope, inv, config)
+    if any(_glob_files(config.project_root, g) for g in globs):
+        return ""
+    shown = ", ".join(f"`{g}`" for g in globs[:3])
+    return (f"scope '{rule.scope}' matches no files (globs: {shown}) — the rule would enforce nothing, "
+            f"so it is not generated rather than passing vacuously")
 
 
 def _scope_to_globs(scope: str, inv: Invariant, config: Config) -> list[str]:

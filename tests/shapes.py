@@ -42,6 +42,11 @@ class Shape:
     note: str = ""
 
 
+#: Two rules produce the `__init__.py` edges that appear throughout this table, and both are real:
+#: importing a name *out of* a package executes that package's initialiser first, whether the import is
+#: written absolutely or relatively. The relative form did not produce the edge until #46's coverage
+#: counter found the asymmetry on archagent's own source.
+#:
 #: `from pkg import b` edges to **both** `pkg/__init__.py` and `pkg/b.py`, because importing a name out
 #: of a package executes that package's initialiser first. Four cells were written without the
 #: initialiser edge on the first pass and the matrix caught it — the expectation was wrong, not the code.
@@ -116,6 +121,16 @@ SHAPES: list[Shape] = [
         note="The same defect as the star form. The star is where it was noticed, not the cause (#41).",
     ),
     Shape(
+        name="`from . import <name-defined-in-init>`",
+        files={"src/pkg/__init__.py": "__version__ = '1.0'\n",
+               "src/pkg/a.py": "from . import __version__\n"},
+        runtime={"src/pkg/a.py": {"src/pkg/__init__.py"}},
+        note="The imported name is not a submodule, so the only candidate was `pkg.__version__` and the "
+             "edge to the initialiser was lost — while the absolute form `from pkg import b` produced "
+             "it. Found by the #46 coverage counter on archagent's own source, where it was two of two "
+             "unresolved relative imports: a missing edge, not a miscount.",
+    ),
+    Shape(
         name="relative import at level ≥ 3",
         files={"src/pkg/__init__.py": "", "src/pkg/top.py": "x = 1\n",
                "src/pkg/a/__init__.py": "", "src/pkg/a/b/__init__.py": "",
@@ -138,7 +153,8 @@ SHAPES: list[Shape] = [
                "src/pkg/a.py": "from typing import TYPE_CHECKING\nif TYPE_CHECKING:\n    from . import b\n",
                "src/pkg/c.py": "import typing\nif typing.TYPE_CHECKING:\n    from . import b\n",
                "src/pkg/b.py": "x = 1\n"},
-        type_only={"src/pkg/a.py": {"src/pkg/b.py"}, "src/pkg/c.py": {"src/pkg/b.py"}},
+        type_only={"src/pkg/a.py": {"src/pkg/b.py", "src/pkg/__init__.py"},
+                   "src/pkg/c.py": {"src/pkg/b.py", "src/pkg/__init__.py"}},
         note="A type-only back-edge is how a project *breaks* a real import cycle, so counting one made "
              "the graph most wrong where the code was most careful — a high-confidence cycle that does "
              "not exist at runtime (#37).",
@@ -148,7 +164,7 @@ SHAPES: list[Shape] = [
         files={"src/pkg/__init__.py": "",
                "src/pkg/a.py": "from typing import TYPE_CHECKING as TC\nif TC:\n    from . import b\n",
                "src/pkg/b.py": "x = 1\n"},
-        type_only={"src/pkg/a.py": {"src/pkg/b.py"}},
+        type_only={"src/pkg/a.py": {"src/pkg/b.py", "src/pkg/__init__.py"}},
         note="#37 surviving in another spelling. Found by enumerating spellings for this table rather "
              "than by waiting for a repository to use one — which is the argument for the table.",
     ),
@@ -158,8 +174,8 @@ SHAPES: list[Shape] = [
                "src/pkg/a.py": "from typing import TYPE_CHECKING\n"
                                "if TYPE_CHECKING:\n    from . import c\nelse:\n    from . import b\n",
                "src/pkg/b.py": "x = 1\n", "src/pkg/c.py": "x = 1\n"},
-        runtime={"src/pkg/a.py": {"src/pkg/b.py"}},
-        type_only={"src/pkg/a.py": {"src/pkg/c.py"}},
+        runtime={"src/pkg/a.py": {"src/pkg/b.py", "src/pkg/__init__.py"}},
+        type_only={"src/pkg/a.py": {"src/pkg/c.py", "src/pkg/__init__.py"}},
         note="The runtime import lives in the `else`. Treating the whole statement as type-only would "
              "drop a real edge to fix a false one.",
     ),
@@ -168,7 +184,7 @@ SHAPES: list[Shape] = [
         files={"src/pkg/__init__.py": "",
                "src/pkg/a.py": "from typing import TYPE_CHECKING\nif not TYPE_CHECKING:\n    from . import b\n",
                "src/pkg/b.py": "x = 1\n"},
-        runtime={"src/pkg/a.py": {"src/pkg/b.py"}},
+        runtime={"src/pkg/a.py": {"src/pkg/b.py", "src/pkg/__init__.py"}},
         note="The negated guard makes its body runtime code. Not matching it keeps the real edge, which "
              "is the safe direction: a missed exclusion costs a false positive, a wrong one drops a "
              "dependency.",
@@ -180,7 +196,7 @@ SHAPES: list[Shape] = [
         files={"src/pkg/__init__.py": "",
                "src/pkg/a.py": "try:\n    from . import fast\nexcept ImportError:\n    from . import slow\n",
                "src/pkg/fast.py": "x = 1\n", "src/pkg/slow.py": "x = 1\n"},
-        runtime={"src/pkg/a.py": {"src/pkg/fast.py", "src/pkg/slow.py"}},
+        runtime={"src/pkg/a.py": {"src/pkg/fast.py", "src/pkg/slow.py", "src/pkg/__init__.py"}},
         note="Both branches are real dependencies — which one runs is an environment fact. Verified; "
              "already sound.",
     ),
@@ -189,7 +205,7 @@ SHAPES: list[Shape] = [
         files={"src/pkg/__init__.py": "",
                "src/pkg/a.py": "def f():\n    from . import b\n    return b\n",
                "src/pkg/b.py": "x = 1\n"},
-        runtime={"src/pkg/a.py": {"src/pkg/b.py"}},
+        runtime={"src/pkg/a.py": {"src/pkg/b.py", "src/pkg/__init__.py"}},
         note="A deferred import is still a dependency. Verified; already sound.",
     ),
     Shape(
@@ -197,7 +213,7 @@ SHAPES: list[Shape] = [
         files={"src/pkg/__init__.py": "",
                "src/pkg/json.py": "x = 1\n",
                "src/pkg/a.py": "from . import json\nimport json as stdlib\n"},
-        runtime={"src/pkg/a.py": {"src/pkg/json.py"}},
+        runtime={"src/pkg/a.py": {"src/pkg/json.py", "src/pkg/__init__.py"}},
         note="The relative import resolves internally; the absolute one is the standard library and must "
              "not. Verified; already sound.",
     ),

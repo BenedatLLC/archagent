@@ -27,6 +27,7 @@ except ModuleNotFoundError:  # py < 3.11
     tomllib = None
 
 from .config import Config
+from .coverage import Counter, Coverage
 from .configscan import declared_config_keys, is_test_path, read_config_keys
 from .connscan import sync_call_targets
 from .tiers import tier_of as _tier_of, tier_rank
@@ -724,25 +725,7 @@ def _imports_of(root: Path, rel_file: str, self_mod: str | None, type_only: bool
             if node.level:  # relative import — resolve against this file's package
                 if not self_mod:
                     continue
-                base = self_mod.split(".")
-                # `level` counts from the *containing package*, and for `__init__.py` the file is that
-                # package rather than a module inside it. Treating the two alike stripped one component
-                # too many from every relative import in every package initialiser: on httpx,
-                # `from ._api import *` resolved to `_api` instead of `httpx._api` and matched nothing,
-                # so the package root appeared to import nothing at all (#41).
-                #
-                # The effect is not confined to star imports — that is only where it was noticed. A
-                # package initialiser is exactly where re-exports live, so this is the file whose edges
-                # matter most for a declared `**Connects:**` to be corroborated.
-                drop = node.level - 1 if _is_package_init(rel_file) else node.level
-                pkg = base[:len(base) - drop] if len(base) >= drop else []
-                names = [a.name for a in node.names if a.name != "*"]
-                if node.module:
-                    stem = pkg + node.module.split(".")
-                    mods.append(".".join(stem))
-                    mods += [".".join(stem + [n]) for n in names]
-                else:
-                    mods += [".".join(pkg + [n]) for n in names]
+                mods += _relative_targets(rel_file, node, self_mod)
             elif node.module:
                 mods.append(node.module)
                 mods += [f"{node.module}.{a.name}" for a in node.names]  # from pkg import submodule
@@ -802,6 +785,80 @@ def _type_only_ranges(tree) -> list[tuple[int, int]]:
             for stmt in node.body:
                 out.append((stmt.lineno, getattr(stmt, "end_lineno", stmt.lineno) or stmt.lineno))
     return out
+
+
+def _relative_targets(rel_file: str, node, self_mod: str) -> list[str]:
+    """Module candidates a relative `ImportFrom` could name.
+
+    One statement yields several: `from .config import Config` gives both `pkg.config` and
+    `pkg.config.Config`, because the imported name may be a submodule or may be an attribute of one.
+    Resolution treats any hit as success, which is also why `import_coverage` counts statements rather
+    than candidates — most ordinary imports leave a candidate unresolved by design.
+
+    `level` counts from the *containing package*, and for `__init__.py` the file **is** that package
+    rather than a module inside it. Treating the two alike stripped one component too many from every
+    relative import in every package initialiser: on httpx `from ._api import *` resolved to `_api`
+    instead of `httpx._api` and matched nothing, so the package root appeared to import nothing at all
+    (#41). Not confined to star imports — that is only where it was noticed, and a package initialiser is
+    exactly where re-exports live, so it is the file whose edges matter most for a declared
+    `**Connects:**` to be corroborated.
+
+    Shared with `import_coverage` on purpose: a counter that measured a different rule than the extractor
+    uses would report a gap nobody could act on, or hide one.
+    """
+    base = self_mod.split(".")
+    drop = node.level - 1 if _is_package_init(rel_file) else node.level
+    pkg = base[:len(base) - drop] if len(base) >= drop else []
+    names = [a.name for a in node.names if a.name != "*"]
+    if node.module:
+        stem = pkg + node.module.split(".")
+        return [".".join(stem)] + [".".join(stem + [n]) for n in names]
+    # `from . import X` — the package itself is a candidate, because that is what is being imported
+    # *from*, and X may be a name defined in its `__init__.py` rather than a submodule. Without it the
+    # relative form disagreed with the absolute one: `from pkg import b` produced an edge to
+    # `pkg/__init__.py` and `from . import b` produced none.
+    #
+    # Found by the coverage counter on archagent's own source, where `from . import __version__` was two
+    # of two unresolved sites — a missing edge, not a miscount. Deliberately not extended to
+    # `from .mod import X`: the package initialiser does execute there too, but adding that edge for
+    # every relative import in a codebase would make every `__init__.py` a fan-in hub and manufacture
+    # god-component findings out of ordinary imports.
+    own = [".".join(pkg)] if pkg else []
+    return own + [".".join(pkg + [n]) for n in names]
+
+
+def import_coverage(root: Path, config: Config, source_files: set[str]) -> Coverage:
+    """How many relative imports resolved to a file in the source set.
+
+    The postcondition is exact rather than heuristic, which is what makes it safe to report loudly.
+    `import numpy` resolves to nothing internal for good reason; `from . import x` **cannot** — a relative
+    import names something inside its own package. So an unresolved one is either a resolution defect or
+    a file outside `source_paths`, and both are worth saying.
+
+    Counted per *statement*, not per module candidate. `from .config import Config` emits both
+    `pkg.config` and `pkg.config.Config`, and only the first is a module — counting candidates would
+    report a false gap on the most ordinary import in Python.
+
+    Measured on httpx at `b5addb6` with only the resolution rule varied: 18 of 88 unresolved before the
+    package-initialiser fix (#41), 0 of 88 after. That single number would have named the defect on the
+    first run, on any repository with a re-exporting initialiser, instead of waiting for a user test.
+    """
+    counter = Counter("relative imports", unit="relative import", empty_is_normal=True)
+    index = _module_index(source_files, config.python.source_paths)
+    for rel in sorted(f for f in source_files if f.endswith(".py")):
+        self_mod = _module_of(rel, config.python.source_paths)
+        if not self_mod:
+            continue
+        try:
+            tree = ast.parse((root / rel).read_text())
+        except (SyntaxError, OSError, ValueError):
+            continue
+        for node in ast.walk(tree):
+            if not (isinstance(node, ast.ImportFrom) and node.level):
+                continue
+            cands = _relative_targets(rel, node, self_mod)
+            counter.site(any(c in index for c in cands), f"{rel}:{node.lineno}")
+    return counter.finish()
 
 
 def _internal_targets(root: Path, rel_file: str, source_paths: list[str], module_index: dict[str, str],
