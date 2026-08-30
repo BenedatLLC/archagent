@@ -127,6 +127,16 @@ counting declarations would report the family active over a comparison that neve
 minor, moderate or critical depends on what it *causes*, which only reading the code establishes — so
 findings that might have consequences are marked for investigation rather than rated.
 
+**A partial scan is reported beside the findings, not instead of them.** `_extraction_coverage` asks each
+scanner what it could not resolve and keeps only the answers that admit a gap. That is a different
+statement from `Inactive`, and the more misleading one to omit: an inactive family produced nothing, while
+a partial scan produces findings and therefore looks like a working result. Its findings are a floor
+rather than a census.
+
+Sound extractors are dropped rather than listed, on the same reasoning that earned the coverage report 5
+of 5 in calibration round 5 — it names what is missing, not everything that is fine, and a report that
+lists its successes is one whose failures get skipped.
+
 **A recommendation may only say what the finding measured.** Every recommendation used to be a constant
 string, so a finding computed specifics and then advised in the abstract: `god-component` knew which files
 other subsystems reach for — fan-in was derived from exactly those edges — and said "split along its

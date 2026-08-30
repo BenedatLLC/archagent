@@ -177,6 +177,22 @@ directory sets** — `e2e/` is test code to one and not the others — which is 
 shape this tool's own group F looks for, recorded as issue #32 rather than quietly unified, because some
 of the divergence is legitimate and the interesting question is why `dupdecide` did not report it.
 
+**Every scanner can say what it could not read, and each does it exactly.** `configscan` counts an env
+read whose key is not a literal, `datamap` a table declaration whose name is computed, `webapi` a route
+decorator whose path is an expression. In each case the shape is recognised and the *value* is not — a
+fact about the scan rather than a guess about the code, which is what makes the number safe to print
+without hedging it.
+
+`webapi` draws the line explicitly: a verb-named decorator whose first argument is a literal that does
+not start with `/` is not counted at all. `@cache.get("key")` is not a route, and counting it would turn
+a fact about what could be read into a guess about what the code is.
+
+The lookahead in those patterns sits *before* the whitespace. `=\s*(?!["'])` matches
+`__tablename__ = "orders"` anyway — the engine backtracks `\s*` to zero characters, looks ahead at the
+space and succeeds. Written the wrong way round twice: once here, and once years earlier in
+`_ENV_READ_ANY`, where it over-counted padded literal reads as opaque and went unnoticed while the number
+stayed internal.
+
 **Conservative by design.** `connscan` drops a call whose target it cannot resolve rather than guessing;
 `datamap` requires a real table definition. A scanner that guesses produces findings nobody can act on.
 
