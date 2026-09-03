@@ -86,6 +86,25 @@ _COMMENT_STARTS = ("#", "//", "*", '"""', "'''")
 
 
 @dataclass
+class Basis:
+    """What produced a finding, separated from what anyone should conclude from it.
+
+    The deterministic layer can establish four things and no more: which rule fired, what it counted,
+    where the evidence is, and what it could not determine. Severity and priority are not among them —
+    those depend on consequence, which only reading the code settles.
+
+    The fourth field is the new one and the reason this exists. Round 2's tester was told a five-node
+    dependency tangle was *high confidence* and disproved it by opening a file; had the finding said
+    **an edge we inferred, from imports we could not tell were type-only**, it would have prompted
+    exactly the check they performed rather than a loss of trust in everything else (#37, #47).
+    """
+    rule: str = ""            # what fired, in words: "fan-in >= 3 and fan-out >= 3"
+    measured: str = ""        # what it counted, the finding's own numbers
+    evidence: tuple[str, ...] = ()      # where to look: paths, commits, subsystems
+    unestablished: str = ""   # what this rests on that nothing corroborated
+
+
+@dataclass
 class Finding:
     sign: str            # stable id, e.g. "god-component"
     group: str           # "A" | "B" | "C" | "D" | "E" | "F"
@@ -104,6 +123,20 @@ class Finding:
     # settling anything.
     investigate: bool = False
     triage_reason: str = ""
+    #: What produced this finding. Additive: `detail` remains the prose summary, and `basis` is the
+    #: structured form a renderer or an agent can lead with instead of a severity word.
+    basis: Basis | None = None
+
+    def as_basis(self) -> Basis:
+        """The finding's basis, derived from what it already carries when none was set.
+
+        A default rather than a requirement, so adding the field did not mean rewriting thirty
+        producers at once — and so a renderer can lead with evidence for every sign immediately rather
+        than only for the ones that have been converted.
+        """
+        if self.basis is not None:
+            return self.basis
+        return Basis(measured=self.detail, evidence=tuple(self.subjects))
 
     @property
     def id(self) -> str:
@@ -486,8 +519,12 @@ def _mark_unverified(model: _Model, result: "EvaluationResult") -> None:
         if f.sign not in structural or not model.unverified(*f.subjects):
             continue
         f.confidence = _DOWNGRADE.get(f.confidence, f.confidence)
-        f.detail = (f.detail + "  [rests on **Connects:** declarations that no parsed import "
-                    "corroborates — `archagent drift` is what checks them]").strip()
+        # Recorded as what the finding could not establish, rather than appended to the measurement.
+        # The distinction is the point of `Basis`: the count is a fact and the edge under it is not.
+        b = f.as_basis()
+        f.basis = Basis(rule=b.rule, measured=b.measured, evidence=b.evidence,
+                        unestablished="rests on **Connects:** declarations that no parsed import "
+                                      "corroborates — `archagent drift` is what checks them")
 
 
 def _attach_investigations(arch_dir: Path, result: "EvaluationResult") -> None:

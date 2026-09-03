@@ -100,3 +100,19 @@ def test_the_cochange_guidance_does_not_assert_causation_from_a_count():
     assert "keeps changing with its dependents" not in text
     # and it must tell the agent to look at the evidence the finding now carries
     assert "read the cited commits" in text.lower()
+
+
+def test_the_prompt_owns_the_rating_the_tool_stopped_making():
+    """#47 moved severity out of the deterministic layer. If the prompt does not pick it up, the tool
+    stops overclaiming and nobody starts judging — which would be a regression dressed as restraint."""
+    text = _prompt("evaluate")
+    assert "The tool no longer rates anything. You do." in text
+    assert "not established" in text, "the agent must be told to start from what is uncorroborated"
+    assert "mechanical_rank" in text, "and told what the surviving number is and is not"
+
+
+def test_the_prompt_does_not_tell_the_agent_to_rank_by_the_tools_number():
+    """It used to say 'order by severity × confidence'. That instructs the agent to launder a count of
+    files and commits into a priority, which is the thing #47 removed from the renderer."""
+    text = _prompt("evaluate")
+    assert "severity × confidence" not in text

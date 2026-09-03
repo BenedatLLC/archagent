@@ -14,7 +14,8 @@ architecture is well-formed.**
   a reason, or reframe — then prioritize. Do not just echo the tool's list.
 - **Cluster to roots.** A few structural roots usually explain most findings. Group related candidates and
   report the underlying cause once, not every symptom.
-- **Rank by value.** Order by severity × confidence × how much the fix would help. Lead with the few that matter.
+- **Rank by value.** Order by what a fix would be worth: consequence traced × how much it would help.
+  Not by the tool's `mechanical_rank`, which counts involvement and knows nothing about either.
 
 ## Steps
 1. Run `archagent evaluate --json` and read the findings. Also read the relevant `architecture/subsystems/*.md`,
@@ -210,10 +211,26 @@ Mined from `git log`; require a git repo (skip with `--no-history`, window with 
   compared against a typed value (TS2367), for string enums, union types and `as const` unions alike, so
   the only real risk there is a value that arrives untyped. Check that before writing it up.
 
-### Severity is mechanical; the rating a reader needs is not
+### The tool no longer rates anything. You do.
 
-`evaluate`'s `severity` counts files and commits. It says nothing about consequence, and the two come
-apart badly: in the first independent labelling round most enum escapes were minor-to-moderate, and one
+`archagent evaluate` reports what produced each finding and stops there: **the rule that fired, what it
+measured, where the evidence is, and what it could not establish.** It prints no severity word, because a
+count of files and commits rendered as a coloured `HIGH` reads as a verdict the tool did not make — and
+two review rounds scored the wording rather than the measurement before that word was removed.
+
+So the rating is yours, and it comes from reading the code, not from re-ranking the list. Concretely:
+
+- **Start from `not established`.** That line names what the finding rests on that nothing corroborated —
+  a declared edge no import confirms, a scan that could read only part of its input. A finding with a
+  populated `not established` is one to verify *before* reporting, not one to report with a hedge. Round
+  2's reviewer disproved a five-node dependency tangle by opening one file; the finding had everything it
+  needed to prompt that check and spent its space on a confidence label instead.
+- **Use `minor` / `moderate` / `critical`**, the vocabulary `investigate` already uses, and say what a
+  rating rests on. A rating with no consequence traced is a guess wearing a word.
+- **`--json` still carries `mechanical_rank`.** It is the same count under an honest name. Use it to
+  decide *what to read first*, never to decide what to report.
+
+The two come apart badly: in the first independent labelling round most enum escapes were minor-to-moderate, and one
 was **critical** — a scattered call-type vocabulary had left a prompt-injection hook comparing against two
 strings that exist in none of the four declarations, so it silently scanned nothing for embedding and
 transcription requests and reported success.

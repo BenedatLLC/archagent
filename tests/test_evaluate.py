@@ -547,7 +547,11 @@ def test_a_finding_resting_only_on_declarations_is_marked_and_downgraded(tmp_pat
     _sub(cfg, "low", "# L\n\n**Tier:** domain\n\n**Covers:** `src/pkg/b.py`\n")
     f = _of(evaluate(cfg), "layer-inversion")[0]
     assert f.confidence == "med"                       # down from "high"
-    assert "no parsed import corroborates" in f.detail
+    # The caveat is what the finding could not *establish*, not part of what it measured. It used to be
+    # appended to `detail`, which put a statement about evidence inside the sentence reporting the
+    # count — the conflation `Basis` exists to undo (#47).
+    assert "no parsed import corroborates" in f.as_basis().unestablished
+    assert "no parsed import corroborates" not in f.detail
 
 
 def test_a_measured_edge_is_not_marked_or_downgraded(tmp_path):
@@ -597,17 +601,40 @@ def test_a_non_import_connector_does_not_become_an_import_edge(tmp_path):
     assert "layer-inversion" not in _signs(evaluate(cfg))
 
 
-def test_the_mechanical_severity_caveat_is_not_gated_on_triage():
-    """It used to live inside `if flagged:`, so a run where nothing was marked for investigation printed
-    its findings with HIGH and MED severities and never said what those words mean. Round 5's reviewer
-    read exactly such a run on dspy — 65 findings, zero flagged — and scored `finding_restraint` 2 of 5,
-    naming this: "the body gives HIGH/MED severity without saying it is mechanical"."""
+def test_the_human_report_emits_no_severity_word():
+    """#47. `severity` counts files and commits; printing it as a coloured HIGH made a count look like a
+    verdict, and the caveat printed beside it lost every time.
+
+    That caveat was itself a fix — it used to sit inside `if flagged:`, so dspy's run showed 65 findings
+    with HIGH and MED and never said what the words meant, and round 5 scored `finding_restraint` 2 of 5
+    naming exactly that. Round 2's tester then hit the same class again from a different angle. Two
+    rounds scoring the wording rather than the measurement is the argument for removing the word rather
+    than rewording it a third time."""
     from pathlib import Path
     src = (Path(__file__).resolve().parents[1] / "src" / "archagent" / "cli.py").read_text()
-    body = src[src.index("def evaluate_cmd") if "def evaluate_cmd" in src else 0:]
-    i_caveat = src.index("Severity above is mechanical")
+    body = src[src.index("Architecture evaluation"):src.index("if result.history_ran")]
+    assert "f.severity.upper()" not in body
+    assert "_SEV_STYLE" not in src, "the severity colour map should be gone with the word"
+    assert "measured:" in body and "not established:" in body
+
+
+def test_the_candidate_statement_prints_independently_of_triage():
+    """The property the old caveat test protected, kept: whatever the report says about the standing of
+    its findings must not be gated on some findings being flagged. dspy's run had zero flagged."""
+    from pathlib import Path
+    src = (Path(__file__).resolve().parents[1] / "src" / "archagent" / "cli.py").read_text()
+    i_note = src.index("a mechanical rank, not a ")
     i_flagged = src.index("flagged = [f for f in findings if f.investigate]")
-    assert i_caveat < i_flagged, "the caveat must print before, and independently of, the triage block"
+    assert i_note < i_flagged
+
+
+def test_json_keeps_the_rank_under_a_name_that_is_not_a_verdict():
+    """The number is still useful to the harness — `spotcheck.py` and the ledger read it. What changed is
+    that a consumer reading `severity: high` reads a judgement the tool never made."""
+    from pathlib import Path
+    src = (Path(__file__).resolve().parents[1] / "src" / "archagent" / "cli.py").read_text()
+    assert '"mechanical_rank": f.severity' in src
+    assert '"severity": f.severity' not in src
 
 
 # --- What a god-component finding tells the reader to do (#31) -----------------------------

@@ -516,14 +516,15 @@ _GROUP_TITLES = {
     "F": "Single source of truth (code duplication)",
 }
 _GROUPS = tuple(_GROUP_TITLES)
-_SEV_STYLE = {"high": "red", "med": "yellow", "low": "cyan"}
 
 
 @app.command()
 def evaluate(
     project: Path = typer.Option(Path("."), help="Target repo root"),
     group: str = typer.Option("", help="Limit to one group: A, B, C, D, E, or F"),
-    min_severity: str = typer.Option("low", help="Only show findings at/above this severity: low|med|high"),
+    min_severity: str = typer.Option("low", help="Only show findings at/above this mechanical rank: "
+                                                 "low|med|high (a count of files and commits, not a "
+                                                 "judgement)"),
     no_history: bool = typer.Option(False, "--no-history", help="Skip git co-change mining (regime A only, offline)"),
     since: str = typer.Option("", help="Co-change window as a git date, e.g. '12.months' or '2025-01-01'"),
     until: str = typer.Option("", help="Ignore commits after this git date — bounds the history window"),
@@ -548,7 +549,16 @@ def evaluate(
         print(json.dumps({
             "findings": [{
                 "id": f.id,
-                "sign": f.sign, "group": f.group, "severity": f.severity, "title": f.title,
+                "sign": f.sign, "group": f.group, "title": f.title,
+                # Renamed from `severity`. The number is unchanged; the word was the problem, because a
+                # consumer reading `severity: high` reads a verdict the tool did not make (#47).
+                "mechanical_rank": f.severity,
+                "basis": {
+                    "rule": f.as_basis().rule,
+                    "measured": f.as_basis().measured,
+                    "evidence": list(f.as_basis().evidence),
+                    "unestablished": f.as_basis().unestablished,
+                },
                 "subjects": f.subjects, "detail": f.detail, "recommendation": f.recommendation,
                 "regime": f.regime, "confidence": f.confidence, "values": f.values,
                 "investigate": f.investigate, "triage_reason": f.triage_reason,
@@ -584,11 +594,21 @@ def evaluate(
             continue
         console.print(f"[bold]{g} — {_GROUP_TITLES[g]}[/] ({len(items)})")
         for f in items:
-            style = _SEV_STYLE[f.severity]
+            # Basis first, and no severity word. `severity` counts files and commits; rendering it as a
+            # coloured HIGH made a count look like a verdict, and the caveat printed beside it lost every
+            # time. It survives in `--json` as `mechanical_rank`, where nothing mistakes it for judgement.
+            # Round 2's tester read a type-only cycle labelled "high confidence" and stopped trusting the
+            # whole report; the same finding stating what it could not establish would have prompted the
+            # check they went on to perform by hand (#47).
+            b = f.as_basis()
             subj = ", ".join(f.subjects[:4]) + (f" (+{len(f.subjects) - 4} more)" if len(f.subjects) > 4 else "")
-            console.print(f"  [{style}]{f.severity.upper():4}[/] {f.title} — {subj}")
-            console.print(f"       {f.detail}")
-            console.print(f"       [dim]→ {f.recommendation} ({f.confidence} confidence, {f.regime})[/]")
+            console.print(f"  [bold]{f.title}[/] — {subj}")
+            if b.rule:
+                console.print(f"       [dim]rule:[/] {b.rule}")
+            console.print(f"       [dim]measured:[/] {b.measured or f.detail}")
+            if b.unestablished:
+                console.print(f"       [yellow]not established:[/] {b.unestablished}")
+            console.print(f"       [dim]→ {f.recommendation} ({f.regime})[/]")
             if f.investigation:
                 inv = f.investigation
                 stale = " [yellow](stale)[/]" if inv["stale"] else ""
@@ -634,12 +654,13 @@ def evaluate(
     if not findings:
         console.print("[green]No system-level smells found in the active signals.[/]")
         return
-    # The caveat belongs to the severities, not to the triage block. It used to live inside `if flagged`,
-    # so a run where nothing was marked for investigation printed 65 findings with HIGH and MED severities
-    # and never said what those words mean. Round 5's reviewer scored `finding_restraint` 2 of 5 and named
-    # exactly this: "the body gives HIGH/MED severity without saying it is mechanical".
-    console.print("[dim]Severity above is mechanical — it counts files and commits, never consequences. A "
-                  "finding is\nonly minor, moderate or critical once someone has read the code.[/]\n")
+    # This used to explain that the printed severities were mechanical. The severities are no longer
+    # printed (#47): a caveat beside a coloured HIGH loses, and after round 5 and round 2 both scored the
+    # wording rather than the measurement, the answer was to stop emitting the word. What replaces it is
+    # a statement about the list as a whole.
+    console.print("[dim]These are candidates, ordered by how much they involve — a mechanical rank, not a "
+                  "priority.\nWhat any of them is worth follows from reading the code, which is what "
+                  "/archagent-evaluate does.[/]\n")
     flagged = [f for f in findings if f.investigate]
     if flagged:
         console.print(f"[bold]{len(flagged)} finding(s) marked for investigation.[/] To find out whether "
