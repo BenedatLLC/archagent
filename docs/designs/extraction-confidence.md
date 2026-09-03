@@ -369,6 +369,40 @@ This also removes a category of defect rather than an instance of one. #37's "hi
 damaging because of the label, not the edge: a cycle reported as *an edge we inferred, from imports we
 could not tell were type-only* would have prompted exactly the check the tester performed.
 
+## Steps 1–4 landed 2026-09-02; step 5 is blocked
+
+**What changed.** The human report leads with `measured:`, adds `not established:` where a finding rests
+on something uncorroborated, and prints **no severity word at all**. `--json` keeps the number as
+`mechanical_rank`. The `/archagent-evaluate` prompt now owns the rating and is told to start from
+`not established` rather than from the tool's ordering.
+
+**Measured on wardrowbe at `wardrowbe-v1.7.0`:** 66 findings, **0 severity words**, every finding
+prefixed with what it measured. The count is deliberately unchanged — nothing about extraction moved,
+which is what makes this a presentation change rather than a new population.
+
+The shape the argument asked for, from a declared-only graph:
+
+```
+Leaky abstraction (layer inversion) — top, low
+     measured: top (infra) depends up on low (domain)
+     not established: rests on **Connects:** declarations that no parsed import corroborates
+     → A lower layer must not depend on a higher one. (static)
+```
+
+The reader is told what to check, not how confident to feel. Round 2's tester disproved a five-node
+tangle by opening one file; that finding had everything needed to prompt the check and spent its space on
+a confidence label instead.
+
+**Comparability.** This moves `FINDINGS_KEYS`, so the next scored round starts a new series and may not
+be read against rounds 1–5. Say so in that round's write-up rather than presenting a step change as an
+improvement.
+
+**Step 5 is blocked, deliberately.** Demoting a signal requires the precision table, and #49 marked
+`layer-inversion` a floor rather than a settled number: two wardrowbe findings existed at round 3 and
+could not be seen, one predicted to be a dismissal. #50 would change the count again by removing a class
+of false `layer-inversion` findings at the source. Deciding a demotion from a number known to be
+incomplete is this document's own failure mode, one level up.
+
 ## Implementation
 
 Staged, because the raw output has direct consumers (`spotcheck.py`, `ledger.py`, the corpus harness) and
