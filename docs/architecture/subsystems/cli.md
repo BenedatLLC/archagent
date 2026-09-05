@@ -68,6 +68,22 @@ prints none and says so, rather than borrowing — another sign's read as author
 looking for what is not there. The test derives the set of triaged signs from `evaluate.py` rather than
 restating it, so a newly triaged sign cannot quietly inherit someone else's questionnaire.
 
+**The report says what produced a finding and stops.** Each entry leads with `measured:`, adds
+`not established:` where the finding rests on something nothing corroborated, and carries **no severity
+word**. `--json` keeps the number as `mechanical_rank`.
+
+Removing the word rather than rewording it a third time is the whole change. `severity` counts files and
+commits; rendered as a coloured `HIGH` it read as a verdict the tool never made, and the caveat printed
+beside it lost. That caveat was itself a fix — it had been gated on triage, so a run with 65 findings and
+none flagged printed HIGH and MED and never said what they meant. Round 5 scored `finding_restraint` 2 of
+5 on it and round 2 hit the same class from another angle; two rounds scoring the wording rather than the
+measurement is the argument for deleting the word.
+
+What replaces it is a statement about the list, printed unconditionally: these are candidates, ordered by
+a mechanical rank rather than a priority. The rating moves to `/archagent-evaluate`, which is told to
+start from `not established` — the line that would have prompted round 2's tester to open the file they
+opened anyway, instead of losing trust in the rest of the report.
+
 **A heading may not be disproved by the block beneath it.** `check` printed "asserted in invariants.md,
 verified by nobody" and then, six lines down, "9 state how they are verified" with the test names. The
 wording predated the `Verification` column, whose whole purpose is to separate *archagent cannot compile

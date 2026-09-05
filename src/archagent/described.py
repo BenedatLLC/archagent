@@ -30,6 +30,7 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
 from .config import Config
+from .configscan import is_build_config
 
 #: A floor low enough to keep a pure re-export out and nothing else, because **size turned out to be a bad
 #: proxy for significance**. The first version used 40 lines and thereby excluded the most important
@@ -51,12 +52,6 @@ _TEST_DIRS = {"test", "tests", "__tests__", "testdata", "fixtures", "e2e"}
 #: and `theme.scss` among its largest findings, which says nothing about whether the architecture is
 #: described.
 _CODE_EXTS = (".py", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".go", ".rb", ".java", ".kt", ".rs")
-
-#: Build configuration is code by extension and not a subject. `tailwind.config.js` is 109 lines and sits
-#: inside a `**Covers:**` glob; no artifact worth reading writes a paragraph about it, and demanding one
-#: pushes `describe` toward the inventories the prose criterion penalises. Same reasoning as skipping
-#: migrations and locales.
-_BUILD_CONFIG = re.compile(r"\.config\.[cm]?[jt]sx?$")
 
 #: A directory holding at least this many source files is a *group*, and an artifact that describes the
 #: group has described its members. Round 4's artifact covers 216 Angular components by directory, base
@@ -233,7 +228,11 @@ def described(config: Config, source_files: set[str], claimed_by: dict[str, str]
                 siblings.get(PurePosixPath(rel).parent.as_posix(), 0) + 1
 
     for rel in sorted(source_files):
-        if _skip(rel) or not rel.endswith(_CODE_EXTS) or _BUILD_CONFIG.search(PurePosixPath(rel).name):
+        # Build configuration is code by extension and not a subject. `tailwind.config.js` is 109
+        # lines and sits inside a `**Covers:**` glob; no artifact worth reading writes a paragraph about
+        # it, and demanding one pushes `describe` toward the inventories the prose criterion penalises.
+        # The predicate is shared with `_mistiered` rather than owned here — see `configscan` (#50).
+        if _skip(rel) or not rel.endswith(_CODE_EXTS) or is_build_config(rel):
             continue
         if _is_test(rel):
             report.test_files += 1

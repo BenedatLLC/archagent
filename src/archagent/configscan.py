@@ -106,6 +106,27 @@ _TEST_DIRS = {"test", "tests", "__tests__", "testdata", "fixtures", "examples"}
 _TEST_FILE = re.compile(r"(^|[._-])(test|spec)s?[._]")
 
 
+#: Build configuration and generated declarations: code by extension, and not something a person wrote
+#: to express an intent about the system. `tailwind.config.js` is a hundred lines of settings;
+#: `next-env.d.ts` is generated and begins by telling you not to edit it.
+_BUILD_CONFIG = re.compile(r"(\.config\.[cm]?[jt]sx?|\.d\.ts)$")
+
+
+def is_build_config(rel: str) -> bool:
+    """Is this build configuration or a generated declaration rather than application code?
+
+    Public and shared for the reason #32 records: `described` had this rule privately, `_mistiered`
+    needed the same answer and did not have it, and a second copy would have been a second behaviour.
+
+    The consequence of not having it was concrete. wardrowbe's `frontend-tests` subsystem covers 17
+    files, 12 of them tests and 5 of them build configuration — so `_mistiered` could not call it
+    non-production, the subsystem kept a `**Tier:** infra` it should never have had, and everything it
+    imported read as an upward dependency. That is the #26 pattern, and it produced a false
+    `layer-inversion` finding on the signal whose precision is currently 43% (#50).
+    """
+    return bool(_BUILD_CONFIG.search(PurePosixPath(rel).name))
+
+
 def is_test_path(rel: str) -> bool:
     """Does this path look like test code?
 

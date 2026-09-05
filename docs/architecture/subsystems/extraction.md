@@ -168,6 +168,17 @@ blank line or `**Field:**`, not to the end of its first line. A real manifest is
 whoever writes it wraps it; reading only the first line silently honours part of the declaration and
 reports the rest as undeclared — a confident, wrong finding against a document that does declare them.
 
+**"Is this build configuration?" is the second shared path predicate, for the same reason.**
+`is_build_config` matches `*.config.{js,ts,mjs}` and `*.d.ts`. `described` held that rule privately and
+`_mistiered` needed the same answer without having it — so wardrowbe's test subsystem, covering twelve
+tests and five config files, could not be recognised as non-production. It kept a `**Tier:** infra` it
+should never have had, everything it imported read as upward, and that produced a false `layer-inversion`
+finding on the signal whose measured precision is 43%.
+
+Across the four recorded artifacts exactly one subsystem changes verdict under the wider predicate: the
+one it was written for. That number is worth having, because the failure mode of loosening this check is
+calling a production subsystem non-production, which would invert it into a new false-positive source.
+
 **"Is this a test path?" is one question with one answer here — and three others elsewhere.**
 `configscan.is_test_path` is public because `drift` uses it to decide what is exempt from documentation
 and `evaluate` uses it to decide which reading of a hard-coded endpoint applies; a second definition would

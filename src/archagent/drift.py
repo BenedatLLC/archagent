@@ -28,7 +28,7 @@ except ModuleNotFoundError:  # py < 3.11
 
 from .config import Config
 from .coverage import Counter, Coverage
-from .configscan import declared_config_keys, is_test_path, read_config_keys
+from .configscan import declared_config_keys, is_build_config, is_test_path, read_config_keys
 from .connscan import sync_call_targets
 from .tiers import tier_of as _tier_of, tier_rank
 from .mdutil import is_empty_value, strip_code_fences
@@ -292,7 +292,11 @@ def _mistiered(covered: set[str], tier: str | None) -> str:
     if not covered or tier_rank(tier) is None:
         return ""
     def _non_production(rel: str) -> bool:
-        return is_test_path(rel) or bool(set(PurePosixPath(rel).parts) & _MIGRATION_DIRS)
+        # Build configuration counts. A test subsystem almost always sweeps up the config that runs the
+        # tests — `vitest.config.ts` beside the suite it configures — and requiring *every* file to be a
+        # test meant the check could not fire on the shape it was written for.
+        return (is_test_path(rel) or is_build_config(rel)
+                or bool(set(PurePosixPath(rel).parts) & _MIGRATION_DIRS))
     return tier if all(_non_production(f) for f in covered) else ""
 
 

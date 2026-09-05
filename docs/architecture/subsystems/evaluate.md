@@ -76,6 +76,15 @@ it. The cost is recorded: a project whose real glossary defines one of those wor
 Django's ~16,000 fix commits. `history.py` learns each repository's wording from its own commits and
 guidelines.
 
+**`Basis` separates what produced a finding from what anyone should conclude.** The deterministic layer
+can establish four things: which rule fired, what it counted, where the evidence is, and what it could not
+determine. Severity and priority are not among them, because both depend on consequence.
+
+The fourth field is the new one. `_mark_unverified` used to *append* its caveat to `detail`, which put a
+statement about evidence inside the sentence reporting the count; it now sets `unestablished`, and that
+separation is the point. `as_basis()` derives a default from a finding's existing fields, so the renderer
+could lead with evidence for every sign at once rather than only for converted producers.
+
 **Findings are candidates with a stable identity.** Each carries an id (`sign:owner:hash`) that survives
 re-runs, so a label or an investigation attaches to the finding rather than to a run.
 
