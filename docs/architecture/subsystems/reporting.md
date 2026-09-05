@@ -19,8 +19,10 @@ the docs are internally consistent.
 
 ## Key abstractions
 
-**`described` does not own its build-configuration rule.** It skips `tailwind.config.js` and friends
-because no artifact worth reading writes a paragraph about them — but `drift._mistiered` needs the same
+**`described` does not own its build-configuration rule.** It skips a project's build
+configuration — the Tailwind and Vite config files and their kind, named here in prose because this
+check reads a backticked filename as a citation of a file in *this* repository — because no artifact
+worth reading writes a paragraph about them — but `drift._mistiered` needs the same
 answer to tell a test subsystem from a production one, and a private copy would have been two behaviours
 for one question (#32's shape). The predicate moved to `configscan.is_build_config` and both callers read
 it.
