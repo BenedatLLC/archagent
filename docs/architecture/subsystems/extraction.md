@@ -169,7 +169,10 @@ whoever writes it wraps it; reading only the first line silently honours part of
 reports the rest as undeclared — a confident, wrong finding against a document that does declare them.
 
 **"Is this build configuration?" is the second shared path predicate, for the same reason.**
-`is_build_config` matches `*.config.{js,ts,mjs}` and `*.d.ts`. `described` held that rule privately and
+`is_build_config` matches the config-file convention — a name ending in `.config` before its extension —
+and TypeScript declaration files. (Written without the glob in backticks: this check reads a backticked
+path-shaped string as a citation of a file in this repository, and flagged the first draft of this
+sentence. Fourth occurrence while documenting this module, twice now inside a paragraph explaining it.) `described` held that rule privately and
 `_mistiered` needed the same answer without having it — so wardrowbe's test subsystem, covering twelve
 tests and five config files, could not be recognised as non-production. It kept a `**Tier:** infra` it
 should never have had, everything it imported read as upward, and that produced a false `layer-inversion`
