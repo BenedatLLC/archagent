@@ -19,6 +19,12 @@ the docs are internally consistent.
 
 ## Key abstractions
 
+**`described` does not own its build-configuration rule.** It skips `tailwind.config.js` and friends
+because no artifact worth reading writes a paragraph about them — but `drift._mistiered` needs the same
+answer to tell a test subsystem from a production one, and a private copy would have been two behaviours
+for one question (#32's shape). The predicate moved to `configscan.is_build_config` and both callers read
+it.
+
 **`graph` reads the version from a leaf, not from the package root.** `from . import __version__` made
 this subsystem (domain) import `__init__.py`, which the model groups with `cli` (ui) — an inversion whose
 substance was false, since a provenance stamp needs the version and not the command line. `version.py`

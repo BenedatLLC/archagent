@@ -142,6 +142,12 @@ which reading of a hard-coded endpoint applies, and two definitions would let th
 about whether a given file is a test — one exempting it from documentation while the other treats it as
 production. The edge to `extraction` is the price of that agreement.
 
+**Build configuration counts as non-production.** A test subsystem almost always sweeps up the config
+that runs the tests, and requiring every covered file to be a *test* meant `_mistiered` could not fire on
+the shape it was written for: wardrowbe's frontend test subsystem covers twelve tests and five config
+files, kept a production tier, and produced a false `layer-inversion` finding (#50). The predicate is
+`configscan.is_build_config`, shared with `described` rather than restated.
+
 **Every** covered file must be non-production, not merely most. A subsystem holding production code beside
 its tests is a production subsystem and belongs on the ladder; flagging it would relocate the false
 positives rather than remove them. That strictness is also why the check catches two of the four known
